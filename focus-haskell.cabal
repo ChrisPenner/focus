@@ -33,7 +33,6 @@ library
       Focus.Exec
       Focus.Parser
       Focus.Types
-      Focus.View
   other-modules:
       Paths_focus_haskell
   autogen-modules:

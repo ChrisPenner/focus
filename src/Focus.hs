@@ -6,8 +6,8 @@ import Data.Text.IO qualified as IO
 import Focus.Cli (InputLocation (..), Options (..), OutputLocation (..), optionsP)
 import Focus.Command (Command (..))
 import Focus.Compile (Focus, compileAST)
+import Focus.Exec qualified as Exec
 import Focus.Parser (parseScript)
-import Focus.View qualified as View
 import Options.Applicative qualified as Opts
 import System.Exit qualified as System
 import UnliftIO qualified as IO
@@ -26,9 +26,11 @@ run = do
     case command of
       View script -> do
         focus <- getFocus script
-        View.runView focus inputHandle outputHandle
+        Exec.runView focus inputHandle outputHandle
       Over {} -> error "Over not implemented"
-      Set {} -> error "Set not implemented"
+      Set script val -> do
+        focus <- getFocus script
+        Exec.runSet focus inputHandle outputHandle val
   where
     failWith :: Text -> IO a
     failWith msg = do
