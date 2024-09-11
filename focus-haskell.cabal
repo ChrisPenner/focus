@@ -26,13 +26,37 @@ source-repository head
 library
   exposed-modules:
       Focus
+      Focus.AST
       Focus.Cli
+      Focus.Parser
   other-modules:
       Paths_focus_haskell
   autogen-modules:
       Paths_focus_haskell
   hs-source-dirs:
       src
+  default-extensions:
+      FlexibleInstances
+      FlexibleContexts
+      ScopedTypeVariables
+      LambdaCase
+      ViewPatterns
+      TypeApplications
+      TypeOperators
+      DeriveFunctor
+      DeriveTraversable
+      DeriveGeneric
+      DerivingStrategies
+      StandaloneDeriving
+      TemplateHaskell
+      RankNTypes
+      GADTs
+      MultiParamTypeClasses
+      OverloadedStrings
+      BlockArguments
+      InstanceSigs
+      NamedFieldPuns
+      ImportQualifiedPost
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
@@ -40,6 +64,7 @@ library
     , lens
     , megaparsec
     , optparse-applicative
+    , pcre-light
     , process
     , text
     , unliftio
@@ -54,6 +79,28 @@ executable focus-haskell-exe
       Paths_focus_haskell
   hs-source-dirs:
       app
+  default-extensions:
+      FlexibleInstances
+      FlexibleContexts
+      ScopedTypeVariables
+      LambdaCase
+      ViewPatterns
+      TypeApplications
+      TypeOperators
+      DeriveFunctor
+      DeriveTraversable
+      DeriveGeneric
+      DerivingStrategies
+      StandaloneDeriving
+      TemplateHaskell
+      RankNTypes
+      GADTs
+      MultiParamTypeClasses
+      OverloadedStrings
+      BlockArguments
+      InstanceSigs
+      NamedFieldPuns
+      ImportQualifiedPost
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
@@ -62,6 +109,7 @@ executable focus-haskell-exe
     , lens
     , megaparsec
     , optparse-applicative
+    , pcre-light
     , process
     , text
     , unliftio
@@ -77,6 +125,28 @@ test-suite focus-haskell-test
       Paths_focus_haskell
   hs-source-dirs:
       test
+  default-extensions:
+      FlexibleInstances
+      FlexibleContexts
+      ScopedTypeVariables
+      LambdaCase
+      ViewPatterns
+      TypeApplications
+      TypeOperators
+      DeriveFunctor
+      DeriveTraversable
+      DeriveGeneric
+      DerivingStrategies
+      StandaloneDeriving
+      TemplateHaskell
+      RankNTypes
+      GADTs
+      MultiParamTypeClasses
+      OverloadedStrings
+      BlockArguments
+      InstanceSigs
+      NamedFieldPuns
+      ImportQualifiedPost
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
@@ -85,6 +155,7 @@ test-suite focus-haskell-test
     , lens
     , megaparsec
     , optparse-applicative
+    , pcre-light
     , process
     , text
     , unliftio

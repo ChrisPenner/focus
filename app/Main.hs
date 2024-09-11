@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Focus
+import Focus (run)
 
 main :: IO ()
-main = putStrLn "Hello, Haskell!"
+main = run

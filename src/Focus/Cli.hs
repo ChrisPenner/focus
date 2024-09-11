@@ -1,11 +1,13 @@
 {-# LANGUAGE ApplicativeDo #-}
-{-# LANGUAGE NamedFieldPuns #-}
 
-module Focus.Cli where
+module Focus.Cli
+  ( optionsP,
+    Options (..),
+  )
+where
 
 import Data.Function
 import Data.Functor
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Options.Applicative
 
@@ -24,8 +26,8 @@ data Options
     script :: Text
   }
 
-sample :: Parser Options
-sample = do
+optionsP :: Parser Options
+optionsP = do
   input <-
     strOption
       ( long "input"
