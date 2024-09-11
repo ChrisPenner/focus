@@ -1,4 +1,10 @@
-module Focus.Compile (compileAST, Focus (..)) where
+module Focus.Compile
+  ( compileAST,
+    Focus (..),
+    textChunk,
+    listChunk,
+  )
+where
 
 import Control.Lens
 import Data.Text (Text)
@@ -14,6 +20,11 @@ textChunk :: Chunk -> Text
 textChunk = \case
   TextChunk txt -> txt
   actual -> error $ "Expected TextChunk, got " <> show actual
+
+listChunk :: Chunk -> [Chunk]
+listChunk = \case
+  ListChunk chs -> chs
+  actual -> error $ "Expected ListChunk, got " <> show actual
 
 compileAST :: AST -> Focus
 compileAST = \case
@@ -39,3 +50,10 @@ compileSelector = \case
       traverse f (fmap TextChunk $ Text.words (textChunk chunk))
         <&> TextChunk . Text.unwords . fmap textChunk
   Regex _ -> error "regex is unsupported"
+  ListOf selector ->
+    Focus $ \f chunk ->
+      case (compileAST selector) of
+        Focus inner ->
+          forOf (partsOf inner) chunk \chunks ->
+            f (ListChunk chunks)
+              <&> listChunk

@@ -44,5 +44,5 @@ runSet (Focus trav) input output val = do
 renderChunk :: Chunk -> Text
 renderChunk = \case
   TextChunk txt -> txt
-  ListChunk chs -> Text.unlines (renderChunk <$> chs)
+  ListChunk chs -> Text.pack . show $ renderChunk <$> chs
   NumberChunk n -> Text.pack (show n)

@@ -22,8 +22,10 @@ parseScript src =
 
 scriptP :: P AST
 scriptP = do
-  selectors <- NE.fromList <$> M.sepBy1 selectorP separatorP
-  pure $ Compose selectors
+  Compose <$> selectorsP
+
+selectorsP :: P (NE.NonEmpty Selector)
+selectorsP = NE.fromList <$> M.sepBy1 selectorP separatorP
 
 lexeme :: P a -> P a
 lexeme = L.lexeme M.space
@@ -47,8 +49,16 @@ regexP =
   where
     escaped = M.char '\\' >> M.anySingle
 
+listP :: P Selector
+listP = do
+  between (lexeme $ M.char '[') (lexeme $ M.char ']') $ do
+    ListOf . Compose <$> selectorsP
+
 selectorP :: P Selector
-selectorP = do
+selectorP = listP <|> simpleSelectorP
+
+simpleSelectorP :: P Selector
+simpleSelectorP = do
   name <-
     lexeme
       ( M.choice

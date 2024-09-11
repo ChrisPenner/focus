@@ -52,4 +52,5 @@ run = do
         Left err -> do
           failWith err
         Right ast -> do
+          print ast
           pure $ compileAST ast

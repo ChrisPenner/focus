@@ -12,4 +12,5 @@ data Selector
   | SplitLines
   | SplitWords
   | Regex Text {- pattern -}
+  | ListOf AST
   deriving stock (Show)
