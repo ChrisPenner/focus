@@ -3,13 +3,17 @@
 module Focus.Cli
   ( optionsP,
     Options (..),
+    InputLocation (..),
+    OutputLocation (..),
   )
 where
 
 import Data.Function
 import Data.Functor
 import Data.Text (Text)
-import Options.Applicative
+import Focus.Command (Command (..))
+import Options.Applicative hiding (command)
+import Options.Applicative qualified as Opt
 
 data InputLocation
   = StdIn
@@ -23,7 +27,7 @@ data Options
   = Options
   { input :: InputLocation,
     output :: OutputLocation,
-    script :: Text
+    command :: Command
   }
 
 optionsP :: Parser Options
@@ -46,9 +50,42 @@ optionsP = do
       )
       & optional
       <&> maybe StdOut OutputFile
-  script <-
-    strArgument
-      ( metavar "COMMAND"
-          <> help "Command to run"
+  command <-
+    subparser
+      ( Opt.command "view" (info viewP (progDesc "View the focus"))
+          <> Opt.command "over" (info overP (progDesc "Modify the focused field"))
+          <> Opt.command "set" (info setP (progDesc "Set the focus"))
       )
-  pure Options {input, output, script}
+  pure Options {input, output, command}
+
+viewP :: Parser Command
+viewP = do
+  script <- scriptP
+  pure $ View script
+
+overP :: Parser Command
+overP = do
+  script <- scriptP
+  modifier <-
+    strArgument
+      ( metavar "MODIFIER"
+          <> help "Modifier to apply"
+      )
+  pure $ Over script modifier
+
+setP :: Parser Command
+setP = do
+  script <- scriptP
+  val <-
+    strArgument
+      ( metavar "VALUE"
+          <> help "Value to set"
+      )
+  pure $ Set script val
+
+scriptP :: Parser Text
+scriptP =
+  strArgument
+    ( metavar "COMMAND"
+        <> help "Command to run"
+    )

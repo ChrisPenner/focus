@@ -28,7 +28,12 @@ library
       Focus
       Focus.AST
       Focus.Cli
+      Focus.Command
+      Focus.Compile
+      Focus.Exec
       Focus.Parser
+      Focus.Types
+      Focus.View
   other-modules:
       Paths_focus_haskell
   autogen-modules:
