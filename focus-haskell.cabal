@@ -25,7 +25,8 @@ source-repository head
 
 library
   exposed-modules:
-      Lib
+      Focus
+      Focus.Cli
   other-modules:
       Paths_focus_haskell
   autogen-modules:
@@ -37,6 +38,8 @@ library
       base >=4.7 && <5
     , bytestring
     , lens
+    , megaparsec
+    , optparse-applicative
     , process
     , text
     , unliftio
@@ -57,6 +60,8 @@ executable focus-haskell-exe
     , bytestring
     , focus-haskell
     , lens
+    , megaparsec
+    , optparse-applicative
     , process
     , text
     , unliftio
@@ -78,6 +83,8 @@ test-suite focus-haskell-test
     , bytestring
     , focus-haskell
     , lens
+    , megaparsec
+    , optparse-applicative
     , process
     , text
     , unliftio

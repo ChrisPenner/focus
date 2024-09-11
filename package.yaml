@@ -27,6 +27,8 @@ dependencies:
 - unliftio
 - bytestring
 - vector
+- optparse-applicative
+- megaparsec
 
 ghc-options:
 - -Wall
