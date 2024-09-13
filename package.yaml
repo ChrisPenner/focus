@@ -41,18 +41,20 @@ default-extensions:
 - InstanceSigs
 - NamedFieldPuns
 - ImportQualifiedPost
+- KindSignatures
 
 dependencies:
 - base >= 4.7 && < 5
 - lens
+- lens-action
 - text
-- process
 - unliftio
 - bytestring
 - vector
 - optparse-applicative
 - megaparsec
 - pcre-light
+- some
 
 ghc-options:
 - -Wall

@@ -1,16 +1,19 @@
+{-# LANGUAGE DataKinds #-}
+
 module Focus.Exec (runView, runSet) where
 
 import Control.Lens
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
+import Focus.Command
 import Focus.Compile (Focus (..))
 import Focus.Types (Chunk (..))
 import System.IO qualified as IO
 import UnliftIO (BufferMode (LineBuffering), Handle, hSetBuffering)
 
-runView :: Focus -> Handle -> Handle -> IO ()
-runView (Focus trav) input output = do
+runView :: Focus ViewT -> Handle -> Handle -> IO ()
+runView (ViewFocus f) input output = do
   hSetBuffering input LineBuffering
   hSetBuffering output LineBuffering
   let go = do
@@ -20,13 +23,12 @@ runView (Focus trav) input output = do
           else do
             line <- Text.hGetLine input
             let chunk = TextChunk line
-            forOf_ trav chunk \foc -> do
-              Text.hPutStrLn output (renderChunk foc)
+            f (Text.hPutStrLn output . renderChunk) chunk
             go
   go
 
-runSet :: Focus -> Handle -> Handle -> Text -> IO ()
-runSet (Focus trav) input output val = do
+runSet :: Focus SetT -> Handle -> Handle -> Text -> IO ()
+runSet (SetFocus trav) input output val = do
   hSetBuffering input LineBuffering
   hSetBuffering output LineBuffering
   let go = do

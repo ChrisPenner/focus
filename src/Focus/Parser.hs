@@ -54,8 +54,15 @@ listP = do
   between (lexeme $ M.char '[') (lexeme $ M.char ']') $ do
     ListOf . Compose <$> selectorsP
 
+shellP :: P Selector
+shellP = do
+  between (lexeme $ M.char '{') (lexeme $ M.char '}') $ do
+    Shell . Text.pack <$> many (escaped <|> M.anySingleBut '}')
+  where
+    escaped = M.char '\\' >> M.anySingle
+
 selectorP :: P Selector
-selectorP = listP <|> simpleSelectorP
+selectorP = shellP <|> listP <|> simpleSelectorP
 
 simpleSelectorP :: P Selector
 simpleSelectorP = do

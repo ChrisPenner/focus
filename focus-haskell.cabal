@@ -61,15 +61,17 @@ library
       InstanceSigs
       NamedFieldPuns
       ImportQualifiedPost
+      KindSignatures
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
     , bytestring
     , lens
+    , lens-action
     , megaparsec
     , optparse-applicative
     , pcre-light
-    , process
+    , some
     , text
     , unliftio
     , vector
@@ -105,16 +107,18 @@ executable focus-haskell-exe
       InstanceSigs
       NamedFieldPuns
       ImportQualifiedPost
+      KindSignatures
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
     , bytestring
     , focus-haskell
     , lens
+    , lens-action
     , megaparsec
     , optparse-applicative
     , pcre-light
-    , process
+    , some
     , text
     , unliftio
     , vector
@@ -151,16 +155,18 @@ test-suite focus-haskell-test
       InstanceSigs
       NamedFieldPuns
       ImportQualifiedPost
+      KindSignatures
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
     , bytestring
     , focus-haskell
     , lens
+    , lens-action
     , megaparsec
     , optparse-applicative
     , pcre-light
-    , process
+    , some
     , text
     , unliftio
     , vector

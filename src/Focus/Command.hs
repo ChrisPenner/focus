@@ -1,8 +1,23 @@
-module Focus.Command (Command (..)) where
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
+
+module Focus.Command
+  ( Command (..),
+    CommandT (..),
+    CommandF (..),
+  )
+where
 
 import Data.Text (Text)
 
 type Script = Text
+
+data CommandT = ViewT | OverT | SetT
+
+data CommandF (cmd :: CommandT) where
+  ViewF :: CommandF 'ViewT
+  OverF :: CommandF 'OverT
+  SetF :: CommandF 'SetT
 
 data Command
   = View Script

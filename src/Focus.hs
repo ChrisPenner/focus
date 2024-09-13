@@ -4,7 +4,7 @@ import Control.Applicative
 import Data.Text (Text)
 import Data.Text.IO qualified as IO
 import Focus.Cli (InputLocation (..), Options (..), OutputLocation (..), optionsP)
-import Focus.Command (Command (..))
+import Focus.Command (Command (..), CommandF (..))
 import Focus.Compile (Focus, compileAST)
 import Focus.Exec qualified as Exec
 import Focus.Parser (parseScript)
@@ -25,11 +25,11 @@ run = do
   withHandles input output \inputHandle outputHandle -> do
     case command of
       View script -> do
-        focus <- getFocus script
+        focus <- getFocus ViewF script
         Exec.runView focus inputHandle outputHandle
       Over {} -> error "Over not implemented"
       Set script val -> do
-        focus <- getFocus script
+        focus <- getFocus SetF script
         Exec.runSet focus inputHandle outputHandle val
   where
     failWith :: Text -> IO a
@@ -46,11 +46,11 @@ run = do
       case output of
         StdOut -> f (\inputHandle -> action inputHandle IO.stdout)
         OutputFile path -> f (\inputHandle -> IO.withFile path IO.WriteMode \outputHandle -> action inputHandle outputHandle)
-    getFocus :: Text -> IO Focus
-    getFocus script = do
+    getFocus :: CommandF cmd -> Text -> IO (Focus cmd)
+    getFocus cmdF script = do
       case parseScript script of
         Left err -> do
           failWith err
         Right ast -> do
           print ast
-          pure $ compileAST ast
+          pure $ compileAST cmdF ast

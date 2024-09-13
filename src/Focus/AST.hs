@@ -13,4 +13,5 @@ data Selector
   | SplitWords
   | Regex Text {- pattern -}
   | ListOf AST
+  | Shell Text
   deriving stock (Show)
