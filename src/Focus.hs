@@ -29,7 +29,7 @@ run = do
         Exec.runView focus inputHandle outputHandle
       Over {} -> error "Over not implemented"
       Set script val -> do
-        focus <- getFocus SetF script
+        focus <- getFocus OverF script
         Exec.runSet focus inputHandle outputHandle val
   where
     failWith :: Text -> IO a

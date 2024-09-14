@@ -17,7 +17,6 @@ data CommandT = ViewT | OverT | SetT
 data CommandF (cmd :: CommandT) where
   ViewF :: CommandF 'ViewT
   OverF :: CommandF 'OverT
-  SetF :: CommandF 'SetT
 
 data Command
   = View Script

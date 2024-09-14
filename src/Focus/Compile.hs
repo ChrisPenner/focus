@@ -65,7 +65,6 @@ liftTrav :: (Applicative m) => CommandF cmd -> Traversal' Chunk Chunk -> Focus c
 liftTrav cmdF trav = case cmdF of
   ViewF -> ViewFocus $ \handler chunk -> getAp $ foldMapOf trav (Ap . handler) chunk
   OverF -> OverFocus $ trav
-  SetF -> SetFocus $ trav
 
 compileSelector :: forall m cmd. (MonadIO m, MonadFix m) => CommandF cmd -> Selector -> Focus cmd m
 compileSelector cmdF = \case
@@ -95,7 +94,7 @@ compileSelector cmdF = \case
                 )
           & liftIO
         chunks <- readTVarIO var
-        f (ListChunk chunks)
+        f (ListChunk $ reverse chunks)
       OverF -> OverFocus $ \f chunk -> do
         let inner :: LensLike' (StateT ListOfS IO) Chunk Chunk
             inner = getOverFocus $ compileAST cmdF selector
@@ -104,28 +103,14 @@ compileSelector cmdF = \case
               chunk
                 & inner %%~ \innerChunk -> do
                   state \(ListOfS {reads = ~reads, results = ~results}) ->
-                    let (result, newResults) = case results of
+                    let ~(result, newResults) = case results of
                           ~(hd : rest) -> (hd, rest)
                      in (result, ListOfS {reads = (innerChunk : reads), results = newResults})
-        (r, _) <- mfix $ \(_r, results) -> do
+        ~(r, _) <- mfix $ \(~(_r, results)) -> do
           ~(r, ListOfS {reads}) <- liftIO $ runStateT action (ListOfS {reads = [], results})
-          (r,) . listChunk <$> f (ListChunk $ reverse reads)
+          f (ListChunk $ reverse reads) >>= \case
+            ~(ListChunk chs) -> pure $ (r, chs)
         pure r
-      _ -> error "Unimplemented"
-  --     _
-  --   -- forOf (partsOf (getViewFocus inner)) chunk \chunks ->
-  --   --   f (ListChunk chunks)
-  --   --     <&> listChunk
-  --   OverF -> OverFocus $ \f chunk -> do
-  --     let x = partsOf (getOverFocus inner)
-  --     undefined & x %%~ _
-  --   -- forOf (partsOf (getOverFocus inner)) chunk \chunks -> _
-  --   -- f (ListChunk chunks)
-  --   --   <&> listChunk
-  --   SetF -> SetFocus $ \f chunk ->
-  --     forOf (partsOf (compileAST cmdF selector)) chunk \chunks ->
-  --       f (ListChunk chunks)
-  --         <&> listChunk
   Shell shellScript -> do
     let go :: forall x. (Chunk -> m x) -> Chunk -> m x
         go f chunk = do
@@ -146,7 +131,6 @@ compileSelector cmdF = \case
     case cmdF of
       ViewF -> ViewFocus \f chunk -> go f chunk
       OverF -> OverFocus \f chunk -> go f chunk
-      SetF -> SetFocus \f chunk -> go f chunk
 
 data ListOfS = ListOfS
   { reads :: [Chunk],

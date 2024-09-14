@@ -28,8 +28,8 @@ runView (ViewFocus f) input output = do
             go
   go
 
-runSet :: (MonadIO m) => Focus SetT m -> Handle -> Handle -> Text -> m ()
-runSet (SetFocus trav) input output val = do
+runSet :: (MonadIO m) => Focus OverT m -> Handle -> Handle -> Text -> m ()
+runSet (OverFocus trav) input output val = do
   liftIO $ hSetBuffering input LineBuffering
   liftIO $ hSetBuffering output LineBuffering
   let go = do
@@ -39,7 +39,7 @@ runSet (SetFocus trav) input output val = do
           else do
             line <- liftIO $ Text.hGetLine input
             let chunk = TextChunk line
-            result <- forOf trav chunk \_foc -> pure $ TextChunk val
+            result <- forOf trav chunk \_foc -> pure $ ListChunk [TextChunk val, TextChunk "two"]
             liftIO $ Text.hPutStrLn output (renderChunk result)
             go
   go
