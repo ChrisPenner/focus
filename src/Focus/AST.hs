@@ -14,4 +14,5 @@ data Selector
   | Regex Text {- pattern -}
   | ListOf AST
   | Shell Text
+  | At Int
   deriving stock (Show)

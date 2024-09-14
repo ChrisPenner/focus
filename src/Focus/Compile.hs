@@ -21,6 +21,7 @@ import Data.Monoid (Ap (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
+import Data.Vector.Internal.Check (HasCallStack)
 import Focus.AST
 import Focus.Command (CommandF (..), CommandT (..))
 import Focus.Types (Chunk (..))
@@ -42,7 +43,7 @@ getViewFocus (ViewFocus f) = f
 getOverFocus :: Focus 'OverT m -> LensLike' m Chunk Chunk
 getOverFocus (OverFocus f) = f
 
-textChunk :: Chunk -> Text
+textChunk :: (HasCallStack) => Chunk -> Text
 textChunk = \case
   TextChunk txt -> txt
   actual -> error $ "Expected TextChunk, got " <> show actual
@@ -132,6 +133,11 @@ compileSelector cmdF = \case
     case cmdF of
       ViewF -> ViewFocus \f chunk -> go f chunk
       OverF -> OverFocus \f chunk -> go f chunk
+  At n -> do
+    liftTrav cmdF $ \f chunk -> do
+      listChunk chunk
+        & ix n %%~ f
+        <&> ListChunk
 
 data ListOfS = ListOfS
   { reads :: [Chunk],

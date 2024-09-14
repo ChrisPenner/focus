@@ -39,7 +39,7 @@ runSet (OverFocus trav) input output val = do
           else do
             line <- liftIO $ Text.hGetLine input
             let chunk = TextChunk line
-            result <- forOf trav chunk \_foc -> pure $ ListChunk [TextChunk val, TextChunk "two"]
+            result <- forOf trav chunk \_foc -> pure $ TextChunk val
             liftIO $ Text.hPutStrLn output (renderChunk result)
             go
   go

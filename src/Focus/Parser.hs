@@ -61,6 +61,11 @@ shellP = do
   where
     escaped = M.char '\\' >> M.anySingle
 
+atP :: P Selector
+atP = do
+  n <- lexeme L.decimal
+  pure $ At n
+
 selectorP :: P Selector
 selectorP = shellP <|> listP <|> simpleSelectorP
 
@@ -72,7 +77,8 @@ simpleSelectorP = do
           [ M.string "splitOn",
             M.string "words",
             M.string "lines",
-            M.string "regex"
+            M.string "regex",
+            M.string "at"
           ]
       )
   case name of
@@ -84,4 +90,5 @@ simpleSelectorP = do
     "regex" -> do
       pat <- strP <|> regexP
       pure $ Regex pat
+    "at" -> atP
     _ -> error "impossible"
