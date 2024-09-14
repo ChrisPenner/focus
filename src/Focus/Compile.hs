@@ -13,7 +13,9 @@ where
 
 import Control.Lens
 import Control.Monad.Fix (MonadFix (..))
+import Control.Monad.RWS.CPS (MonadWriter (..))
 import Control.Monad.State.Lazy
+import Control.Monad.Writer (WriterT, execWriterT)
 import Data.Maybe (fromMaybe)
 import Data.Monoid (Ap (..))
 import Data.Text (Text)
@@ -25,7 +27,6 @@ import Focus.Types (Chunk (..))
 import System.Exit (ExitCode (..))
 import UnliftIO qualified
 import UnliftIO.Process qualified as UnliftIO
-import UnliftIO.STM
 import Prelude hiding (reads)
 
 -- data Err = TypeMismatch (ChunkType {- expected -}) (ChunkType {- actual -})
@@ -84,17 +85,17 @@ compileSelector cmdF = \case
   ListOf selector -> do
     case cmdF of
       ViewF -> ViewFocus $ \f chunk -> do
-        var <- newTVarIO []
-        let t :: ((Chunk -> IO ()) -> Chunk -> IO ())
+        let t :: ((Chunk -> WriterT [Chunk] IO ()) -> Chunk -> WriterT [Chunk] IO ())
             t = getViewFocus $ compileAST cmdF selector
-        chunk
-          & t
-            %%~ ( \chunk' -> do
-                    atomically $ modifyTVar var (chunk' :)
-                )
-          & liftIO
-        chunks <- readTVarIO var
-        f (ListChunk $ reverse chunks)
+        results <-
+          chunk
+            & t
+              %%~ ( \chunk' -> do
+                      tell [chunk']
+                  )
+            & execWriterT
+            & liftIO
+        f (ListChunk $ results)
       OverF -> OverFocus $ \f chunk -> do
         let inner :: LensLike' (StateT ListOfS IO) Chunk Chunk
             inner = getOverFocus $ compileAST cmdF selector
