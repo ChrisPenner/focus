@@ -46,7 +46,7 @@ run = do
       case output of
         StdOut -> f (\inputHandle -> action inputHandle IO.stdout)
         OutputFile path -> f (\inputHandle -> IO.withFile path IO.WriteMode \outputHandle -> action inputHandle outputHandle)
-    getFocus :: CommandF cmd -> Text -> IO (Focus cmd)
+    getFocus :: CommandF cmd -> Text -> IO (Focus cmd IO)
     getFocus cmdF script = do
       case parseScript script of
         Left err -> do

@@ -1,5 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE TupleSections #-}
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module Focus.Compile
   ( compileAST,
@@ -10,7 +12,10 @@ module Focus.Compile
 where
 
 import Control.Lens
+import Control.Monad.Fix (MonadFix (..))
+import Control.Monad.State.Lazy
 import Data.Maybe (fromMaybe)
+import Data.Monoid (Ap (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
@@ -20,14 +25,21 @@ import Focus.Types (Chunk (..))
 import System.Exit (ExitCode (..))
 import UnliftIO qualified
 import UnliftIO.Process qualified as UnliftIO
-import UnliftIO.Process qualified as UnlitIO
+import UnliftIO.STM
+import Prelude hiding (reads)
 
 -- data Err = TypeMismatch (ChunkType {- expected -}) (ChunkType {- actual -})
 
-data Focus (cmd :: CommandT) where
-  ViewFocus :: ((Chunk -> IO ()) -> Chunk -> IO ()) -> Focus 'ViewT
-  OverFocus :: LensLike' IO Chunk Chunk -> Focus 'OverT
-  SetFocus :: LensLike' IO Chunk Chunk -> Focus 'SetT
+data Focus (cmd :: CommandT) m where
+  ViewFocus :: ((Chunk -> m ()) -> Chunk -> m ()) -> Focus 'ViewT m
+  OverFocus :: LensLike' m Chunk Chunk -> Focus 'OverT m
+  SetFocus :: LensLike' m Chunk Chunk -> Focus 'SetT m
+
+getViewFocus :: Focus 'ViewT m -> ((Chunk -> m ()) -> Chunk -> m ())
+getViewFocus (ViewFocus f) = f
+
+getOverFocus :: Focus 'OverT m -> LensLike' m Chunk Chunk
+getOverFocus (OverFocus f) = f
 
 textChunk :: Chunk -> Text
 textChunk = \case
@@ -39,23 +51,23 @@ listChunk = \case
   ListChunk chs -> chs
   actual -> error $ "Expected ListChunk, got " <> show actual
 
-compileAST :: CommandF cmd -> AST -> Focus cmd
+compileAST :: (MonadIO m, MonadFix m) => CommandF cmd -> AST -> Focus cmd m
 compileAST cmdF = \case
   Compose selectors ->
     foldr1 composeFT (compileSelector cmdF <$> selectors)
 
-composeFT :: Focus cmd -> Focus cmd -> Focus cmd
+composeFT :: Focus cmd m -> Focus cmd m -> Focus cmd m
 composeFT (ViewFocus l) (ViewFocus r) = ViewFocus $ l . r
 composeFT (OverFocus l) (OverFocus r) = OverFocus $ l . r
 composeFT (SetFocus l) (SetFocus r) = SetFocus $ l . r
 
-liftTrav :: CommandF cmd -> Traversal' Chunk Chunk -> Focus cmd
+liftTrav :: (Applicative m) => CommandF cmd -> Traversal' Chunk Chunk -> Focus cmd m
 liftTrav cmdF trav = case cmdF of
-  ViewF -> ViewFocus $ \handler chunk -> foldMapOf trav handler chunk
+  ViewF -> ViewFocus $ \handler chunk -> getAp $ foldMapOf trav (Ap . handler) chunk
   OverF -> OverFocus $ trav
   SetF -> SetFocus $ trav
 
-compileSelector :: CommandF cmd -> Selector -> Focus cmd
+compileSelector :: forall m cmd. (MonadIO m, MonadFix m) => CommandF cmd -> Selector -> Focus cmd m
 compileSelector cmdF = \case
   SplitFields delim ->
     liftTrav cmdF $ \f chunk ->
@@ -70,10 +82,36 @@ compileSelector cmdF = \case
       traverse f (fmap TextChunk $ Text.words (textChunk chunk))
         <&> TextChunk . Text.unwords . fmap textChunk
   Regex _ -> error "regex is unsupported"
-  ListOf _selector -> do undefined
-  -- let inner = (compileAST cmdF selector)
-  -- case cmdF of
-  --   ViewF -> ViewFocus $ \f chunk ->
+  ListOf selector -> do
+    case cmdF of
+      ViewF -> ViewFocus $ \f chunk -> do
+        var <- newTVarIO []
+        let t :: ((Chunk -> IO ()) -> Chunk -> IO ())
+            t = getViewFocus $ compileAST cmdF selector
+        chunk
+          & t
+            %%~ ( \chunk' -> do
+                    atomically $ modifyTVar var (chunk' :)
+                )
+          & liftIO
+        chunks <- readTVarIO var
+        f (ListChunk chunks)
+      OverF -> OverFocus $ \f chunk -> do
+        let inner :: LensLike' (StateT ListOfS IO) Chunk Chunk
+            inner = getOverFocus $ compileAST cmdF selector
+        let action :: StateT ListOfS IO Chunk
+            action =
+              chunk
+                & inner %%~ \innerChunk -> do
+                  state \(ListOfS {reads = ~reads, results = ~results}) ->
+                    let (result, newResults) = case results of
+                          ~(hd : rest) -> (hd, rest)
+                     in (result, ListOfS {reads = (innerChunk : reads), results = newResults})
+        (r, _) <- mfix $ \(_r, results) -> do
+          ~(r, ListOfS {reads}) <- liftIO $ runStateT action (ListOfS {reads = [], results})
+          (r,) . listChunk <$> f (ListChunk $ reverse reads)
+        pure r
+      _ -> error "Unimplemented"
   --     _
   --   -- forOf (partsOf (getViewFocus inner)) chunk \chunks ->
   --   --   f (ListChunk chunks)
@@ -89,11 +127,11 @@ compileSelector cmdF = \case
   --       f (ListChunk chunks)
   --         <&> listChunk
   Shell shellScript -> do
-    let go :: forall x. (Chunk -> IO x) -> Chunk -> IO x
+    let go :: forall x. (Chunk -> m x) -> Chunk -> m x
         go f chunk = do
-          let proc = UnlitIO.shell (Text.unpack shellScript)
-          let proc' = proc {UnlitIO.std_in = UnlitIO.CreatePipe, UnlitIO.std_out = UnlitIO.CreatePipe}
-          UnlitIO.withCreateProcess proc' \mstdin mstdout _stderr phandle -> do
+          let proc = UnliftIO.shell (Text.unpack shellScript)
+          let proc' = proc {UnliftIO.std_in = UnliftIO.CreatePipe, UnliftIO.std_out = UnliftIO.CreatePipe}
+          out' <- liftIO $ UnliftIO.withCreateProcess proc' \mstdin mstdout _stderr phandle -> do
             let stdin = fromMaybe (error "missing stdin") mstdin
             let stdout = fromMaybe (error "missing stdout") mstdout
             Text.hPutStrLn stdin (textChunk chunk)
@@ -103,16 +141,14 @@ compileSelector cmdF = \case
               ExitFailure code -> error $ "Shell script failed with exit code " <> show code
             out <- Text.hGetContents stdout
             let out' = fromMaybe out $ Text.stripSuffix "\n" out
-            f (TextChunk out')
+            pure out'
+          f (TextChunk out')
     case cmdF of
       ViewF -> ViewFocus \f chunk -> go f chunk
       OverF -> OverFocus \f chunk -> go f chunk
       SetF -> SetFocus \f chunk -> go f chunk
 
--- do
---   Text.hPutStrLn stdin (textChunk chunk)
---   UnliftIO.hClose stdin
---   UnliftIO.waitForProcess phandle >>= \case
---     ExitSuccess -> pure ()
---     ExitFailure code -> error $ "Shell script failed with exit code " <> show code
---   TextChunk <$> Text.hGetContents stdout
+data ListOfS = ListOfS
+  { reads :: [Chunk],
+    results :: [Chunk]
+  }

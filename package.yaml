@@ -55,6 +55,7 @@ dependencies:
 - megaparsec
 - pcre-light
 - some
+- mtl
 
 ghc-options:
 - -Wall

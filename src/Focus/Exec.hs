@@ -3,6 +3,7 @@
 module Focus.Exec (runView, runSet) where
 
 import Control.Lens
+import Control.Monad.IO.Class (MonadIO (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
@@ -12,34 +13,34 @@ import Focus.Types (Chunk (..))
 import System.IO qualified as IO
 import UnliftIO (BufferMode (LineBuffering), Handle, hSetBuffering)
 
-runView :: Focus ViewT -> Handle -> Handle -> IO ()
+runView :: (MonadIO m) => Focus ViewT m -> Handle -> Handle -> m ()
 runView (ViewFocus f) input output = do
-  hSetBuffering input LineBuffering
-  hSetBuffering output LineBuffering
+  liftIO $ hSetBuffering input LineBuffering
+  liftIO $ hSetBuffering output LineBuffering
   let go = do
-        done <- IO.hIsEOF input
+        done <- liftIO $ IO.hIsEOF input
         if done
           then pure ()
           else do
-            line <- Text.hGetLine input
+            line <- liftIO $ Text.hGetLine input
             let chunk = TextChunk line
-            f (Text.hPutStrLn output . renderChunk) chunk
+            f (liftIO . Text.hPutStrLn output . renderChunk) chunk
             go
   go
 
-runSet :: Focus SetT -> Handle -> Handle -> Text -> IO ()
+runSet :: (MonadIO m) => Focus SetT m -> Handle -> Handle -> Text -> m ()
 runSet (SetFocus trav) input output val = do
-  hSetBuffering input LineBuffering
-  hSetBuffering output LineBuffering
+  liftIO $ hSetBuffering input LineBuffering
+  liftIO $ hSetBuffering output LineBuffering
   let go = do
-        done <- IO.hIsEOF input
+        done <- liftIO $ IO.hIsEOF input
         if done
           then pure ()
           else do
-            line <- Text.hGetLine input
+            line <- liftIO $ Text.hGetLine input
             let chunk = TextChunk line
             result <- forOf trav chunk \_foc -> pure $ TextChunk val
-            Text.hPutStrLn output (renderChunk result)
+            liftIO $ Text.hPutStrLn output (renderChunk result)
             go
   go
 

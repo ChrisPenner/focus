@@ -69,6 +69,7 @@ library
     , lens
     , lens-action
     , megaparsec
+    , mtl
     , optparse-applicative
     , pcre-light
     , some
@@ -116,6 +117,7 @@ executable focus-haskell-exe
     , lens
     , lens-action
     , megaparsec
+    , mtl
     , optparse-applicative
     , pcre-light
     , some
@@ -164,6 +166,7 @@ test-suite focus-haskell-test
     , lens
     , lens-action
     , megaparsec
+    , mtl
     , optparse-applicative
     , pcre-light
     , some
