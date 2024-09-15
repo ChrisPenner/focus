@@ -27,7 +27,10 @@ run = do
       View script -> do
         focus <- getFocus ViewF script
         Exec.runView focus inputHandle outputHandle
-      Over {} -> error "Over not implemented"
+      Over script m -> do
+        focus <- getFocus OverF script
+        modifier <- getFocus OverF m
+        Exec.runOver focus modifier inputHandle outputHandle
       Set script val -> do
         focus <- getFocus OverF script
         Exec.runSet focus inputHandle outputHandle val

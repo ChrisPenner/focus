@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
-module Focus.Exec (runView, runSet) where
+module Focus.Exec (runView, runSet, runOver) where
 
 import Control.Lens
 import Control.Monad.IO.Class (MonadIO (..))
@@ -40,6 +40,22 @@ runSet (OverFocus trav) input output val = do
             line <- liftIO $ Text.hGetLine input
             let chunk = TextChunk line
             result <- forOf trav chunk \_foc -> pure $ TextChunk val
+            liftIO $ Text.hPutStrLn output (renderChunk result)
+            go
+  go
+
+runOver :: (MonadIO m) => Focus OverT m -> Focus OverT m -> Handle -> Handle -> m ()
+runOver (OverFocus trav) (OverFocus modifier) input output = do
+  liftIO $ hSetBuffering input LineBuffering
+  liftIO $ hSetBuffering output LineBuffering
+  let go = do
+        done <- liftIO $ IO.hIsEOF input
+        if done
+          then pure ()
+          else do
+            line <- liftIO $ Text.hGetLine input
+            let chunk = TextChunk line
+            result <- forOf (trav . modifier) chunk pure
             liftIO $ Text.hPutStrLn output (renderChunk result)
             go
   go
