@@ -72,7 +72,7 @@ library:
   source-dirs: src
 
 executables:
-  focus-haskell-exe:
+  focus:
     main:                Main.hs
     source-dirs:         app
     ghc-options:

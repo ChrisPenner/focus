@@ -6,6 +6,7 @@ import Data.Text.IO qualified as IO
 import Focus.Cli (InputLocation (..), Options (..), OutputLocation (..), optionsP)
 import Focus.Command (Command (..), CommandF (..))
 import Focus.Compile (Focus, compileAST)
+import Focus.Debug (debugM)
 import Focus.Exec qualified as Exec
 import Focus.Parser (parseScript)
 import Options.Applicative qualified as Opts
@@ -55,5 +56,5 @@ run = do
         Left err -> do
           failWith err
         Right ast -> do
-          print ast
+          debugM "AST" ast
           pure $ compileAST cmdF ast
