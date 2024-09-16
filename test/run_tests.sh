@@ -67,3 +67,7 @@ echo "one,two,three" | run basic_view view 'splitOn ","'
 
 # Basic typechecking
 echo "one,two,three" | run expected_list view 'splitOn "," | at 1'
+
+# Regex
+echo "one two 555-123-4567 three" | run regex_view view '/[\d-]+/'
+echo "one two 555-123-4567 three 999-876-5432" | run regex_modify modify '/[\d-]+/' '{rev}'

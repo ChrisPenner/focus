@@ -7,6 +7,7 @@ import Control.Comonad.Cofree qualified as CF
 import Control.Monad
 import Data.Bifunctor (Bifunctor (..))
 import Data.Function
+import Data.Functor (($>))
 import Data.List.NonEmpty qualified as NE
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -20,7 +21,6 @@ import Text.Megaparsec
 import Text.Megaparsec qualified as M
 import Text.Megaparsec.Char qualified as M
 import Text.Megaparsec.Char.Lexer qualified as L
-import Text.Regex.PCRE.Heavy (Regex)
 import Text.Regex.PCRE.Heavy qualified as Regex
 
 data CustomError
@@ -83,16 +83,16 @@ strP =
   where
     escaped = M.char '\\' >> M.anySingle
 
-regexP :: P Regex
+regexP :: P TaggedSelector
 regexP =
-  M.label "regex" $ do
+  withPos $ M.label "regex" $ do
     pat <- lexeme $ between (M.char '/') (M.char '/') $ do
       Text.pack <$> many (escaped <|> M.anySingleBut '/')
     case Regex.compileM (Text.encodeUtf8 pat) [] of
       Left err -> M.customFailure $ BadRegex (Text.pack err)
-      Right re -> pure re
+      Right re -> pure $ RegexF re
   where
-    escaped = M.char '\\' >> M.anySingle
+    escaped = M.string "\\/" $> '/'
 
 listP :: P TaggedSelector
 listP = withPos do
@@ -107,7 +107,7 @@ shellP = withPos do
     escaped = M.char '\\' >> M.anySingle
 
 selectorP :: P TaggedSelector
-selectorP = shellP <|> listP <|> simpleSelectorP
+selectorP = shellP <|> listP <|> regexP <|> simpleSelectorP
 
 simpleSelectorP :: P TaggedSelector
 simpleSelectorP = withPos do
@@ -117,7 +117,6 @@ simpleSelectorP = withPos do
           [ M.string "splitOn",
             M.string "words",
             M.string "lines",
-            M.string "regex",
             M.string "at"
           ]
       )
@@ -127,8 +126,6 @@ simpleSelectorP = withPos do
       pure $ SplitFieldsF delim
     "words" -> pure SplitWordsF
     "lines" -> pure SplitLinesF
-    "regex" -> do
-      RegexF <$> regexP
     "at" -> do
       n <- lexeme L.decimal
       pure $ AtF n

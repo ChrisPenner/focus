@@ -25,7 +25,7 @@ import Data.Text.IO qualified as Text
 import Data.Vector.Internal.Check (HasCallStack)
 import Focus.AST
 import Focus.Command (CommandF (..), CommandT (..))
-import Focus.Types (Chunk (..))
+import Focus.Types
 import System.Exit (ExitCode (..))
 import UnliftIO qualified
 import UnliftIO.Process qualified as UnliftIO
@@ -69,36 +69,37 @@ liftTrav cmdF trav = case cmdF of
   ViewF -> ViewFocus $ \handler chunk -> getAp $ foldMapOf trav (Ap . handler) chunk
   ModifyF -> ModifyFocus $ trav
 
--- underTextChunk :: Prism' Chunk Text
--- underTextChunk = prism' TextChunk \case
---   TextChunk txt -> Just txt
---   _ -> Nothing
+textI :: Iso' Chunk Text
+textI = unsafeIso _TextChunk
 
-underTextChunk :: Traversal' Text Text -> Traversal' Chunk Chunk
-underTextChunk t f = \case
-  TextChunk txt ->
-    TextChunk <$> forOf t txt \txt' ->
-      textChunk <$> f (TextChunk txt')
-  other -> pure other
+underText :: Traversal' Text Text -> Traversal' Chunk Chunk
+underText = withinIso textI
+
+withinIso :: Iso' s a -> Traversal' a a -> Traversal' s s
+withinIso i t = i . t . from i
+
+unsafeIso :: (Show s) => Prism' s a -> Iso' s a
+unsafeIso p = iso (\actual -> fromJust actual . preview p $ actual) (review p)
+  where
+    fromJust actual = \case
+      Just x -> x
+      Nothing -> error $ "unsafeIso: Mismatch. Actual: " <> show actual
 
 compileSelector :: forall m cmd. (MonadIO m, MonadFix m) => CommandF cmd -> Selector -> Focus cmd m
 compileSelector cmdF = \case
   Compose selectors ->
     foldr1 composeFT (compileSelector cmdF <$> selectors)
   SplitFields delim ->
-    liftTrav cmdF $ \f chunk ->
-      traverse f (fmap TextChunk $ Text.splitOn delim (textChunk chunk))
-        <&> TextChunk . Text.intercalate delim . fmap textChunk
+    liftTrav cmdF $ underText (\f txt -> (Text.intercalate delim) <$> traverse f (Text.splitOn delim txt))
   SplitLines ->
-    liftTrav cmdF $ \f chunk ->
-      traverse f (fmap TextChunk $ Text.lines (textChunk chunk))
-        <&> TextChunk . Text.unlines . fmap textChunk
+    liftTrav cmdF $ underText (\f txt -> Text.unlines <$> traverse f (Text.lines txt))
   SplitWords ->
-    liftTrav cmdF $ \f chunk ->
-      traverse f (fmap TextChunk $ Text.words (textChunk chunk))
-        <&> TextChunk . Text.unwords . fmap textChunk
+    liftTrav cmdF $ underText (\f txt -> Text.unwords <$> traverse f (Text.words txt))
   Regex pat -> do
-    liftTrav cmdF $ underTextChunk (RE.regexing pat . RE.match)
+    liftTrav cmdF $ underText (RE.regexing pat . RE.match)
+  RegexMatches ->
+    liftTrav cmdF $ _RegexMatchChunk . RE.match . from textI
+  -- liftTrav cmdF $ underText RE.regexMatches
   ListOf selector -> do
     case cmdF of
       ViewF -> ViewFocus $ \f chunk -> do
