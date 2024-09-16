@@ -3,12 +3,11 @@ module Focus (run) where
 import Control.Applicative
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Data.Text.IO qualified as IO
 import Error.Diagnose qualified as Diagnose
-import Focus.AST (typecheckAST)
+import Focus.AST (typecheckSelector, untagSelector)
 import Focus.Cli (InputLocation (..), Options (..), OutputLocation (..), optionsP)
 import Focus.Command (Command (..), CommandF (..))
-import Focus.Compile (Focus, compileAST)
+import Focus.Compile (Focus, compileSelector)
 import Focus.Debug (debugM)
 import Focus.Exec qualified as Exec
 import Focus.Parser (parseScript)
@@ -40,9 +39,9 @@ run = do
         focus <- getFocus "<selector>" ModifyF script
         Exec.runSet focus inputHandle outputHandle val
   where
-    failWith :: Text -> IO a
-    failWith msg = do
-      IO.hPutStrLn IO.stderr msg
+    failWithDiagnostic :: Diagnose.Diagnostic Text -> IO a
+    failWithDiagnostic diagnostic = do
+      Diagnose.printDiagnostic System.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) Diagnose.defaultStyle diagnostic
       System.exitFailure
 
     withHandles :: InputLocation -> OutputLocation -> (IO.Handle -> IO.Handle -> IO r) -> IO r
@@ -61,9 +60,13 @@ run = do
           Diagnose.printDiagnostic System.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) Diagnose.defaultStyle errDiagnostic
           System.exitFailure
         Right ast -> do
-          debugM "AST" ast
-          case typecheckAST ast of
-            Left err -> do
-              failWith $ "Type error: " <> Text.pack (show err)
+          debugM "Selector" ast
+          case typecheckSelector ast of
+            Left errReport -> do
+              let diagnostic =
+                    ( Diagnose.addFile mempty (Text.unpack srcName) (Text.unpack script)
+                        <> (Diagnose.addReport mempty errReport)
+                    )
+              failWithDiagnostic diagnostic
             Right _ -> do
-              pure $ compileAST cmdF ast
+              pure $ compileSelector cmdF (untagSelector ast)

@@ -10,4 +10,3 @@ extra-deps:
 flags:
   diagnose:
     megaparsec-compat: true
-

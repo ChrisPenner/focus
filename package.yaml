@@ -45,6 +45,7 @@ default-extensions:
 
 dependencies:
 - base >= 4.7 && < 5
+- free
 - lens
 - lens-action
 - text
@@ -54,9 +55,11 @@ dependencies:
 - optparse-applicative
 - megaparsec
 - pcre-light
+- recursion-schemes
 - some
 - mtl
 - diagnose
+- deriving-compat
 
 ghc-options:
 - -Wall

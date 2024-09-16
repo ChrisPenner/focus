@@ -53,7 +53,7 @@ optionsP = do
   command <-
     subparser
       ( Opt.command "view" (info viewP (progDesc "View the focus"))
-          <> Opt.command "over" (info overP (progDesc "Modify the focused field"))
+          <> Opt.command "modify" (info overP (progDesc "Modify the focused field"))
           <> Opt.command "set" (info setP (progDesc "Set the focus"))
       )
   pure Options {input, output, command}

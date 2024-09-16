@@ -42,7 +42,7 @@ run() {
         exit_code="$?"
       } || true
       ;;
-    "over" | "set")
+    "modify" | "set")
       { "$focus" "$cmd" "$selector" "$arg" < "$input_file" >> "$out_file" 2>&1  
         exit_code="$?"
       } ||  true

@@ -4,7 +4,7 @@
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module Focus.Compile
-  ( compileAST,
+  ( compileSelector,
     Focus (..),
     textChunk,
     listChunk,
@@ -53,10 +53,10 @@ listChunk = \case
   ListChunk chs -> chs
   actual -> error $ "Expected ListChunk, got " <> show actual
 
-compileAST :: (MonadIO m, MonadFix m) => CommandF cmd -> AST -> Focus cmd m
-compileAST cmdF = \case
-  Compose selectors ->
-    foldr1 composeFT (compileSelector cmdF <$> selectors)
+-- compileSelector :: (MonadIO m, MonadFix m) => CommandF cmd -> Selector -> Focus cmd m
+-- compileSelector cmdF = \case
+--   Compose selectors ->
+--     foldr1 composeFT (compileSelector cmdF <$> selectors)
 
 composeFT :: Focus cmd m -> Focus cmd m -> Focus cmd m
 composeFT (ViewFocus l) (ViewFocus r) = ViewFocus $ l . r
@@ -70,6 +70,8 @@ liftTrav cmdF trav = case cmdF of
 
 compileSelector :: forall m cmd. (MonadIO m, MonadFix m) => CommandF cmd -> Selector -> Focus cmd m
 compileSelector cmdF = \case
+  Compose selectors ->
+    foldr1 composeFT (compileSelector cmdF <$> selectors)
   SplitFields delim ->
     liftTrav cmdF $ \f chunk ->
       traverse f (fmap TextChunk $ Text.splitOn delim (textChunk chunk))
@@ -87,7 +89,7 @@ compileSelector cmdF = \case
     case cmdF of
       ViewF -> ViewFocus $ \f chunk -> do
         let t :: ((Chunk -> WriterT [Chunk] IO ()) -> Chunk -> WriterT [Chunk] IO ())
-            t = getViewFocus $ compileAST cmdF selector
+            t = getViewFocus $ compileSelector cmdF selector
         results <-
           chunk
             & t
@@ -99,7 +101,7 @@ compileSelector cmdF = \case
         f (ListChunk $ results)
       ModifyF -> ModifyFocus $ \f chunk -> do
         let inner :: LensLike' (StateT ListOfS IO) Chunk Chunk
-            inner = getModifyFocus $ compileAST cmdF selector
+            inner = getModifyFocus $ compileSelector cmdF selector
         let action :: StateT ListOfS IO Chunk
             action =
               chunk

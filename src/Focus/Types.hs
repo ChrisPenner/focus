@@ -4,6 +4,8 @@ module Focus.Types
     textChunk_,
     listChunk_,
     numberChunk_,
+    renderType,
+    unifies,
   )
 where
 
@@ -37,3 +39,16 @@ data ChunkType
   | NumberType
   | AnyType
   deriving (Show, Eq)
+
+unifies :: ChunkType -> ChunkType -> Bool
+unifies AnyType _ = True
+unifies _ AnyType = True
+unifies (ListType x) (ListType y) = x `unifies` y
+unifies x y = x == y
+
+renderType :: ChunkType -> Text
+renderType = \case
+  TextType -> "text"
+  ListType t -> "[" <> renderType t <> "]"
+  NumberType -> "number"
+  AnyType -> "any"

@@ -1,6 +1,6 @@
 cabal-version: 2.2
 
--- This file has been generated from package.yaml by hpack version 0.36.0.
+-- This file has been generated from package.yaml by hpack version 0.37.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -33,6 +33,7 @@ library
       Focus.Debug
       Focus.Exec
       Focus.Parser
+      Focus.Prelude
       Focus.Types
   other-modules:
       Paths_focus_haskell
@@ -67,13 +68,16 @@ library
   build-depends:
       base >=4.7 && <5
     , bytestring
+    , deriving-compat
     , diagnose
+    , free
     , lens
     , lens-action
     , megaparsec
     , mtl
     , optparse-applicative
     , pcre-light
+    , recursion-schemes
     , some
     , text
     , unliftio
@@ -115,14 +119,17 @@ executable focus
   build-depends:
       base >=4.7 && <5
     , bytestring
+    , deriving-compat
     , diagnose
     , focus-haskell
+    , free
     , lens
     , lens-action
     , megaparsec
     , mtl
     , optparse-applicative
     , pcre-light
+    , recursion-schemes
     , some
     , text
     , unliftio
@@ -165,14 +172,17 @@ test-suite focus-haskell-test
   build-depends:
       base >=4.7 && <5
     , bytestring
+    , deriving-compat
     , diagnose
     , focus-haskell
+    , free
     , lens
     , lens-action
     , megaparsec
     , mtl
     , optparse-applicative
     , pcre-light
+    , recursion-schemes
     , some
     , text
     , unliftio

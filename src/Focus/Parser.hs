@@ -3,6 +3,7 @@
 
 module Focus.Parser (parseScript) where
 
+import Control.Comonad.Cofree qualified as CF
 import Control.Monad
 import Data.Bifunctor (Bifunctor (..))
 import Data.Function
@@ -24,7 +25,15 @@ type P = Parsec Void String
 instance HasHints Void a where
   hints e = case e of {}
 
-parseScript :: Text -> Text -> Either (Diagnostic Text) AST
+withPos :: P (SelectorF TaggedSelector) -> P TaggedSelector
+withPos p = do
+  SourcePos {sourceName, sourceLine = startLine, sourceColumn = startCol} <- M.getSourcePos
+  s <- p
+  end <- M.getSourcePos
+  let pos = Diagnose.Position (M.unPos startLine, M.unPos startCol) (M.unPos (M.sourceLine end), M.unPos (M.sourceColumn end)) sourceName
+  pure $ pos CF.:< s
+
+parseScript :: Text -> Text -> Either (Diagnostic Text) TaggedSelector
 parseScript srcName src =
   let strSource = Text.unpack src
       strSourceName = Text.unpack srcName
@@ -36,12 +45,12 @@ parseScript srcName src =
                 & \d -> Diagnose.addFile d strSourceName strSource
           )
 
-scriptP :: P AST
-scriptP = do
-  Compose <$> selectorsP
+scriptP :: P TaggedSelector
+scriptP = selectorsP
 
-selectorsP :: P (NE.NonEmpty Selector)
-selectorsP = NE.fromList <$> M.sepBy1 selectorP separatorP
+selectorsP :: P TaggedSelector
+selectorsP = withPos do
+  ComposeF . NE.fromList <$> M.sepBy1 selectorP separatorP
 
 lexeme :: P a -> P a
 lexeme = L.lexeme M.space
@@ -67,28 +76,23 @@ regexP =
   where
     escaped = M.char '\\' >> M.anySingle
 
-listP :: P Selector
-listP = do
+listP :: P TaggedSelector
+listP = withPos do
   between (lexeme $ M.char '[') (lexeme $ M.char ']') $ do
-    ListOf . Compose <$> selectorsP
+    ListOfF <$> selectorsP
 
-shellP :: P Selector
-shellP = do
+shellP :: P TaggedSelector
+shellP = withPos do
   between (lexeme $ M.char '{') (lexeme $ M.char '}') $ do
-    Shell . Text.pack <$> many (escaped <|> M.anySingleBut '}')
+    ShellF . Text.pack <$> many (escaped <|> M.anySingleBut '}')
   where
     escaped = M.char '\\' >> M.anySingle
 
-atP :: P Selector
-atP = do
-  n <- lexeme L.decimal
-  pure $ At n
-
-selectorP :: P Selector
+selectorP :: P TaggedSelector
 selectorP = shellP <|> listP <|> simpleSelectorP
 
-simpleSelectorP :: P Selector
-simpleSelectorP = do
+simpleSelectorP :: P TaggedSelector
+simpleSelectorP = withPos do
   name <-
     lexeme
       ( M.choice
@@ -102,11 +106,13 @@ simpleSelectorP = do
   case name of
     "splitOn" -> do
       delim <- strP
-      pure $ SplitFields delim
-    "words" -> pure SplitWords
-    "lines" -> pure SplitLines
+      pure $ SplitFieldsF delim
+    "words" -> pure SplitWordsF
+    "lines" -> pure SplitLinesF
     "regex" -> do
       pat <- strP <|> regexP
-      pure $ Regex pat
-    "at" -> atP
+      pure $ RegexF pat
+    "at" -> do
+      n <- lexeme L.decimal
+      pure $ AtF n
     _ -> error "impossible"
