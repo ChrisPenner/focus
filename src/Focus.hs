@@ -2,7 +2,9 @@ module Focus (run) where
 
 import Control.Applicative
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Data.Text.IO qualified as IO
+import Focus.AST (typecheckAST)
 import Focus.Cli (InputLocation (..), Options (..), OutputLocation (..), optionsP)
 import Focus.Command (Command (..), CommandF (..))
 import Focus.Compile (Focus, compileAST)
@@ -57,4 +59,8 @@ run = do
           failWith err
         Right ast -> do
           debugM "AST" ast
-          pure $ compileAST cmdF ast
+          case typecheckAST ast of
+            Left err -> do
+              failWith $ "Type error: " <> Text.pack (show err)
+            Right _ -> do
+              pure $ compileAST cmdF ast

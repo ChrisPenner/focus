@@ -1,7 +1,6 @@
 module Focus.Types
   ( Chunk (..),
     ChunkType (..),
-    chunkType,
     textChunk_,
     listChunk_,
     numberChunk_,
@@ -32,11 +31,9 @@ numberChunk_ = prism' NumberChunk $ \case
   NumberChunk n -> Just n
   _ -> Nothing
 
-data ChunkType = TextType | ListType | NumberType
+data ChunkType
+  = TextType
+  | ListType ChunkType
+  | NumberType
+  | AnyType
   deriving (Show, Eq)
-
-chunkType :: Chunk -> ChunkType
-chunkType = \case
-  TextChunk _ -> TextType
-  ListChunk _ -> ListType
-  NumberChunk _ -> NumberType

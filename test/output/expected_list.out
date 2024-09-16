@@ -3,8 +3,6 @@ focus view 'splitOn "," | at 1' ''
 ===INPUT===============================================================================
 one,two,three
 ===OUTPUT===============================================================================
-focus: Expected ListChunk, got TextChunk "one"
-CallStack (from HasCallStack):
-  error, called at src/Focus/Compile.hs:54:13 in focus-haskell-0.1.0.0-KTmNUvpK52X3pdoRlGV2Co:Focus.Compile
+Type error: TypeMismatch (SplitFields ",",TextType) (At 1,ListType AnyType)
 ===EXIT CODE===============================================================================
 1
