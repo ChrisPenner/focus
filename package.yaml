@@ -54,7 +54,8 @@ dependencies:
 - vector
 - optparse-applicative
 - megaparsec
-- pcre-light
+- lens-regex-pcre
+- pcre-heavy
 - recursion-schemes
 - some
 - mtl

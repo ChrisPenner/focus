@@ -10,6 +10,7 @@ import Data.Function
 import Data.List.NonEmpty qualified as NE
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text
 import Data.Void
 import Error.Diagnose (Diagnostic)
 import Error.Diagnose qualified as Diagnose
@@ -19,8 +20,22 @@ import Text.Megaparsec
 import Text.Megaparsec qualified as M
 import Text.Megaparsec.Char qualified as M
 import Text.Megaparsec.Char.Lexer qualified as L
+import Text.Regex.PCRE.Heavy (Regex)
+import Text.Regex.PCRE.Heavy qualified as Regex
 
-type P = Parsec Void String
+data CustomError
+  = BadRegex Text
+  deriving stock (Show, Eq, Ord)
+
+instance ShowErrorComponent CustomError where
+  showErrorComponent = \case
+    BadRegex s -> "Invalid Regex: " <> Text.unpack s
+
+instance HasHints CustomError a where
+  hints e = case e of
+    BadRegex _ -> []
+
+type P = Parsec CustomError String
 
 instance HasHints Void a where
   hints e = case e of {}
@@ -68,11 +83,14 @@ strP =
   where
     escaped = M.char '\\' >> M.anySingle
 
-regexP :: P Text
+regexP :: P Regex
 regexP =
-  M.label "regex, e.g. /he?(ll)o.+/" $ do
-    lexeme $ between (M.char '/') (M.char '/') $ do
+  M.label "regex" $ do
+    pat <- lexeme $ between (M.char '/') (M.char '/') $ do
       Text.pack <$> many (escaped <|> M.anySingleBut '/')
+    case Regex.compileM (Text.encodeUtf8 pat) [] of
+      Left err -> M.customFailure $ BadRegex (Text.pack err)
+      Right re -> pure re
   where
     escaped = M.char '\\' >> M.anySingle
 
@@ -110,8 +128,7 @@ simpleSelectorP = withPos do
     "words" -> pure SplitWordsF
     "lines" -> pure SplitLinesF
     "regex" -> do
-      pat <- strP <|> regexP
-      pure $ RegexF pat
+      RegexF <$> regexP
     "at" -> do
       n <- lexeme L.decimal
       pure $ AtF n

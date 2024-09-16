@@ -24,6 +24,7 @@ import Data.Text (Text)
 import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Focus.Types (ChunkType (..), renderType, unifies)
+import Text.Regex.PCRE.Heavy (Regex)
 import Text.Show.Deriving (deriveShow1)
 
 type TaggedSelector = Cofree SelectorF D.Position
@@ -33,7 +34,7 @@ data SelectorF r
   | SplitFieldsF Text {- delimeter -}
   | SplitLinesF
   | SplitWordsF
-  | RegexF Text {- pattern -}
+  | RegexF Regex {- pattern -}
   | ListOfF r
   | ShellF Text
   | AtF Int
@@ -46,7 +47,7 @@ data Selector
   | SplitFields Text {- delimeter -}
   | SplitLines
   | SplitWords
-  | Regex Text {- pattern -}
+  | Regex Regex
   | ListOf Selector
   | Shell Text
   | At Int

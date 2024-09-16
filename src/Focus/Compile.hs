@@ -12,6 +12,7 @@ module Focus.Compile
 where
 
 import Control.Lens
+import Control.Lens.Regex.Text qualified as RE
 import Control.Monad.Fix (MonadFix (..))
 import Control.Monad.RWS.CPS (MonadWriter (..))
 import Control.Monad.State.Lazy
@@ -68,6 +69,18 @@ liftTrav cmdF trav = case cmdF of
   ViewF -> ViewFocus $ \handler chunk -> getAp $ foldMapOf trav (Ap . handler) chunk
   ModifyF -> ModifyFocus $ trav
 
+-- underTextChunk :: Prism' Chunk Text
+-- underTextChunk = prism' TextChunk \case
+--   TextChunk txt -> Just txt
+--   _ -> Nothing
+
+underTextChunk :: Traversal' Text Text -> Traversal' Chunk Chunk
+underTextChunk t f = \case
+  TextChunk txt ->
+    TextChunk <$> forOf t txt \txt' ->
+      textChunk <$> f (TextChunk txt')
+  other -> pure other
+
 compileSelector :: forall m cmd. (MonadIO m, MonadFix m) => CommandF cmd -> Selector -> Focus cmd m
 compileSelector cmdF = \case
   Compose selectors ->
@@ -84,7 +97,8 @@ compileSelector cmdF = \case
     liftTrav cmdF $ \f chunk ->
       traverse f (fmap TextChunk $ Text.words (textChunk chunk))
         <&> TextChunk . Text.unwords . fmap textChunk
-  Regex _ -> error "regex is unsupported"
+  Regex pat -> do
+    liftTrav cmdF $ underTextChunk (RE.regexing pat . RE.match)
   ListOf selector -> do
     case cmdF of
       ViewF -> ViewFocus $ \f chunk -> do
