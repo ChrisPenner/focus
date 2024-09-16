@@ -117,7 +117,8 @@ simpleSelectorP = withPos do
           [ M.string "splitOn",
             M.string "words",
             M.string "lines",
-            M.string "at"
+            M.string "at",
+            M.string "matches"
           ]
       )
   case name of
@@ -129,4 +130,8 @@ simpleSelectorP = withPos do
     "at" -> do
       n <- lexeme L.decimal
       pure $ AtF n
+    "matches" -> do
+      pure RegexMatchesF
+    "groups" -> do
+      pure RegexGroupsF
     _ -> error "impossible"

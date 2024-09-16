@@ -65,3 +65,4 @@ renderChunk = \case
   TextChunk txt -> txt
   ListChunk chs -> Text.pack . show $ renderChunk <$> chs
   NumberChunk n -> Text.pack (show n)
+  RegexMatchChunk _m -> error "Can't render a regex match chunk"

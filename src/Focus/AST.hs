@@ -36,6 +36,7 @@ data SelectorF r
   | SplitWordsF
   | RegexF Regex {- pattern -}
   | RegexMatchesF
+  | RegexGroupsF
   | ListOfF r
   | ShellF Text
   | AtF Int
@@ -50,6 +51,7 @@ data Selector
   | SplitWords
   | Regex Regex
   | RegexMatches
+  | RegexGroups
   | ListOf Selector
   | Shell Text
   | At Int
@@ -65,6 +67,7 @@ instance Recursive Selector where
     SplitWords -> SplitWordsF
     Regex pattern -> RegexF pattern
     RegexMatches -> RegexMatchesF
+    RegexGroups -> RegexGroupsF
     ListOf ast -> ListOfF ast
     Shell command -> ShellF command
     At index -> AtF index
@@ -77,6 +80,7 @@ instance Corecursive Selector where
     SplitWordsF -> SplitWords
     RegexF pattern -> Regex pattern
     RegexMatchesF -> RegexMatches
+    RegexGroupsF -> RegexGroups
     ListOfF ast -> ListOf ast
     ShellF command -> Shell command
     AtF index -> At index
@@ -95,8 +99,9 @@ typecheckSelector =
     SplitFieldsF _ -> pure (TextType, TextType)
     SplitLinesF -> pure (TextType, TextType)
     SplitWordsF -> pure (TextType, TextType)
-    RegexF _ -> pure (TextType, TextType)
+    RegexF _ -> pure (TextType, RegexMatchType)
     RegexMatchesF -> pure (RegexMatchType, TextType)
+    RegexGroupsF -> pure (RegexMatchType, TextType)
     ListOfF ast -> do
       (input, output) <- typecheckSelector ast
       pure (input, ListType output)

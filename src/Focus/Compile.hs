@@ -13,6 +13,7 @@ where
 
 import Control.Lens
 import Control.Lens.Regex.Text qualified as RE
+import Control.Lens.Regex.Text qualified as Re
 import Control.Monad.Fix (MonadFix (..))
 import Control.Monad.RWS.CPS (MonadWriter (..))
 import Control.Monad.State.Lazy
@@ -72,6 +73,9 @@ liftTrav cmdF trav = case cmdF of
 textI :: Iso' Chunk Text
 textI = unsafeIso _TextChunk
 
+matchI :: Iso' Chunk Re.Match
+matchI = unsafeIso _RegexMatchChunk
+
 underText :: Traversal' Text Text -> Traversal' Chunk Chunk
 underText = withinIso textI
 
@@ -96,10 +100,11 @@ compileSelector cmdF = \case
   SplitWords ->
     liftTrav cmdF $ underText (\f txt -> Text.unwords <$> traverse f (Text.words txt))
   Regex pat -> do
-    liftTrav cmdF $ underText (RE.regexing pat . RE.match)
+    liftTrav cmdF $ textI . RE.regexing pat . from matchI
   RegexMatches ->
     liftTrav cmdF $ _RegexMatchChunk . RE.match . from textI
-  -- liftTrav cmdF $ underText RE.regexMatches
+  RegexGroups ->
+    liftTrav cmdF $ _RegexMatchChunk . RE.groups . traversed . from textI
   ListOf selector -> do
     case cmdF of
       ViewF -> ViewFocus $ \f chunk -> do
