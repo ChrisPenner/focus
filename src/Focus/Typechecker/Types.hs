@@ -6,13 +6,87 @@ module Focus.Typechecker.Types
     SomeTypedSelector (..),
     inputType,
     outputType,
+    Chunk (..),
+    ChunkType (..),
+    ChunkTypeF (..),
+    getChunkType,
+    _TextChunk,
+    _ListChunk,
+    _NumberChunk,
+    _RegexMatchChunk,
+    renderType,
+    unifies,
   )
 where
 
+import Control.Lens
 import Control.Lens.Regex.Text qualified as Re
 import Data.Text (Text)
+import Data.Type.Equality (TestEquality (..))
 import Focus.Tagged (Tagged (..))
-import Focus.Types
+
+data Chunk
+  = TextChunk Text
+  | ListChunk [Chunk]
+  | NumberChunk Double
+  | RegexMatchChunk Re.Match
+
+makePrisms ''Chunk
+
+instance Show Chunk where
+  show = \case
+    TextChunk txt -> show txt
+    ListChunk chs -> show chs
+    NumberChunk n -> show n
+    RegexMatchChunk m -> show $ m ^.. Re.matchAndGroups
+
+data ChunkType
+  = TextType
+  | ListType ChunkType
+  | NumberType
+  | AnyType
+  | RegexMatchType
+  deriving (Show, Eq)
+
+data ChunkTypeF (ct :: ChunkType) where
+  TextTypeF :: ChunkTypeF 'TextType
+  ListTypeF :: ChunkTypeF t -> ChunkTypeF ('ListType t)
+  NumberTypeF :: ChunkTypeF 'NumberType
+  AnyTypeF :: ChunkTypeF any
+  RegexMatchTypeF :: ChunkTypeF 'RegexMatchType
+
+getChunkType :: ChunkTypeF x -> ChunkType
+getChunkType = \case
+  TextTypeF -> TextType
+  ListTypeF t -> ListType (getChunkType t)
+  NumberTypeF -> NumberType
+  AnyTypeF -> AnyType
+  RegexMatchTypeF -> RegexMatchType
+
+instance TestEquality ChunkTypeF where
+  testEquality TextTypeF TextTypeF = Just Refl
+  testEquality (ListTypeF x) (ListTypeF y) =
+    case x `testEquality` y of
+      Just Refl -> Just Refl
+      Nothing -> Nothing
+  testEquality NumberTypeF NumberTypeF = Just Refl
+  testEquality AnyTypeF AnyTypeF = error "AnyTypeF should not be compared"
+  testEquality RegexMatchTypeF RegexMatchTypeF = Just Refl
+  testEquality _ _ = Nothing
+
+unifies :: ChunkType -> ChunkType -> Bool
+unifies AnyType _ = True
+unifies _ AnyType = True
+unifies (ListType x) (ListType y) = x `unifies` y
+unifies x y = x == y
+
+renderType :: ChunkType -> Text
+renderType = \case
+  TextType -> "text"
+  ListType t -> "[" <> renderType t <> "]"
+  NumberType -> "number"
+  RegexMatchType -> "regex-match"
+  AnyType -> "any"
 
 data TypedSelector (i :: ChunkType) (o :: ChunkType) a where
   Compose :: a -> TypedSelector i m a -> TypedSelector m o a -> TypedSelector i o a

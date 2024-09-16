@@ -19,9 +19,8 @@ import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Focus.Prelude ()
 import Focus.Tagged (Tagged (..))
-import Focus.Typechecker.Types (SomeTypedSelector (..), inputType, outputType)
+import Focus.Typechecker.Types (ChunkType, SomeTypedSelector (..), getChunkType, inputType, outputType, renderType)
 import Focus.Typechecker.Types qualified as Typechecked
-import Focus.Types (ChunkType (..), getChunkType, renderType)
 import Text.Regex.PCRE.Heavy (Regex)
 
 type TaggedSelector = Selector D.Position

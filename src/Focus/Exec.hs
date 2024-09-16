@@ -9,7 +9,7 @@ import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
 import Focus.Command
 import Focus.Compile (Focus (..))
-import Focus.Types (Chunk (..))
+import Focus.Typechecker.Types (Chunk (..))
 import System.IO qualified as IO
 import UnliftIO (BufferMode (LineBuffering), Handle, hSetBuffering)
 

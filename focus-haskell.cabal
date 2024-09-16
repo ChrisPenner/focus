@@ -37,7 +37,6 @@ library
       Focus.Prelude
       Focus.Tagged
       Focus.Typechecker.Types
-      Focus.Types
   other-modules:
       Paths_focus_haskell
   autogen-modules:

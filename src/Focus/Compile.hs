@@ -25,9 +25,8 @@ import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
 import Data.Vector.Internal.Check (HasCallStack)
 import Focus.Command (CommandF (..), CommandT (..))
-import Focus.Typechecker.Types (TypedSelector)
+import Focus.Typechecker.Types (Chunk (..), TypedSelector)
 import Focus.Typechecker.Types qualified as T
-import Focus.Types
 import System.Exit (ExitCode (..))
 import UnliftIO qualified
 import UnliftIO.Process qualified as UnliftIO
@@ -72,10 +71,10 @@ liftTrav cmdF trav = case cmdF of
   ModifyF -> ModifyFocus $ trav
 
 textI :: Iso' Chunk Text
-textI = unsafeIso _TextChunk
+textI = unsafeIso T._TextChunk
 
 matchI :: Iso' Chunk Re.Match
-matchI = unsafeIso _RegexMatchChunk
+matchI = unsafeIso T._RegexMatchChunk
 
 underText :: Traversal' Text Text -> Traversal' Chunk Chunk
 underText = withinIso textI
@@ -105,9 +104,9 @@ compileSelector cmdF = \case
   T.Regex _ pat -> do
     liftTrav cmdF $ textI . RE.regexing pat . from matchI
   T.RegexMatches _ ->
-    liftTrav cmdF $ _RegexMatchChunk . RE.match . from textI
+    liftTrav cmdF $ T._RegexMatchChunk . RE.match . from textI
   T.RegexGroups _ ->
-    liftTrav cmdF $ _RegexMatchChunk . RE.groups . traversed . from textI
+    liftTrav cmdF $ T._RegexMatchChunk . RE.groups . traversed . from textI
   T.ListOf _ selector -> do
     case cmdF of
       ViewF -> ViewFocus $ \f chunk -> do
