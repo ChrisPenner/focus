@@ -3,22 +3,14 @@
 
 module Focus.AST
   ( Selector (..),
-    SelectorF (..),
     TaggedSelector,
     TypeError (..),
     TypeErrorReport,
     typecheckSelector,
-    untagSelector,
   )
 where
 
-import Control.Category ((>>>))
-import Control.Comonad (Comonad (..))
-import Control.Comonad.Cofree (Cofree)
-import Control.Comonad.Cofree qualified as CF
-import Control.Comonad.Trans.Cofree qualified as CofreeF
 import Data.Foldable (foldlM)
-import Data.Functor.Foldable (Base, Corecursive (..), Recursive (..))
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Text (Text)
@@ -26,69 +18,39 @@ import Data.Type.Equality (TestEquality (..), (:~:) (Refl))
 import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Focus.Prelude ()
+import Focus.Tagged (Tagged (..))
 import Focus.Typechecker.Types (SomeTypedSelector (..), inputType, outputType)
 import Focus.Typechecker.Types qualified as Typechecked
 import Focus.Types (ChunkType (..), getChunkType, renderType)
 import Text.Regex.PCRE.Heavy (Regex)
-import Text.Show.Deriving (deriveShow1)
 
-type TaggedSelector = Cofree SelectorF D.Position
+type TaggedSelector = Selector D.Position
 
-data SelectorF r
-  = ComposeF (NonEmpty r)
-  | SplitFieldsF Text {- delimeter -}
-  | SplitLinesF
-  | SplitWordsF
-  | RegexF Regex {- pattern -}
-  | RegexMatchesF
-  | RegexGroupsF
-  | ListOfF r
-  | ShellF Text
-  | AtF Int
+data Selector a
+  = Compose a (NonEmpty (Selector a))
+  | SplitFields a Text {- delimeter -}
+  | SplitLines a
+  | SplitWords a
+  | Regex a Regex
+  | RegexMatches a
+  | RegexGroups a
+  | ListOf a (Selector a)
+  | Shell a Text
+  | At a Int
   deriving stock (Show, Functor, Foldable, Traversable)
 
-deriveShow1 ''SelectorF
-
-data Selector
-  = Compose (NonEmpty Selector)
-  | SplitFields Text {- delimeter -}
-  | SplitLines
-  | SplitWords
-  | Regex Regex
-  | RegexMatches
-  | RegexGroups
-  | ListOf Selector
-  | Shell Text
-  | At Int
-  deriving stock (Show)
-
-type instance Base Selector = SelectorF
-
-instance Recursive Selector where
-  project = \case
-    Compose selectors -> ComposeF selectors
-    SplitFields delimeter -> SplitFieldsF delimeter
-    SplitLines -> SplitLinesF
-    SplitWords -> SplitWordsF
-    Regex pattern -> RegexF pattern
-    RegexMatches -> RegexMatchesF
-    RegexGroups -> RegexGroupsF
-    ListOf ast -> ListOfF ast
-    Shell command -> ShellF command
-    At index -> AtF index
-
-instance Corecursive Selector where
-  embed = \case
-    ComposeF selectors -> Compose selectors
-    SplitFieldsF delimeter -> SplitFields delimeter
-    SplitLinesF -> SplitLines
-    SplitWordsF -> SplitWords
-    RegexF pattern -> Regex pattern
-    RegexMatchesF -> RegexMatches
-    RegexGroupsF -> RegexGroups
-    ListOfF ast -> ListOf ast
-    ShellF command -> Shell command
-    AtF index -> At index
+instance Tagged Selector where
+  tag = \case
+    Compose a _ -> a
+    SplitFields a _ -> a
+    SplitLines a -> a
+    SplitWords a -> a
+    Regex a _ -> a
+    RegexMatches a -> a
+    RegexGroups a -> a
+    ListOf a _ -> a
+    Shell a _ -> a
+    At a _ -> a
 
 data TypeError
   = TypeMismatch (D.Position, ChunkType) (D.Position, ChunkType)
@@ -99,7 +61,7 @@ type TypeErrorReport = D.Report Text
 -- oldTypecheckSelector :: TaggedSelector -> Either TypeErrorReport (ChunkType {- input -}, ChunkType {- output -})
 -- oldTypecheckSelector =
 --   CF.unwrap >>> \case
---     ComposeF selectors -> do
+--     Compose selectors -> do
 --       selectorTypes <- traverse typecheckSelector selectors
 --       (snd <$> foldrM1 checkTypes (NE.zip selectors selectorTypes))
 --     SplitFieldsF _ -> pure (TextType, TextType)
@@ -124,9 +86,6 @@ type TypeErrorReport = D.Report Text
 --           Right (sl, (i, o))
 --         else Left $ typeErrorReport $ TypeMismatch (sl, l) (sr, r)
 
-untagSelector :: TaggedSelector -> Selector
-untagSelector = cata \(_ CofreeF.:< f) -> embed f
-
 typeErrorReport :: TypeError -> D.Report Text
 typeErrorReport = \case
   TypeMismatch (lPos, ltyp) (rPos, rtyp) ->
@@ -138,32 +97,30 @@ typeErrorReport = \case
       ]
       []
 
-typecheckSelector :: TaggedSelector -> Either TypeErrorReport SomeTypedSelector
-typecheckSelector =
-  CF.unwrap >>> \case
-    ComposeF (s NE.:| rest) -> do
-      s' <- typecheckSelector s
-      snd <$> foldlM compose (extract s, s') rest
-    SplitFieldsF delim -> pure $ SomeTypedSelector $ Typechecked.SplitFields delim
-    SplitLinesF -> pure $ SomeTypedSelector Typechecked.SplitLines
-    SplitWordsF -> pure $ SomeTypedSelector Typechecked.SplitWords
-    RegexF pat -> pure $ SomeTypedSelector $ Typechecked.Regex pat
-    RegexMatchesF -> pure $ SomeTypedSelector Typechecked.RegexMatches
-    RegexGroupsF -> pure $ SomeTypedSelector Typechecked.RegexGroups
-    ListOfF inner -> do
-      typecheckSelector inner >>= \case
-        SomeTypedSelector inner' ->
-          pure $ SomeTypedSelector $ Typechecked.ListOf inner'
-    ShellF script -> pure $ SomeTypedSelector $ Typechecked.Shell script
-    AtF n -> pure $ SomeTypedSelector $ Typechecked.At n
+typecheckSelector :: TaggedSelector -> Either TypeErrorReport (SomeTypedSelector D.Position)
+typecheckSelector = \case
+  Compose _pos (s NE.:| rest) -> do
+    s' <- typecheckSelector s
+    foldlM compose s' rest
+  SplitFields pos delim -> pure $ SomeTypedSelector $ Typechecked.SplitFields pos delim
+  SplitLines pos -> pure $ SomeTypedSelector $ Typechecked.SplitLines pos
+  SplitWords pos -> pure $ SomeTypedSelector $ Typechecked.SplitWords pos
+  Regex pos pat -> pure $ SomeTypedSelector $ Typechecked.Regex pos pat
+  RegexMatches pos -> pure $ SomeTypedSelector $ Typechecked.RegexMatches pos
+  RegexGroups pos -> pure $ SomeTypedSelector $ Typechecked.RegexGroups pos
+  ListOf pos inner -> do
+    typecheckSelector inner >>= \case
+      SomeTypedSelector inner' ->
+        pure $ SomeTypedSelector $ Typechecked.ListOf pos inner'
+  Shell pos script -> pure $ SomeTypedSelector $ Typechecked.Shell pos script
+  At pos n -> pure $ SomeTypedSelector $ Typechecked.At pos n
   where
-    compose :: (D.Position, SomeTypedSelector) -> TaggedSelector -> Either TypeErrorReport (D.Position, SomeTypedSelector)
-    compose (lPos, l) r = do
-      let rPos = extract r
+    compose :: SomeTypedSelector D.Position -> TaggedSelector -> Either TypeErrorReport (SomeTypedSelector D.Position)
+    compose l r = do
       typecheckSelector r >>= \case
         SomeTypedSelector r' ->
           case l of
             SomeTypedSelector l' ->
               case testEquality (outputType l') (inputType r') of
-                Just Refl -> Right $ (lPos <> rPos, SomeTypedSelector $ Typechecked.Compose l' r')
-                Nothing -> Left $ typeErrorReport $ TypeMismatch (lPos, getChunkType $ outputType l') (rPos, getChunkType $ inputType r')
+                Just Refl -> Right $ (SomeTypedSelector $ Typechecked.Compose (tag l' <> tag r) l' r')
+                Nothing -> Left $ typeErrorReport $ TypeMismatch (tag l', getChunkType $ outputType l') (tag r', getChunkType $ inputType r')

@@ -1,6 +1,5 @@
 module Focus.Parser (parseScript) where
 
-import Control.Comonad.Cofree qualified as CF
 import Control.Monad
 import Data.Bifunctor (Bifunctor (..))
 import Data.Function
@@ -10,9 +9,11 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Error.Diagnose (Diagnostic)
+import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Error.Diagnose.Compat.Megaparsec
 import Focus.AST
+import Focus.Prelude ((<&>))
 import Text.Megaparsec
 import Text.Megaparsec qualified as M
 import Text.Megaparsec.Char qualified as M
@@ -33,13 +34,13 @@ instance HasHints CustomError a where
 
 type P = Parsec CustomError String
 
-withPos :: P (SelectorF TaggedSelector) -> P TaggedSelector
+withPos :: P (D.Position -> TaggedSelector) -> P TaggedSelector
 withPos p = do
   SourcePos {sourceName, sourceLine = startLine, sourceColumn = startCol} <- M.getSourcePos
-  s <- p
+  f <- p
   end <- M.getSourcePos
   let pos = Diagnose.Position (M.unPos startLine, M.unPos startCol) (M.unPos (M.sourceLine end), M.unPos (M.sourceColumn end)) sourceName
-  pure $ pos CF.:< s
+  pure $ f pos
 
 parseScript :: Text -> Text -> Either (Diagnostic Text) TaggedSelector
 parseScript srcName src =
@@ -58,7 +59,8 @@ scriptP = selectorsP
 
 selectorsP :: P TaggedSelector
 selectorsP = withPos do
-  ComposeF . NE.fromList <$> M.sepBy1 selectorP separatorP
+  M.sepBy1 selectorP separatorP
+    <&> \r pos -> Compose pos . NE.fromList $ r
 
 lexeme :: P a -> P a
 lexeme = L.lexeme M.space
@@ -83,19 +85,19 @@ regexP =
       Text.pack <$> many (escaped <|> M.anySingleBut '/')
     case Regex.compileM (Text.encodeUtf8 pat) [] of
       Left err -> M.customFailure $ BadRegex (Text.pack err)
-      Right re -> pure $ RegexF re
+      Right re -> pure $ \pos -> Regex pos re
   where
     escaped = M.string "\\/" $> '/'
 
 listP :: P TaggedSelector
 listP = withPos do
   between (lexeme $ M.char '[') (lexeme $ M.char ']') $ do
-    ListOfF <$> selectorsP
+    flip ListOf <$> selectorsP
 
 shellP :: P TaggedSelector
 shellP = withPos do
   between (lexeme $ M.char '{') (lexeme $ M.char '}') $ do
-    ShellF . Text.pack <$> many (escaped <|> M.anySingleBut '}')
+    flip Shell . Text.pack <$> many (escaped <|> M.anySingleBut '}')
   where
     escaped = M.char '\\' >> M.anySingle
 
@@ -117,14 +119,14 @@ simpleSelectorP = withPos do
   case name of
     "splitOn" -> do
       delim <- strP
-      pure $ SplitFieldsF delim
-    "words" -> pure SplitWordsF
-    "lines" -> pure SplitLinesF
+      pure $ flip SplitFields delim
+    "words" -> pure SplitWords
+    "lines" -> pure SplitLines
     "at" -> do
       n <- lexeme L.decimal
-      pure $ AtF n
+      pure $ flip At n
     "matches" -> do
-      pure RegexMatchesF
+      pure RegexMatches
     "groups" -> do
-      pure RegexGroupsF
+      pure RegexGroups
     _ -> error "impossible"

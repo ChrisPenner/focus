@@ -11,45 +11,64 @@ where
 
 import Control.Lens.Regex.Text qualified as Re
 import Data.Text (Text)
+import Focus.Tagged (Tagged (..))
 import Focus.Types
 
-data TypedSelector (i :: ChunkType) (o :: ChunkType) where
-  Compose :: TypedSelector i m -> TypedSelector m o -> TypedSelector i o
-  SplitFields :: Text -> TypedSelector TextType TextType
-  SplitLines :: TypedSelector TextType TextType
-  SplitWords :: TypedSelector TextType TextType
-  Regex :: Re.Regex -> TypedSelector TextType RegexMatchType
-  RegexMatches :: TypedSelector RegexMatchType TextType
-  RegexGroups :: TypedSelector RegexMatchType TextType
-  ListOf :: TypedSelector i o -> TypedSelector i (ListType o)
-  Shell :: Text -> TypedSelector TextType TextType
-  At :: Int -> TypedSelector (ListType a) a
+data TypedSelector (i :: ChunkType) (o :: ChunkType) a where
+  Compose :: a -> TypedSelector i m a -> TypedSelector m o a -> TypedSelector i o a
+  SplitFields :: a -> Text -> TypedSelector TextType TextType a
+  SplitLines :: a -> TypedSelector TextType TextType a
+  SplitWords :: a -> TypedSelector TextType TextType a
+  Regex :: a -> Re.Regex -> TypedSelector TextType RegexMatchType a
+  RegexMatches :: a -> TypedSelector RegexMatchType TextType a
+  RegexGroups :: a -> TypedSelector RegexMatchType TextType a
+  ListOf :: a -> TypedSelector i o a -> TypedSelector i (ListType o) a
+  Shell :: a -> Text -> TypedSelector TextType TextType a
+  At :: a -> Int -> TypedSelector (ListType t) t a
 
-data SomeTypedSelector where
-  SomeTypedSelector :: forall i o. TypedSelector i o -> SomeTypedSelector
+instance Tagged (TypedSelector i o) where
+  tag = \case
+    Compose pos _ _ -> pos
+    SplitFields pos _ -> pos
+    SplitLines pos -> pos
+    SplitWords pos -> pos
+    Regex pos _ -> pos
+    RegexMatches pos -> pos
+    RegexGroups pos -> pos
+    ListOf pos _ -> pos
+    Shell pos _ -> pos
+    At pos _ -> pos
 
-inputType :: TypedSelector i o -> ChunkTypeF i
+deriving instance Functor (TypedSelector i o)
+
+data SomeTypedSelector a where
+  SomeTypedSelector :: TypedSelector i o a -> SomeTypedSelector a
+
+instance Tagged SomeTypedSelector where
+  tag (SomeTypedSelector s) = tag s
+
+inputType :: TypedSelector i o a -> ChunkTypeF i
 inputType = \case
-  Compose a _ -> inputType a
-  SplitFields _ -> TextTypeF
-  SplitLines -> TextTypeF
-  SplitWords -> TextTypeF
-  Regex _ -> TextTypeF
-  RegexMatches -> RegexMatchTypeF
-  RegexGroups -> RegexMatchTypeF
-  ListOf t -> inputType t
-  Shell _ -> TextTypeF
-  At _ -> ListTypeF (AnyTypeF)
+  Compose _pos a _ -> inputType a
+  SplitFields _pos _ -> TextTypeF
+  SplitLines _pos -> TextTypeF
+  SplitWords _pos -> TextTypeF
+  Regex _pos _ -> TextTypeF
+  RegexMatches _pos -> RegexMatchTypeF
+  RegexGroups _pos -> RegexMatchTypeF
+  ListOf _pos t -> inputType t
+  Shell _pos _ -> TextTypeF
+  At _pos _ -> ListTypeF (AnyTypeF)
 
-outputType :: TypedSelector i o -> ChunkTypeF o
+outputType :: TypedSelector i o a -> ChunkTypeF o
 outputType = \case
-  Compose _ b -> outputType b
-  SplitFields _ -> TextTypeF
-  SplitLines -> TextTypeF
-  SplitWords -> TextTypeF
-  Regex _ -> RegexMatchTypeF
-  RegexMatches -> TextTypeF
-  RegexGroups -> TextTypeF
-  ListOf t -> ListTypeF (outputType t)
-  Shell _ -> TextTypeF
-  At _ -> AnyTypeF
+  Compose _pos _ b -> outputType b
+  SplitFields _pos _ -> TextTypeF
+  SplitLines _pos -> TextTypeF
+  SplitWords _pos -> TextTypeF
+  Regex _pos _ -> RegexMatchTypeF
+  RegexMatches _pos -> TextTypeF
+  RegexGroups _pos -> TextTypeF
+  ListOf _pos t -> ListTypeF (outputType t)
+  Shell _pos _ -> TextTypeF
+  At _pos _ -> AnyTypeF
