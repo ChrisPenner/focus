@@ -24,8 +24,9 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
 import Data.Vector.Internal.Check (HasCallStack)
-import Focus.AST
 import Focus.Command (CommandF (..), CommandT (..))
+import Focus.Typechecker.Types (TypedSelector)
+import Focus.Typechecker.Types qualified as T
 import Focus.Types
 import System.Exit (ExitCode (..))
 import UnliftIO qualified
@@ -89,23 +90,25 @@ unsafeIso p = iso (\actual -> fromJust actual . preview p $ actual) (review p)
       Just x -> x
       Nothing -> error $ "unsafeIso: Mismatch. Actual: " <> show actual
 
-compileSelector :: forall m cmd. (MonadIO m, MonadFix m) => CommandF cmd -> Selector -> Focus cmd m
+compileSelector :: forall m cmd i o. (MonadIO m, MonadFix m) => CommandF cmd -> TypedSelector i o -> Focus cmd m
 compileSelector cmdF = \case
-  Compose selectors ->
-    foldr1 composeFT (compileSelector cmdF <$> selectors)
-  SplitFields delim ->
+  T.Compose l r ->
+    let l' = compileSelector cmdF l
+        r' = compileSelector cmdF r
+     in composeFT l' r'
+  T.SplitFields delim ->
     liftTrav cmdF $ underText (\f txt -> (Text.intercalate delim) <$> traverse f (Text.splitOn delim txt))
-  SplitLines ->
+  T.SplitLines ->
     liftTrav cmdF $ underText (\f txt -> Text.unlines <$> traverse f (Text.lines txt))
-  SplitWords ->
+  T.SplitWords ->
     liftTrav cmdF $ underText (\f txt -> Text.unwords <$> traverse f (Text.words txt))
-  Regex pat -> do
+  T.Regex pat -> do
     liftTrav cmdF $ textI . RE.regexing pat . from matchI
-  RegexMatches ->
+  T.RegexMatches ->
     liftTrav cmdF $ _RegexMatchChunk . RE.match . from textI
-  RegexGroups ->
+  T.RegexGroups ->
     liftTrav cmdF $ _RegexMatchChunk . RE.groups . traversed . from textI
-  ListOf selector -> do
+  T.ListOf selector -> do
     case cmdF of
       ViewF -> ViewFocus $ \f chunk -> do
         let t :: ((Chunk -> WriterT [Chunk] IO ()) -> Chunk -> WriterT [Chunk] IO ())
@@ -135,7 +138,7 @@ compileSelector cmdF = \case
           f (ListChunk $ reverse reads) >>= \case
             ~(ListChunk chs) -> pure $ (r, chs)
         pure r
-  Shell shellScript -> do
+  T.Shell shellScript -> do
     let go :: forall x. (Chunk -> m x) -> Chunk -> m x
         go f chunk = do
           let proc = UnliftIO.shell (Text.unpack shellScript)
@@ -155,7 +158,7 @@ compileSelector cmdF = \case
     case cmdF of
       ViewF -> ViewFocus \f chunk -> go f chunk
       ModifyF -> ModifyFocus \f chunk -> go f chunk
-  At n -> do
+  T.At n -> do
     liftTrav cmdF $ \f chunk -> do
       listChunk chunk
         & ix n %%~ f

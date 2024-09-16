@@ -5,7 +5,7 @@ import Control.Monad.Reader (MonadIO (liftIO), ReaderT (..), asks)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Error.Diagnose qualified as Diagnose
-import Focus.AST (typecheckSelector, untagSelector)
+import Focus.AST (typecheckSelector)
 import Focus.Cli (InputLocation (..), Options (..), OutputLocation (..), UseColour (..), optionsP)
 import Focus.Command (Command (..), CommandF (..))
 import Focus.Compile (Focus, compileSelector)
@@ -13,6 +13,7 @@ import Focus.Debug (debugM)
 import Focus.Exec qualified as Exec
 import Focus.Parser (parseScript)
 import Focus.Prelude
+import Focus.Typechecker.Types (SomeTypedSelector (..))
 import Options.Applicative qualified as Opts
 import Prettyprinter.Render.Terminal (AnsiStyle)
 import System.Exit qualified as System
@@ -80,5 +81,5 @@ run = do
                         <> (Diagnose.addReport mempty errReport)
                     )
               failWithDiagnostic diagnostic
-            Right _ -> do
-              pure $ compileSelector cmdF (untagSelector ast)
+            Right (SomeTypedSelector typedSelector) -> do
+              pure $ compileSelector cmdF typedSelector
