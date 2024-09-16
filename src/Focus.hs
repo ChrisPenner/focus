@@ -52,7 +52,7 @@ run = do
     failWithDiagnostic :: Diagnose.Diagnostic Text -> CliM a
     failWithDiagnostic diagnostic = do
       style <- diagnoseStyle
-      Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithoutUnicode (Diagnose.TabSize 2) style diagnostic
+      Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style diagnostic
       liftIO $ System.exitFailure
 
     withHandles :: InputLocation -> OutputLocation -> (IO.Handle -> IO.Handle -> IO r) -> IO r
@@ -69,7 +69,7 @@ run = do
       case parseScript srcName script of
         Left errDiagnostic -> do
           style <- diagnoseStyle
-          Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithoutUnicode (Diagnose.TabSize 2) style errDiagnostic
+          Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style errDiagnostic
           liftIO $ System.exitFailure
         Right ast -> do
           debugM "Selector" ast
