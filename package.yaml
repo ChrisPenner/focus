@@ -56,6 +56,7 @@ dependencies:
 - pcre-light
 - some
 - mtl
+- diagnose
 
 ghc-options:
 - -Wall

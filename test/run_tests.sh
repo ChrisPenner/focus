@@ -59,6 +59,9 @@ run() {
 
 "$focus" --help > "help.out"
 
+# Parser errors
+echo "one,two,three" | run parser_err view 'splitOn ,'
+
 # Basic View
 echo "one,two,three" | run basic_view view 'splitOn ","'
 

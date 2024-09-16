@@ -2,3 +2,12 @@ resolver: lts-22.26
 
 packages:
 - .
+
+extra-deps:
+- diagnose-2.5.1@sha256:853fd268d7fe0191b79d73187104bf7b4bc5ce3bc3483cb088dc10b09f18abc8,5977
+- text-2.0@sha256:f2207a6a51a8320c44dbd8b462723a8e39e2bfceda67e15f52fc12922259cbb0,8093
+
+flags:
+  diagnose:
+    megaparsec-compat: true
+

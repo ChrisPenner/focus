@@ -71,7 +71,7 @@ overP = do
       ( metavar "MODIFIER"
           <> help "Modifier to apply"
       )
-  pure $ Over script modifier
+  pure $ Modify script modifier
 
 setP :: Parser Command
 setP = do

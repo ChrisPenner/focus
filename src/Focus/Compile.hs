@@ -34,14 +34,14 @@ import Prelude hiding (reads)
 
 data Focus (cmd :: CommandT) m where
   ViewFocus :: ((Chunk -> m ()) -> Chunk -> m ()) -> Focus 'ViewT m
-  OverFocus :: LensLike' m Chunk Chunk -> Focus 'OverT m
+  ModifyFocus :: LensLike' m Chunk Chunk -> Focus 'ModifyT m
   SetFocus :: LensLike' m Chunk Chunk -> Focus 'SetT m
 
 getViewFocus :: Focus 'ViewT m -> ((Chunk -> m ()) -> Chunk -> m ())
 getViewFocus (ViewFocus f) = f
 
-getOverFocus :: Focus 'OverT m -> LensLike' m Chunk Chunk
-getOverFocus (OverFocus f) = f
+getModifyFocus :: Focus 'ModifyT m -> LensLike' m Chunk Chunk
+getModifyFocus (ModifyFocus f) = f
 
 textChunk :: (HasCallStack) => Chunk -> Text
 textChunk = \case
@@ -60,13 +60,13 @@ compileAST cmdF = \case
 
 composeFT :: Focus cmd m -> Focus cmd m -> Focus cmd m
 composeFT (ViewFocus l) (ViewFocus r) = ViewFocus $ l . r
-composeFT (OverFocus l) (OverFocus r) = OverFocus $ l . r
+composeFT (ModifyFocus l) (ModifyFocus r) = ModifyFocus $ l . r
 composeFT (SetFocus l) (SetFocus r) = SetFocus $ l . r
 
 liftTrav :: (Applicative m) => CommandF cmd -> Traversal' Chunk Chunk -> Focus cmd m
 liftTrav cmdF trav = case cmdF of
   ViewF -> ViewFocus $ \handler chunk -> getAp $ foldMapOf trav (Ap . handler) chunk
-  OverF -> OverFocus $ trav
+  ModifyF -> ModifyFocus $ trav
 
 compileSelector :: forall m cmd. (MonadIO m, MonadFix m) => CommandF cmd -> Selector -> Focus cmd m
 compileSelector cmdF = \case
@@ -97,9 +97,9 @@ compileSelector cmdF = \case
             & execWriterT
             & liftIO
         f (ListChunk $ results)
-      OverF -> OverFocus $ \f chunk -> do
+      ModifyF -> ModifyFocus $ \f chunk -> do
         let inner :: LensLike' (StateT ListOfS IO) Chunk Chunk
-            inner = getOverFocus $ compileAST cmdF selector
+            inner = getModifyFocus $ compileAST cmdF selector
         let action :: StateT ListOfS IO Chunk
             action =
               chunk
@@ -132,7 +132,7 @@ compileSelector cmdF = \case
           f (TextChunk out')
     case cmdF of
       ViewF -> ViewFocus \f chunk -> go f chunk
-      OverF -> OverFocus \f chunk -> go f chunk
+      ModifyF -> ModifyFocus \f chunk -> go f chunk
   At n -> do
     liftTrav cmdF $ \f chunk -> do
       listChunk chunk

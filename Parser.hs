@@ -24,16 +24,16 @@ type P = Parsec Void String
 instance HasHints Void a where
   hints e = case e of {}
 
-parseScript :: Text -> Text -> Either (Diagnostic Text) AST
-parseScript srcName src =
+parseScript :: Text -> Either (Diagnostic Text) AST
+parseScript src =
   let strSource = Text.unpack src
-      strSourceName = Text.unpack srcName
-   in parse (scriptP <* M.eof) strSourceName strSource
+      srcName = "<selector>"
+   in parse scriptP srcName strSource
         & first
           ( \bundle ->
               bundle
                 & errorDiagnosticFromBundle Nothing "Invalid selector" Nothing
-                & \d -> Diagnose.addFile d strSourceName strSource
+                & \d -> Diagnose.addFile d srcName strSource
           )
 
 scriptP :: P AST
@@ -52,18 +52,16 @@ separatorP = do
 
 -- | Parse a string literal, handling escape sequences
 strP :: P Text
-strP =
-  M.label "string" $ do
-    lexeme $ between (M.char '"') (M.char '"') $ do
-      Text.pack <$> many (escaped <|> M.anySingleBut '"')
+strP = M.label "string" $ do
+  lexeme $ between (M.char '"') (M.char '"') $ do
+    Text.pack <$> many (escaped <|> M.anySingleBut '"')
   where
     escaped = M.char '\\' >> M.anySingle
 
 regexP :: P Text
 regexP =
-  M.label "regex, e.g. /he?(ll)o.+/" $ do
-    lexeme $ between (M.char '/') (M.char '/') $ do
-      Text.pack <$> many (escaped <|> M.anySingleBut '/')
+  lexeme $ between (M.char '/') (M.char '/') $ do
+    Text.pack <$> many (escaped <|> M.anySingleBut '/')
   where
     escaped = M.char '\\' >> M.anySingle
 

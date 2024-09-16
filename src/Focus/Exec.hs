@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 
-module Focus.Exec (runView, runSet, runOver) where
+module Focus.Exec (runView, runSet, runModify) where
 
 import Control.Lens
 import Control.Monad.IO.Class (MonadIO (..))
@@ -28,8 +28,8 @@ runView (ViewFocus f) input output = do
             go
   go
 
-runSet :: (MonadIO m) => Focus OverT m -> Handle -> Handle -> Text -> m ()
-runSet (OverFocus trav) input output val = do
+runSet :: (MonadIO m) => Focus ModifyT m -> Handle -> Handle -> Text -> m ()
+runSet (ModifyFocus trav) input output val = do
   liftIO $ hSetBuffering input LineBuffering
   liftIO $ hSetBuffering output LineBuffering
   let go = do
@@ -44,8 +44,8 @@ runSet (OverFocus trav) input output val = do
             go
   go
 
-runOver :: (MonadIO m) => Focus OverT m -> Focus OverT m -> Handle -> Handle -> m ()
-runOver (OverFocus trav) (OverFocus modifier) input output = do
+runModify :: (MonadIO m) => Focus ModifyT m -> Focus ModifyT m -> Handle -> Handle -> m ()
+runModify (ModifyFocus trav) (ModifyFocus modifier) input output = do
   liftIO $ hSetBuffering input LineBuffering
   liftIO $ hSetBuffering output LineBuffering
   let go = do

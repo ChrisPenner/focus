@@ -67,6 +67,7 @@ library
   build-depends:
       base >=4.7 && <5
     , bytestring
+    , diagnose
     , lens
     , lens-action
     , megaparsec
@@ -114,6 +115,7 @@ executable focus
   build-depends:
       base >=4.7 && <5
     , bytestring
+    , diagnose
     , focus-haskell
     , lens
     , lens-action
@@ -163,6 +165,7 @@ test-suite focus-haskell-test
   build-depends:
       base >=4.7 && <5
     , bytestring
+    , diagnose
     , focus-haskell
     , lens
     , lens-action

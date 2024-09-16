@@ -12,14 +12,14 @@ import Data.Text (Text)
 
 type Script = Text
 
-data CommandT = ViewT | OverT | SetT
+data CommandT = ViewT | ModifyT | SetT
 
 data CommandF (cmd :: CommandT) where
   ViewF :: CommandF 'ViewT
-  OverF :: CommandF 'OverT
+  ModifyF :: CommandF 'ModifyT
 
 data Command
   = View Script
-  | Over Script Text
+  | Modify Script Text
   | Set Script Text
   deriving stock (Show)
