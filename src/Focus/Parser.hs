@@ -1,6 +1,3 @@
-{-# LANGUAGE EmptyCase #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
-
 module Focus.Parser (parseScript) where
 
 import Control.Comonad.Cofree qualified as CF
@@ -12,7 +9,6 @@ import Data.List.NonEmpty qualified as NE
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
-import Data.Void
 import Error.Diagnose (Diagnostic)
 import Error.Diagnose qualified as Diagnose
 import Error.Diagnose.Compat.Megaparsec
@@ -36,9 +32,6 @@ instance HasHints CustomError a where
     BadRegex _ -> []
 
 type P = Parsec CustomError String
-
-instance HasHints Void a where
-  hints e = case e of {}
 
 withPos :: P (SelectorF TaggedSelector) -> P TaggedSelector
 withPos p = do

@@ -1,6 +1,10 @@
+{-# LANGUAGE DataKinds #-}
+
 module Focus.Types
   ( Chunk (..),
     ChunkType (..),
+    ChunkTypeF (..),
+    getChunkType,
     _TextChunk,
     _ListChunk,
     _NumberChunk,
@@ -16,6 +20,7 @@ where
 import Control.Lens
 import Control.Lens.Regex.Text qualified as Re
 import Data.Text (Text)
+import Data.Type.Equality (TestEquality (..))
 
 data Chunk
   = TextChunk Text
@@ -54,6 +59,32 @@ data ChunkType
   | AnyType
   | RegexMatchType
   deriving (Show, Eq)
+
+data ChunkTypeF (ct :: ChunkType) where
+  TextTypeF :: ChunkTypeF 'TextType
+  ListTypeF :: ChunkTypeF t -> ChunkTypeF ('ListType t)
+  NumberTypeF :: ChunkTypeF 'NumberType
+  AnyTypeF :: ChunkTypeF any
+  RegexMatchTypeF :: ChunkTypeF 'RegexMatchType
+
+getChunkType :: ChunkTypeF x -> ChunkType
+getChunkType = \case
+  TextTypeF -> TextType
+  ListTypeF t -> ListType (getChunkType t)
+  NumberTypeF -> NumberType
+  AnyTypeF -> AnyType
+  RegexMatchTypeF -> RegexMatchType
+
+instance TestEquality ChunkTypeF where
+  testEquality TextTypeF TextTypeF = Just Refl
+  testEquality (ListTypeF x) (ListTypeF y) =
+    case x `testEquality` y of
+      Just Refl -> Just Refl
+      Nothing -> Nothing
+  testEquality NumberTypeF NumberTypeF = Just Refl
+  testEquality AnyTypeF AnyTypeF = error "AnyTypeF should not be compared"
+  testEquality RegexMatchTypeF RegexMatchTypeF = Just Refl
+  testEquality _ _ = Nothing
 
 unifies :: ChunkType -> ChunkType -> Bool
 unifies AnyType _ = True

@@ -62,6 +62,7 @@ dependencies:
 - diagnose
 - deriving-compat
 - prettyprinter-ansi-terminal
+- comonad
 
 ghc-options:
 - -Wall
@@ -79,7 +80,7 @@ library:
   source-dirs: src
 
 executables:
-  focus:
+  focus-exe:
     main:                Main.hs
     source-dirs:         app
     ghc-options:

@@ -3,6 +3,8 @@ focus view '/[\d-]+/' ''
 ===INPUT===============================================================================
 one two 555-123-4567 three
 ===OUTPUT===============================================================================
-555-123-4567
+focus-exe: Can't render a regex match chunk
+CallStack (from HasCallStack):
+  error, called at src/Focus/Exec.hs:68:25 in focus-haskell-0.1.0.0-67u5sjtUdw1Bwuwyj6yF8g:Focus.Exec
 ===EXIT CODE===============================================================================
-0
+1

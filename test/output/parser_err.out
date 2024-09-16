@@ -4,12 +4,12 @@ focus view 'splitOn ,' ''
 one,two,three
 ===OUTPUT===============================================================================
 [0m[error][0m: Invalid selector
-     [0m+-->[0m [0m<selector>@1:9-1:10[0m
-     [0m|[0m
-[0m   1 |[0m [0ms[0m[0mp[0m[0ml[0m[0mi[0m[0mt[0m[0mO[0m[0mn[0m[0m [0m[0m,[0m
-     [0m:[0m         [0m^[0m
-     [0m:[0m         [0m|-[0m [0munexpected ','[0m
-     [0m:[0m         [0m`-[0m [0mexpecting string or white space[0m
-[0m-----+[0m
+     [0m╭──▶[0m [0m<selector>@1:9-1:10[0m
+     [0m│[0m
+[0m   1 │[0m [0ms[0m[0mp[0m[0ml[0m[0mi[0m[0mt[0m[0mO[0m[0mn[0m[0m [0m[0m,[0m
+     [0m•[0m         [0m┬[0m
+     [0m•[0m         [0m├╸[0m [0munexpected ','[0m
+     [0m•[0m         [0m╰╸[0m [0mexpecting string or white space[0m
+[0m─────╯[0m
 ===EXIT CODE===============================================================================
 1

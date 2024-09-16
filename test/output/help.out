@@ -1,5 +1,5 @@
-Usage: focus [-i|--input INPUT-FILE] [-o|--output OUTPUT-FILE] [--no-color]
-             COMMAND
+Usage: focus-exe [-i|--input INPUT-FILE] [-o|--output OUTPUT-FILE] [--no-color]
+                 COMMAND
 
   Focus - cli utility for hacking and slashing data
 
