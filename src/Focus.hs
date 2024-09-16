@@ -1,24 +1,29 @@
 module Focus (run) where
 
 import Control.Applicative
+import Control.Monad.Reader (MonadIO (liftIO), ReaderT (..), asks)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Error.Diagnose qualified as Diagnose
 import Focus.AST (typecheckSelector, untagSelector)
-import Focus.Cli (InputLocation (..), Options (..), OutputLocation (..), optionsP)
+import Focus.Cli (InputLocation (..), Options (..), OutputLocation (..), UseColour (..), optionsP)
 import Focus.Command (Command (..), CommandF (..))
 import Focus.Compile (Focus, compileSelector)
 import Focus.Debug (debugM)
 import Focus.Exec qualified as Exec
 import Focus.Parser (parseScript)
+import Focus.Prelude
 import Options.Applicative qualified as Opts
+import Prettyprinter.Render.Terminal (AnsiStyle)
 import System.Exit qualified as System
 import UnliftIO qualified as IO
-import UnliftIO.IO qualified as System
+import UnliftIO.IO qualified as UnliftIO
+
+type CliM = ReaderT Options IO
 
 run :: IO ()
 run = do
-  Options {command, input, output} <-
+  opts@Options {command, input, output} <-
     Opts.execParser $
       ( Opts.info
           (optionsP <**> Opts.helper)
@@ -26,23 +31,29 @@ run = do
               <> Opts.progDesc "Focus - cli utility for hacking and slashing data"
           )
       )
-  withHandles input output \inputHandle outputHandle -> do
+  withHandles input output \inputHandle outputHandle -> flip runReaderT opts do
     case command of
       View script -> do
         focus <- getFocus "<selector>" ViewF script
-        Exec.runView focus inputHandle outputHandle
+        liftIO $ Exec.runView focus inputHandle outputHandle
       Modify script m -> do
         focus <- getFocus "<selector>" ModifyF script
         modifier <- getFocus "<modifier>" ModifyF m
-        Exec.runModify focus modifier inputHandle outputHandle
+        liftIO $ Exec.runModify focus modifier inputHandle outputHandle
       Set script val -> do
         focus <- getFocus "<selector>" ModifyF script
-        Exec.runSet focus inputHandle outputHandle val
+        liftIO $ Exec.runSet focus inputHandle outputHandle val
   where
-    failWithDiagnostic :: Diagnose.Diagnostic Text -> IO a
+    diagnoseStyle :: CliM (Diagnose.Style AnsiStyle)
+    diagnoseStyle =
+      asks useColour <&> \case
+        Colour -> Diagnose.defaultStyle
+        NoColour -> Diagnose.unadornedStyle
+    failWithDiagnostic :: Diagnose.Diagnostic Text -> CliM a
     failWithDiagnostic diagnostic = do
-      Diagnose.printDiagnostic System.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) Diagnose.defaultStyle diagnostic
-      System.exitFailure
+      style <- diagnoseStyle
+      Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithoutUnicode (Diagnose.TabSize 2) style diagnostic
+      liftIO $ System.exitFailure
 
     withHandles :: InputLocation -> OutputLocation -> (IO.Handle -> IO.Handle -> IO r) -> IO r
     withHandles input output action = do
@@ -53,12 +64,13 @@ run = do
       case output of
         StdOut -> f (\inputHandle -> action inputHandle IO.stdout)
         OutputFile path -> f (\inputHandle -> IO.withFile path IO.WriteMode \outputHandle -> action inputHandle outputHandle)
-    getFocus :: Text -> CommandF cmd -> Text -> IO (Focus cmd IO)
+    getFocus :: Text -> CommandF cmd -> Text -> CliM (Focus cmd IO)
     getFocus srcName cmdF script = do
       case parseScript srcName script of
         Left errDiagnostic -> do
-          Diagnose.printDiagnostic System.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) Diagnose.defaultStyle errDiagnostic
-          System.exitFailure
+          style <- diagnoseStyle
+          Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithoutUnicode (Diagnose.TabSize 2) style errDiagnostic
+          liftIO $ System.exitFailure
         Right ast -> do
           debugM "Selector" ast
           case typecheckSelector ast of

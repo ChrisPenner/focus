@@ -38,12 +38,12 @@ run() {
   divider "OUTPUT" "$out_file"
   case "$cmd" in
     "view")
-      { "$focus" "$cmd"  "$selector" < "$input_file" >> "$out_file" 2>&1;
+      { "$focus" --no-color "$cmd"  "$selector" < "$input_file" >> "$out_file" 2>&1;
         exit_code="$?"
       } || true
       ;;
     "modify" | "set")
-      { "$focus" "$cmd" "$selector" "$arg" < "$input_file" >> "$out_file" 2>&1  
+      { "$focus" --no-color "$cmd" "$selector" "$arg" < "$input_file" >> "$out_file" 2>&1  
         exit_code="$?"
       } ||  true
       ;;

@@ -60,6 +60,7 @@ dependencies:
 - mtl
 - diagnose
 - deriving-compat
+- prettyprinter-ansi-terminal
 
 ghc-options:
 - -Wall

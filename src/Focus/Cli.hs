@@ -5,6 +5,7 @@ module Focus.Cli
     Options (..),
     InputLocation (..),
     OutputLocation (..),
+    UseColour (..),
   )
 where
 
@@ -23,11 +24,14 @@ data OutputLocation
   = StdOut
   | OutputFile FilePath
 
+data UseColour = Colour | NoColour
+
 data Options
   = Options
   { input :: InputLocation,
     output :: OutputLocation,
-    command :: Command
+    command :: Command,
+    useColour :: UseColour
   }
 
 optionsP :: Parser Options
@@ -50,13 +54,20 @@ optionsP = do
       )
       & optional
       <&> maybe StdOut OutputFile
+  useColour <-
+    flag
+      Colour
+      NoColour
+      ( long "no-color"
+          <> help "Disable colored output"
+      )
   command <-
     subparser
       ( Opt.command "view" (info viewP (progDesc "View the focus"))
           <> Opt.command "modify" (info overP (progDesc "Modify the focused field"))
           <> Opt.command "set" (info setP (progDesc "Set the focus"))
       )
-  pure Options {input, output, command}
+  pure Options {input, output, command, useColour}
 
 viewP :: Parser Command
 viewP = do

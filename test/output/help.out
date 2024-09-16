@@ -1,4 +1,5 @@
-Usage: focus [-i|--input INPUT-FILE] [-o|--output OUTPUT-FILE] COMMAND
+Usage: focus [-i|--input INPUT-FILE] [-o|--output OUTPUT-FILE] [--no-color]
+             COMMAND
 
   Focus - cli utility for hacking and slashing data
 
@@ -7,9 +8,10 @@ Available options:
                            unspecified
   -o,--output OUTPUT-FILE  File to use for output. Defaults to stdout if
                            unspecified
+  --no-color               Disable colored output
   -h,--help                Show this help text
 
 Available commands:
   view                     View the focus
-  over                     Modify the focused field
+  modify                   Modify the focused field
   set                      Set the focus

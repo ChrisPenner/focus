@@ -77,6 +77,7 @@ library
     , mtl
     , optparse-applicative
     , pcre-light
+    , prettyprinter-ansi-terminal
     , recursion-schemes
     , some
     , text
@@ -129,6 +130,7 @@ executable focus
     , mtl
     , optparse-applicative
     , pcre-light
+    , prettyprinter-ansi-terminal
     , recursion-schemes
     , some
     , text
@@ -182,6 +184,7 @@ test-suite focus-haskell-test
     , mtl
     , optparse-applicative
     , pcre-light
+    , prettyprinter-ansi-terminal
     , recursion-schemes
     , some
     , text
