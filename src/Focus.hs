@@ -5,7 +5,7 @@ import Control.Monad.Reader (MonadIO (liftIO), ReaderT (..), asks)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Error.Diagnose qualified as Diagnose
-import Focus.AST (typecheckSelector)
+import Focus.AST (typecheckSelector, typecheckSelectorUnified)
 import Focus.Cli (InputLocation (..), Options (..), OutputLocation (..), UseColour (..), optionsP)
 import Focus.Command (Command (..), CommandF (..))
 import Focus.Compile (Focus, compileSelector)
@@ -65,6 +65,14 @@ run = do
       case output of
         StdOut -> f (\inputHandle -> action inputHandle IO.stdout)
         OutputFile path -> f (\inputHandle -> IO.withFile path IO.WriteMode \outputHandle -> action inputHandle outputHandle)
+
+    failWithReport :: Text -> Text -> Diagnose.Report Text -> CliM a
+    failWithReport srcName src report = do
+      let diagnostic =
+            ( Diagnose.addFile mempty (Text.unpack srcName) (Text.unpack src)
+                <> (Diagnose.addReport mempty report)
+            )
+      failWithDiagnostic diagnostic
     getFocus :: Text -> CommandF cmd -> Text -> CliM (Focus cmd IO)
     getFocus srcName cmdF script = do
       case parseScript srcName script of
@@ -74,12 +82,13 @@ run = do
           liftIO $ System.exitFailure
         Right ast -> do
           debugM "Selector" ast
+          liftIO $ putStrLn "Initial typechecking"
+          case typecheckSelectorUnified ast of
+            Left errReport -> failWithReport srcName script errReport
+            Right _ -> do
+              liftIO $ putStrLn "Successful typechecking"
+              pure ()
           case typecheckSelector ast of
-            Left errReport -> do
-              let diagnostic =
-                    ( Diagnose.addFile mempty (Text.unpack srcName) (Text.unpack script)
-                        <> (Diagnose.addReport mempty errReport)
-                    )
-              failWithDiagnostic diagnostic
+            Left errReport -> failWithReport srcName script errReport
             Right (SomeTypedSelector typedSelector) -> do
               pure $ compileSelector cmdF typedSelector

@@ -15,7 +15,7 @@ import Control.Monad.Except (ExceptT, runExceptT, withExceptT)
 import Control.Monad.Trans (lift)
 import Control.Unification qualified as Unify
 import Control.Unification.STVar qualified as Unify
-import Control.Unification.Types (UFailure)
+import Control.Unification.Types (UFailure, UTerm (..))
 import Control.Unification.Types qualified as Unify
 import Data.Foldable (foldlM)
 import Data.Functor.Fixedpoint (Fix)
@@ -25,7 +25,7 @@ import Data.Text (Text)
 import Data.Type.Equality (TestEquality (..), (:~:) (Refl))
 import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
-import Focus.Prelude ()
+import Focus.Prelude
 import Focus.Tagged (Tagged (..))
 import Focus.Typechecker.Types (ChunkType, ChunkTypeT, SomeTypedSelector (..), Typ, UVar, getChunkType, inputType, outputType, renderType)
 import Focus.Typechecker.Types qualified as T
@@ -47,7 +47,7 @@ data Selector a
   | At a Int
   deriving stock (Show, Functor, Foldable, Traversable)
 
-instance Tagged Selector where
+instance Tagged (Selector a) a where
   tag = \case
     Compose a _ -> a
     SplitFields a _ -> a
@@ -105,6 +105,41 @@ typeErrorReport = \case
       ]
       []
 
+unificationErrorReport :: UnifyFailure s -> D.Report Text
+unificationErrorReport = \case
+  Unify.OccursFailure _ trm ->
+    case trm of
+      UTerm trm' ->
+        Diagnose.Err
+          Nothing
+          "Type error"
+          [ (tag trm', D.This $ "Cyclic type detected. Please report this issue." <> renderTyp trm)
+          ]
+          []
+      _ -> error "OccursFailure: Please report this issue."
+  Unify.MismatchFailure l r ->
+    let lPos = tag l
+        rPos = tag r
+     in Diagnose.Err
+          Nothing
+          "Type error"
+          [ (lPos, D.This $ "this selector outputs the type: " <> renderUTyp l),
+            (rPos, D.Where $ "but this selector accepts the type: " <> renderUTyp r)
+          ]
+          []
+  where
+    renderTyp :: Typ s -> Text
+    renderTyp = \case
+      UVar v -> tShow v
+      UTerm t -> renderUTyp t
+    renderUTyp :: ChunkTypeT D.Position (Typ s) -> Text
+    renderUTyp = \case
+      T.Arrow _ a b -> "(" <> renderTyp a <> " -> " <> renderTyp b <> ")"
+      T.TextTypeT {} -> renderType T.TextType
+      T.ListTypeT _ t -> "[" <> renderTyp t <> "]"
+      T.NumberTypeT _ -> renderType T.NumberType
+      T.RegexMatchTypeT _ -> renderType T.RegexMatchType
+
 typecheckSelector :: TaggedSelector -> Either TypeErrorReport (SomeTypedSelector D.Position)
 typecheckSelector = \case
   Compose _pos (s NE.:| rest) -> do
@@ -135,53 +170,53 @@ typecheckSelector = \case
 
 type UnifyM e s = ExceptT e (Unify.STBinding s)
 
-type UnifyFailure s = UFailure ChunkTypeT (UVar s)
+type UnifyFailure s = UFailure (ChunkTypeT D.Position) (UVar s)
 
-typecheckSelectorUnified :: TaggedSelector -> Either Text (Fix ChunkTypeT)
-typecheckSelectorUnified ts =
-  Unify.runSTBinding $ runExceptT $ runUnification
+typecheckSelectorUnified :: TaggedSelector -> Either TypeErrorReport (Fix (ChunkTypeT D.Position))
+typecheckSelectorUnified t =
+  Unify.runSTBinding $ runExceptT $ runUnification t
   where
-    runUnification :: forall s. UnifyM Text s (Fix ChunkTypeT)
-    runUnification = withExceptT (renderErr @s) $ do
+    runUnification :: forall s. TaggedSelector -> UnifyM TypeErrorReport s (Fix (ChunkTypeT D.Position))
+    runUnification ts = withExceptT unificationErrorReport $ do
       typ <- go ts
-      trm <- Unify.applyBindings typ
+      trm <- Unify.applyBindings (UTerm typ)
       case Unify.freeze trm of
         Nothing -> pure $ error "Freeze failed"
         Just r -> pure r
-    renderErr :: UnifyFailure s -> Text
-    renderErr = \case
-      Unify.OccursFailure _v _tm -> "OccursFailure"
-      Unify.MismatchFailure _tm1 _tm2 -> "MismatchFailure"
 
-    go :: TaggedSelector -> UnifyM (UnifyFailure s) s (Typ s)
-    go = \case
-      Compose _pos (s NE.:| rest) -> do
-        s' <- go s
-        foldlM compose s' rest
-      SplitFields {} -> pure $ T.arrow T.textType T.textType
-      SplitLines {} -> pure $ T.arrow T.textType T.textType
-      SplitWords {} -> pure $ T.arrow T.textType T.textType
-      Regex {} -> pure $ T.arrow T.textType T.regexMatchType
-      RegexMatches {} -> pure $ T.arrow T.regexMatchType T.textType
-      RegexGroups {} -> pure $ T.arrow T.regexMatchType T.textType
-      ListOf _pos inner -> do
-        innerT <- go inner
-        inp <- freshVar
-        out <- freshVar
-        _ <- Unify.unify (T.arrow inp out) innerT
-        pure $ T.arrow inp (T.listType out)
-      Shell {} -> pure $ T.arrow T.textType T.textType
-      At {} -> do
-        inp <- freshVar
-        pure $ T.arrow (T.listType inp) inp
+    go :: TaggedSelector -> UnifyM (UnifyFailure s) s (ChunkTypeT D.Position (Typ s))
+    go ts =
+      let pos = tag ts
+       in case ts of
+            Compose _pos (s NE.:| rest) -> do
+              s' <- go s
+              foldlM compose s' rest
+            SplitFields {} -> pure $ T.Arrow pos (T.textType pos) (T.textType pos)
+            SplitLines {} -> pure $ T.Arrow pos (T.textType pos) (T.textType pos)
+            SplitWords {} -> pure $ T.Arrow pos (T.textType pos) (T.textType pos)
+            Regex {} -> pure $ T.Arrow pos (T.textType pos) (T.regexMatchType pos)
+            RegexMatches {} -> pure $ T.Arrow pos (T.regexMatchType pos) (T.textType pos)
+            RegexGroups {} -> pure $ T.Arrow pos (T.regexMatchType pos) (T.textType pos)
+            ListOf _ inner -> do
+              innerT <- go inner
+              inp <- freshVar
+              out <- freshVar
+              _ <- Unify.unify (T.arrow pos inp out) (UTerm innerT)
+              pure $ T.Arrow pos inp (T.listType pos out)
+            Shell {} -> pure $ T.Arrow pos (T.textType pos) (T.textType pos)
+            At {} -> do
+              inp <- freshVar
+              pure $ T.Arrow pos (T.listType pos inp) inp
 
-    compose :: forall s. Typ s -> TaggedSelector -> UnifyM (UnifyFailure s) s (Typ s)
+    compose :: forall s. ChunkTypeT Diagnose.Position (Typ s) -> TaggedSelector -> UnifyM (UnifyFailure s) s (ChunkTypeT Diagnose.Position (Typ s))
     compose lt r = do
       rt <- go r
-      (li, m, ro) <- lift $ (,,) <$> Unify.freeVar @(ChunkTypeT) @(UVar s) <*> Unify.freeVar <*> Unify.freeVar
-      _ <- Unify.unify (T.arrow (Unify.UVar li) (Unify.UVar m)) lt
-      _ <- Unify.unify (T.arrow (Unify.UVar m) (Unify.UVar ro)) rt
-      pure (T.arrow (Unify.UVar li) (Unify.UVar ro))
+      (li, m, ro) <- lift $ (,,) <$> Unify.freeVar <*> Unify.freeVar <*> Unify.freeVar
+      let posL = tag lt
+      let posR = tag rt
+      _ <- Unify.unify (T.arrow posL (Unify.UVar li) (Unify.UVar m)) (UTerm lt)
+      _ <- Unify.unify (T.arrow posR (Unify.UVar m) (Unify.UVar ro)) (UTerm rt)
+      pure (T.Arrow (posL <> posR) (Unify.UVar li) (Unify.UVar ro))
 
 freshVar :: UnifyM (UnifyFailure s) s (Typ s)
 freshVar = lift $ Unify.UVar <$> Unify.freeVar

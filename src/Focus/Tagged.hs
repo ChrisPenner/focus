@@ -1,4 +1,6 @@
+{-# LANGUAGE FunctionalDependencies #-}
+
 module Focus.Tagged (Tagged (..)) where
 
-class Tagged f where
-  tag :: f a -> a
+class Tagged t a | t -> a where
+  tag :: t -> a

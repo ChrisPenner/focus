@@ -33,6 +33,7 @@ import Control.Unification (UTerm (..), Unifiable (..))
 import Control.Unification.STVar qualified as Unify
 import Data.Text (Text)
 import Data.Type.Equality (TestEquality (..))
+import Error.Diagnose qualified as D
 import Focus.Tagged (Tagged (..))
 
 data Chunk
@@ -65,44 +66,52 @@ data ChunkTypeF (ct :: ChunkType) where
   AnyTypeF :: ChunkTypeF any
   RegexMatchTypeF :: ChunkTypeF 'RegexMatchType
 
-data ChunkTypeT r
-  = Arrow r r
-  | TextTypeT
-  | ListTypeT r
-  | NumberTypeT
-  | RegexMatchTypeT
+data ChunkTypeT a r
+  = Arrow a r r
+  | TextTypeT a
+  | ListTypeT a r
+  | NumberTypeT a
+  | RegexMatchTypeT a
   deriving stock (Show, Eq, Functor, Foldable, Traversable)
 
-type UVar s = Unify.STVar s ChunkTypeT
+instance Tagged (ChunkTypeT a r) a where
+  tag = \case
+    Arrow pos _ _ -> pos
+    TextTypeT pos -> pos
+    ListTypeT pos _ -> pos
+    NumberTypeT pos -> pos
+    RegexMatchTypeT pos -> pos
 
-type Typ s = UTerm ChunkTypeT (UVar s)
+type UVar s = Unify.STVar s (ChunkTypeT D.Position)
 
-arrow :: Typ v -> Typ v -> Typ v
-arrow l r = UTerm $ Arrow l r
+type Typ s = UTerm (ChunkTypeT D.Position) (UVar s)
 
-textType :: Typ v
-textType = UTerm TextTypeT
+arrow :: D.Position -> Typ v -> Typ v -> Typ v
+arrow pos l r = UTerm $ Arrow pos l r
 
-listType :: Typ v -> Typ v
-listType t = UTerm $ ListTypeT t
+textType :: D.Position -> Typ v
+textType pos = UTerm $ TextTypeT pos
 
-numberType :: Typ v
-numberType = UTerm NumberTypeT
+listType :: D.Position -> Typ v -> Typ v
+listType pos t = UTerm $ ListTypeT pos t
 
-regexMatchType :: Typ v
-regexMatchType = UTerm RegexMatchTypeT
+numberType :: D.Position -> Typ v
+numberType pos = UTerm $ NumberTypeT pos
 
-instance Unifiable ChunkTypeT where
+regexMatchType :: D.Position -> Typ v
+regexMatchType pos = UTerm $ RegexMatchTypeT pos
+
+instance Unifiable (ChunkTypeT a) where
   zipMatch = \cases
-    (Arrow x y) (Arrow x' y') -> Just (Arrow (Right (x, x')) (Right (y, y')))
-    TextTypeT TextTypeT -> Just TextTypeT
-    (ListTypeT x) (ListTypeT y) -> Just (ListTypeT $ Right (x, y))
-    NumberTypeT NumberTypeT -> Just NumberTypeT
-    RegexMatchTypeT RegexMatchTypeT -> Just RegexMatchTypeT
-    TextTypeT _ -> Nothing
+    (Arrow pos x y) (Arrow _ x' y') -> Just (Arrow pos (Right (x, x')) (Right (y, y')))
+    (TextTypeT pos) TextTypeT {} -> Just (TextTypeT pos)
+    (ListTypeT pos x) (ListTypeT _ y) -> Just (ListTypeT pos $ Right (x, y))
+    (NumberTypeT pos) NumberTypeT {} -> Just $ NumberTypeT pos
+    (RegexMatchTypeT pos) RegexMatchTypeT {} -> Just $ RegexMatchTypeT pos
+    TextTypeT {} _ -> Nothing
     ListTypeT {} _ -> Nothing
-    NumberTypeT _ -> Nothing
-    RegexMatchTypeT _ -> Nothing
+    NumberTypeT {} _ -> Nothing
+    RegexMatchTypeT {} _ -> Nothing
     Arrow {} _ -> Nothing
 
 getChunkType :: ChunkTypeF x -> ChunkType
@@ -150,7 +159,7 @@ data TypedSelector (i :: ChunkType) (o :: ChunkType) a where
   Shell :: a -> Text -> TypedSelector TextType TextType a
   At :: a -> Int -> TypedSelector (ListType t) t a
 
-instance Tagged (TypedSelector i o) where
+instance Tagged (TypedSelector i o a) a where
   tag = \case
     Compose pos _ _ -> pos
     SplitFields pos _ -> pos
@@ -168,7 +177,7 @@ deriving instance Functor (TypedSelector i o)
 data SomeTypedSelector a where
   SomeTypedSelector :: TypedSelector i o a -> SomeTypedSelector a
 
-instance Tagged SomeTypedSelector where
+instance Tagged (SomeTypedSelector a) a where
   tag (SomeTypedSelector s) = tag s
 
 inputType :: TypedSelector i o a -> ChunkTypeF i
