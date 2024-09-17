@@ -4,12 +4,8 @@
 module Focus.Typechecker.Types
   ( TypedSelector (..),
     SomeTypedSelector (..),
-    inputType,
-    outputType,
     Chunk (..),
     ChunkType (..),
-    ChunkTypeF (..),
-    getChunkType,
     _TextChunk,
     _ListChunk,
     _NumberChunk,
@@ -32,7 +28,6 @@ import Control.Lens.Regex.Text qualified as Re
 import Control.Unification (UTerm (..), Unifiable (..))
 import Control.Unification.STVar qualified as Unify
 import Data.Text (Text)
-import Data.Type.Equality (TestEquality (..))
 import Error.Diagnose qualified as D
 import Focus.Tagged (Tagged (..))
 
@@ -58,13 +53,6 @@ data ChunkType
   | AnyType
   | RegexMatchType
   deriving (Show, Eq)
-
-data ChunkTypeF (ct :: ChunkType) where
-  TextTypeF :: ChunkTypeF 'TextType
-  ListTypeF :: ChunkTypeF t -> ChunkTypeF ('ListType t)
-  NumberTypeF :: ChunkTypeF 'NumberType
-  AnyTypeF :: ChunkTypeF any
-  RegexMatchTypeF :: ChunkTypeF 'RegexMatchType
 
 data ChunkTypeT a r
   = Arrow a r r
@@ -114,25 +102,6 @@ instance Unifiable (ChunkTypeT a) where
     RegexMatchTypeT {} _ -> Nothing
     Arrow {} _ -> Nothing
 
-getChunkType :: ChunkTypeF x -> ChunkType
-getChunkType = \case
-  TextTypeF -> TextType
-  ListTypeF t -> ListType (getChunkType t)
-  NumberTypeF -> NumberType
-  AnyTypeF -> AnyType
-  RegexMatchTypeF -> RegexMatchType
-
-instance TestEquality ChunkTypeF where
-  testEquality TextTypeF TextTypeF = Just Refl
-  testEquality (ListTypeF x) (ListTypeF y) =
-    case x `testEquality` y of
-      Just Refl -> Just Refl
-      Nothing -> Nothing
-  testEquality NumberTypeF NumberTypeF = Just Refl
-  testEquality AnyTypeF AnyTypeF = error "AnyTypeF should not be compared"
-  testEquality RegexMatchTypeF RegexMatchTypeF = Just Refl
-  testEquality _ _ = Nothing
-
 unifies :: ChunkType -> ChunkType -> Bool
 unifies AnyType _ = True
 unifies _ AnyType = True
@@ -179,29 +148,3 @@ data SomeTypedSelector a where
 
 instance Tagged (SomeTypedSelector a) a where
   tag (SomeTypedSelector s) = tag s
-
-inputType :: TypedSelector i o a -> ChunkTypeF i
-inputType = \case
-  Compose _pos a _ -> inputType a
-  SplitFields _pos _ -> TextTypeF
-  SplitLines _pos -> TextTypeF
-  SplitWords _pos -> TextTypeF
-  Regex _pos _ -> TextTypeF
-  RegexMatches _pos -> RegexMatchTypeF
-  RegexGroups _pos -> RegexMatchTypeF
-  ListOf _pos t -> inputType t
-  Shell _pos _ -> TextTypeF
-  At _pos _ -> ListTypeF (AnyTypeF)
-
-outputType :: TypedSelector i o a -> ChunkTypeF o
-outputType = \case
-  Compose _pos _ b -> outputType b
-  SplitFields _pos _ -> TextTypeF
-  SplitLines _pos -> TextTypeF
-  SplitWords _pos -> TextTypeF
-  Regex _pos _ -> RegexMatchTypeF
-  RegexMatches _pos -> TextTypeF
-  RegexGroups _pos -> TextTypeF
-  ListOf _pos t -> ListTypeF (outputType t)
-  Shell _pos _ -> TextTypeF
-  At _pos _ -> AnyTypeF

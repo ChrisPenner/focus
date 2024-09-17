@@ -36,6 +36,7 @@ library
       Focus.Parser
       Focus.Prelude
       Focus.Tagged
+      Focus.Typechecker
       Focus.Typechecker.Types
   other-modules:
       Paths_focus
