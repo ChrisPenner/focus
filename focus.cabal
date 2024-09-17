@@ -83,6 +83,7 @@ library
     , recursion-schemes
     , some
     , text
+    , unification-fd
     , unliftio
     , vector
   default-language: Haskell2010
@@ -136,6 +137,7 @@ executable focus
     , recursion-schemes
     , some
     , text
+    , unification-fd
     , unliftio
     , vector
   default-language: Haskell2010

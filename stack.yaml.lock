@@ -18,6 +18,13 @@ packages:
       size: 7364
   original:
     hackage: text-2.0@sha256:f2207a6a51a8320c44dbd8b462723a8e39e2bfceda67e15f52fc12922259cbb0,8093
+- completed:
+    hackage: unification-fd-0.11.2.2@sha256:2eb9eae455b8db582d2706b23ed7eb2bbd1b48b064ec4c1988c2b7e95fcfb638,3919
+    pantry-tree:
+      sha256: 7c5bb60dab50ead6e0993a5806563bea114302daad264e57e482ac4c085b659d
+      size: 1122
+  original:
+    hackage: unification-fd-0.11.2.2@sha256:2eb9eae455b8db582d2706b23ed7eb2bbd1b48b064ec4c1988c2b7e95fcfb638,3919
 snapshots:
 - completed:
     sha256: 8e7996960d864443a66eb4105338bbdd6830377b9f6f99cd5527ef73c10c01e7

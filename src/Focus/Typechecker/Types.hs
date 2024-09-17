@@ -16,11 +16,21 @@ module Focus.Typechecker.Types
     _RegexMatchChunk,
     renderType,
     unifies,
+    ChunkTypeT (..),
+    Typ,
+    UVar,
+    arrow,
+    textType,
+    listType,
+    numberType,
+    regexMatchType,
   )
 where
 
 import Control.Lens
 import Control.Lens.Regex.Text qualified as Re
+import Control.Unification (UTerm (..), Unifiable (..))
+import Control.Unification.STVar qualified as Unify
 import Data.Text (Text)
 import Data.Type.Equality (TestEquality (..))
 import Focus.Tagged (Tagged (..))
@@ -54,6 +64,46 @@ data ChunkTypeF (ct :: ChunkType) where
   NumberTypeF :: ChunkTypeF 'NumberType
   AnyTypeF :: ChunkTypeF any
   RegexMatchTypeF :: ChunkTypeF 'RegexMatchType
+
+data ChunkTypeT r
+  = Arrow r r
+  | TextTypeT
+  | ListTypeT r
+  | NumberTypeT
+  | RegexMatchTypeT
+  deriving stock (Show, Eq, Functor, Foldable, Traversable)
+
+type UVar s = Unify.STVar s ChunkTypeT
+
+type Typ s = UTerm ChunkTypeT (UVar s)
+
+arrow :: Typ v -> Typ v -> Typ v
+arrow l r = UTerm $ Arrow l r
+
+textType :: Typ v
+textType = UTerm TextTypeT
+
+listType :: Typ v -> Typ v
+listType t = UTerm $ ListTypeT t
+
+numberType :: Typ v
+numberType = UTerm NumberTypeT
+
+regexMatchType :: Typ v
+regexMatchType = UTerm RegexMatchTypeT
+
+instance Unifiable ChunkTypeT where
+  zipMatch = \cases
+    (Arrow x y) (Arrow x' y') -> Just (Arrow (Right (x, x')) (Right (y, y')))
+    TextTypeT TextTypeT -> Just TextTypeT
+    (ListTypeT x) (ListTypeT y) -> Just (ListTypeT $ Right (x, y))
+    NumberTypeT NumberTypeT -> Just NumberTypeT
+    RegexMatchTypeT RegexMatchTypeT -> Just RegexMatchTypeT
+    TextTypeT _ -> Nothing
+    ListTypeT {} _ -> Nothing
+    NumberTypeT _ -> Nothing
+    RegexMatchTypeT _ -> Nothing
+    Arrow {} _ -> Nothing
 
 getChunkType :: ChunkTypeF x -> ChunkType
 getChunkType = \case

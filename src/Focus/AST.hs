@@ -7,10 +7,18 @@ module Focus.AST
     TypeError (..),
     TypeErrorReport,
     typecheckSelector,
+    typecheckSelectorUnified,
   )
 where
 
+import Control.Monad.Except (ExceptT, runExceptT, withExceptT)
+import Control.Monad.Trans (lift)
+import Control.Unification qualified as Unify
+import Control.Unification.STVar qualified as Unify
+import Control.Unification.Types (UFailure)
+import Control.Unification.Types qualified as Unify
 import Data.Foldable (foldlM)
+import Data.Functor.Fixedpoint (Fix)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Text (Text)
@@ -19,7 +27,8 @@ import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Focus.Prelude ()
 import Focus.Tagged (Tagged (..))
-import Focus.Typechecker.Types (ChunkType, SomeTypedSelector (..), getChunkType, inputType, outputType, renderType)
+import Focus.Typechecker.Types (ChunkType, ChunkTypeT, SomeTypedSelector (..), Typ, UVar, getChunkType, inputType, outputType, renderType)
+import Focus.Typechecker.Types qualified as T
 import Focus.Typechecker.Types qualified as Typechecked
 import Text.Regex.PCRE.Heavy (Regex)
 
@@ -123,3 +132,63 @@ typecheckSelector = \case
               case testEquality (outputType l') (inputType r') of
                 Just Refl -> Right $ (SomeTypedSelector $ Typechecked.Compose (tag l' <> tag r) l' r')
                 Nothing -> Left $ typeErrorReport $ TypeMismatch (tag l', getChunkType $ outputType l') (tag r', getChunkType $ inputType r')
+
+type UnifyM e s = ExceptT e (Unify.STBinding s)
+
+type UnifyFailure s = UFailure ChunkTypeT (UVar s)
+
+typecheckSelectorUnified :: TaggedSelector -> Either Text (Fix ChunkTypeT)
+typecheckSelectorUnified ts =
+  Unify.runSTBinding $ runExceptT $ runUnification
+  where
+    runUnification :: forall s. UnifyM Text s (Fix ChunkTypeT)
+    runUnification = withExceptT (renderErr @s) $ do
+      typ <- go ts
+      trm <- Unify.applyBindings typ
+      case Unify.freeze trm of
+        Nothing -> pure $ error "Freeze failed"
+        Just r -> pure r
+    renderErr :: UnifyFailure s -> Text
+    renderErr = \case
+      Unify.OccursFailure _v _tm -> "OccursFailure"
+      Unify.MismatchFailure _tm1 _tm2 -> "MismatchFailure"
+
+    go :: TaggedSelector -> UnifyM (UnifyFailure s) s (Typ s)
+    go = \case
+      Compose _pos (s NE.:| rest) -> do
+        s' <- go s
+        foldlM compose s' rest
+      SplitFields {} -> pure $ T.arrow T.textType T.textType
+      SplitLines {} -> pure $ T.arrow T.textType T.textType
+      SplitWords {} -> pure $ T.arrow T.textType T.textType
+      Regex {} -> pure $ T.arrow T.textType T.regexMatchType
+      RegexMatches {} -> pure $ T.arrow T.regexMatchType T.textType
+      RegexGroups {} -> pure $ T.arrow T.regexMatchType T.textType
+      ListOf _pos inner -> do
+        innerT <- go inner
+        inp <- freshVar
+        out <- freshVar
+        _ <- Unify.unify (T.arrow inp out) innerT
+        pure $ T.arrow inp (T.listType out)
+      Shell {} -> pure $ T.arrow T.textType T.textType
+      At {} -> do
+        inp <- freshVar
+        pure $ T.arrow (T.listType inp) inp
+
+    compose :: forall s. Typ s -> TaggedSelector -> UnifyM (UnifyFailure s) s (Typ s)
+    compose lt r = do
+      rt <- go r
+      (li, m, ro) <- lift $ (,,) <$> Unify.freeVar @(ChunkTypeT) @(UVar s) <*> Unify.freeVar <*> Unify.freeVar
+      _ <- Unify.unify (T.arrow (Unify.UVar li) (Unify.UVar m)) lt
+      _ <- Unify.unify (T.arrow (Unify.UVar m) (Unify.UVar ro)) rt
+      pure (T.arrow (Unify.UVar li) (Unify.UVar ro))
+
+freshVar :: UnifyM (UnifyFailure s) s (Typ s)
+freshVar = lift $ Unify.UVar <$> Unify.freeVar
+
+-- ListOf pos inner -> do
+--   typecheckSelector inner >>= \case
+--     SomeTypedSelector inner' ->
+--       pure $ SomeTypedSelector $ Typechecked.ListOf pos inner'
+-- Shell pos script -> pure $ SomeTypedSelector $ Typechecked.Shell pos script
+-- At pos n -> pure $ SomeTypedSelector $ Typechecked.At pos n
