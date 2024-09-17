@@ -6,7 +6,6 @@ import Control.Unification qualified as Unify
 import Control.Unification.STVar qualified as Unify
 import Control.Unification.Types (UFailure, UTerm (..))
 import Control.Unification.Types qualified as Unify
-import Data.Foldable (foldlM)
 import Data.Functor.Fixedpoint (Fix)
 import Data.List.NonEmpty qualified as NE
 import Data.Text (Text)

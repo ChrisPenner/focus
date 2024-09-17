@@ -7,6 +7,7 @@ module Focus.Cli
     OutputLocation (..),
     UseColour (..),
     ChunkSize (..),
+    InPlace (..),
   )
 where
 
@@ -31,10 +32,12 @@ data ChunkSize
 
 data UseColour = Colour | NoColour
 
+data InPlace = InPlace | NotInPlace
+
 data Options
   = Options
-  { input :: InputLocation,
-    output :: OutputLocation,
+  { output :: OutputLocation,
+    inPlace :: InPlace,
     command :: Command,
     useColour :: UseColour,
     chunkSize :: ChunkSize
@@ -42,15 +45,6 @@ data Options
 
 optionsP :: Parser Options
 optionsP = do
-  input <-
-    strOption
-      ( long "input"
-          <> short 'i'
-          <> metavar "INPUT-FILE"
-          <> help "File to use for input. Defaults to stdin if unspecified"
-      )
-      & optional
-      <&> maybe StdIn InputFile
   output <-
     strOption
       ( long "output"
@@ -72,7 +66,16 @@ optionsP = do
       LineChunks
       EntireChunks
       ( long "full"
+          <> short 'f'
           <> help "Process the entire input at once instead of line-by-line"
+      )
+  inPlace <-
+    flag
+      NotInPlace
+      InPlace
+      ( long "in-place"
+          <> short 'i'
+          <> help "Modify each input file in place rather than writing to output"
       )
   command <-
     subparser
@@ -80,12 +83,16 @@ optionsP = do
           <> Opt.command "modify" (info overP (progDesc "Modify the focused field"))
           <> Opt.command "set" (info setP (progDesc "Set the focus"))
       )
-  pure Options {input, output, command, useColour, chunkSize}
+  pure Options {output, command, useColour, chunkSize, inPlace}
+
+inputFilesP :: Parser [FilePath]
+inputFilesP = many $ strArgument (metavar "FILES..." <> help "Input files. If omitted, read from stdin")
 
 viewP :: Parser Command
 viewP = do
   script <- scriptP
-  pure $ View script
+  inputFiles <- inputFilesP
+  pure $ View script inputFiles
 
 overP :: Parser Command
 overP = do
@@ -95,7 +102,8 @@ overP = do
       ( metavar "MODIFIER"
           <> help "Modifier to apply"
       )
-  pure $ Modify script modifier
+  inputFiles <- inputFilesP
+  pure $ Modify script modifier inputFiles
 
 setP :: Parser Command
 setP = do
@@ -105,7 +113,8 @@ setP = do
       ( metavar "VALUE"
           <> help "Value to set"
       )
-  pure $ Set script val
+  inputFiles <- inputFilesP
+  pure $ Set script val inputFiles
 
 scriptP :: Parser Text
 scriptP =

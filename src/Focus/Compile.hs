@@ -14,7 +14,6 @@ module Focus.Compile
   )
 where
 
-import Control.Applicative (empty)
 import Control.Lens
 import Control.Lens.Regex.Text qualified as RE
 import Control.Lens.Regex.Text qualified as Re

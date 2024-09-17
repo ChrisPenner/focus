@@ -1,5 +1,14 @@
-module Focus.Prelude (tShow, (&), (<&>)) where
+module Focus.Prelude
+  ( tShow,
+    (&),
+    (<&>),
+    module X,
+  )
+where
 
+import Control.Applicative as X
+import Control.Monad as X
+import Data.Foldable as X
 import Data.Function ((&))
 import Data.Functor ((<&>))
 import Data.Text (Text)

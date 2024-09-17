@@ -1,16 +1,16 @@
-Usage: focus [-i|--input INPUT-FILE] [-o|--output OUTPUT-FILE] [--no-color] 
-             [--full] COMMAND
+Usage: focus [-o|--output OUTPUT-FILE] [--no-color] [-f|--full] [-i|--in-place]
+             COMMAND
 
   Focus - cli utility for hacking and slashing data
 
 Available options:
-  -i,--input INPUT-FILE    File to use for input. Defaults to stdin if
-                           unspecified
   -o,--output OUTPUT-FILE  File to use for output. Defaults to stdout if
                            unspecified
   --no-color               Disable colored output
-  --full                   Process the entire input at once instead of
+  -f,--full                Process the entire input at once instead of
                            line-by-line
+  -i,--in-place            Modify each input file in place rather than writing
+                           to output
   -h,--help                Show this help text
 
 Available commands:

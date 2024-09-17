@@ -28,6 +28,8 @@ celery NOLEMRETAW apples STORRAC
 
 ## TODO
 
+- [ ] Switch to input file arguments
+- [ ] In-place editing
 - [ ] Ability to 'NOT'/invert filters
 - [ ] Add more examples
 - [ ] Add more tests
@@ -35,6 +37,5 @@ celery NOLEMRETAW apples STORRAC
 - [ ] List splat
 - [ ] Expression language?
 - [ ] Require reversable selectors
-- [ ] Switch to input file arguments
 - [ ] Handle errors from shell commands better
 - [ ] shell 'if'
