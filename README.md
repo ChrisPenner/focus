@@ -1,5 +1,7 @@
 # focus - cli utility for hacking and slashing data
 
+**ALPHA**
+
 `awk` can do anything, but it's not always the most intuitive tool to use. 
 
 `focus` takes a different approach, similar to tools like `jq` and `xpath` it allows you to compose simple 'selectors' in a pipeline to
