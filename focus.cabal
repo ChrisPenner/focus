@@ -4,11 +4,11 @@ cabal-version: 2.2
 --
 -- see: https://github.com/sol/hpack
 
-name:           focus-haskell
+name:           focus
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/focus-haskell#readme>
-homepage:       https://github.com/githubuser/focus-haskell#readme
-bug-reports:    https://github.com/githubuser/focus-haskell/issues
+description:    Please see the README on GitHub at <https://github.com/ChrisPenner/focus#readme>
+homepage:       https://github.com/ChrisPenner/focus#readme
+bug-reports:    https://github.com/ChrisPenner/focus/issues
 author:         Author name here
 maintainer:     example@example.com
 copyright:      2024 Author name here
@@ -21,7 +21,7 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/githubuser/focus-haskell
+  location: https://github.com/ChrisPenner/focus
 
 library
   exposed-modules:
@@ -38,9 +38,9 @@ library
       Focus.Tagged
       Focus.Typechecker.Types
   other-modules:
-      Paths_focus_haskell
+      Paths_focus
   autogen-modules:
-      Paths_focus_haskell
+      Paths_focus
   hs-source-dirs:
       src
   default-extensions:
@@ -87,12 +87,12 @@ library
     , vector
   default-language: Haskell2010
 
-executable focus-exe
+executable focus
   main-is: Main.hs
   other-modules:
-      Paths_focus_haskell
+      Paths_focus
   autogen-modules:
-      Paths_focus_haskell
+      Paths_focus
   hs-source-dirs:
       app
   default-extensions:
@@ -124,61 +124,7 @@ executable focus-exe
     , bytestring
     , deriving-compat
     , diagnose
-    , focus-haskell
-    , lens
-    , lens-action
-    , lens-regex-pcre
-    , megaparsec
-    , mtl
-    , optparse-applicative
-    , pcre-heavy
-    , prettyprinter-ansi-terminal
-    , recursion-schemes
-    , some
-    , text
-    , unliftio
-    , vector
-  default-language: Haskell2010
-
-test-suite focus-haskell-test
-  type: exitcode-stdio-1.0
-  main-is: Spec.hs
-  other-modules:
-      Paths_focus_haskell
-  autogen-modules:
-      Paths_focus_haskell
-  hs-source-dirs:
-      test
-  default-extensions:
-      FlexibleInstances
-      FlexibleContexts
-      ScopedTypeVariables
-      LambdaCase
-      ViewPatterns
-      TypeApplications
-      TypeOperators
-      DeriveFunctor
-      DeriveTraversable
-      DeriveGeneric
-      DerivingStrategies
-      StandaloneDeriving
-      TemplateHaskell
-      RankNTypes
-      GADTs
-      MultiParamTypeClasses
-      OverloadedStrings
-      BlockArguments
-      InstanceSigs
-      NamedFieldPuns
-      ImportQualifiedPost
-      KindSignatures
-  ghc-options: -Wall -Werror -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
-  build-depends:
-      base >=4.7 && <5
-    , bytestring
-    , deriving-compat
-    , diagnose
-    , focus-haskell
+    , focus
     , lens
     , lens-action
     , lens-regex-pcre
