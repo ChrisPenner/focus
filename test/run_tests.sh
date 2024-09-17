@@ -8,11 +8,11 @@ unset FOCUS_DEBUG
 # cd to the directory of the script
 cd "$(dirname "$0")/output" || exit 1
 
-rm ./*.out || true
+rm -r ./*.out 2>/dev/null || true
 
 # Run the tests
 stack build --fast > /dev/null
-focus=$(stack exec -- which focus-exe)
+focus=$(stack exec -- which focus)
 
 divider() {
   echo "===$1===============================================================================" >> "$2"
