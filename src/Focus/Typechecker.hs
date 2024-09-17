@@ -111,6 +111,11 @@ typecheckSelector t =
               SomeTypedSelector inner' -> do
                 pure $ (typ, SomeTypedSelector $ Typechecked.ListOf pos inner')
           _ -> error "ListOf: Expected Arrow"
+      FilterBy pos inner -> do
+        (innerTyp, innerTS) <- go inner
+        case innerTS of
+          SomeTypedSelector inner' -> do
+            pure $ (innerTyp, SomeTypedSelector $ Typechecked.FilterBy pos inner')
       Shell pos script ->
         let typ = T.Arrow pos (T.textType pos) (T.textType pos)
             ts = SomeTypedSelector $ Typechecked.Shell pos script

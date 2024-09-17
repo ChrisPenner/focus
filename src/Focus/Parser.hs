@@ -89,8 +89,8 @@ regexP =
   where
     escaped = M.string "\\/" $> '/'
 
-listP :: P TaggedSelector
-listP = withPos do
+listOfP :: P TaggedSelector
+listOfP = withPos do
   between (lexeme $ M.char '[') (lexeme $ M.char ']') $ do
     flip ListOf <$> selectorsP
 
@@ -101,8 +101,12 @@ shellP = withPos do
   where
     escaped = M.char '\\' >> M.anySingle
 
+groupedP :: P TaggedSelector
+groupedP = do
+  shellP <|> listOfP <|> regexP <|> between (lexeme (M.char '(')) (lexeme (M.char ')')) simpleSelectorP
+
 selectorP :: P TaggedSelector
-selectorP = shellP <|> listP <|> regexP <|> simpleSelectorP
+selectorP = shellP <|> listOfP <|> regexP <|> simpleSelectorP
 
 simpleSelectorP :: P TaggedSelector
 simpleSelectorP = withPos do
@@ -113,7 +117,8 @@ simpleSelectorP = withPos do
             M.string "words",
             M.string "lines",
             M.string "at",
-            M.string "matches"
+            M.string "matches",
+            M.string "filterBy"
           ]
       )
   case name of
@@ -129,4 +134,6 @@ simpleSelectorP = withPos do
       pure RegexMatches
     "groups" -> do
       pure RegexGroups
+    "filterBy" -> do
+      flip FilterBy <$> groupedP
     _ -> error "impossible"

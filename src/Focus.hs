@@ -1,13 +1,15 @@
 module Focus (run) where
 
 import Control.Applicative
+import Control.Monad.Except (runExceptT)
 import Control.Monad.Reader (MonadIO (liftIO), ReaderT (..), asks)
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.IO qualified as TextIO
 import Error.Diagnose qualified as Diagnose
 import Focus.Cli (InputLocation (..), Options (..), OutputLocation (..), UseColour (..), optionsP)
 import Focus.Command (Command (..), CommandF (..))
-import Focus.Compile (Focus, compileSelector)
+import Focus.Compile (Focus, FocusM (..), SelectorError (..), compileSelector)
 import Focus.Debug (debugM)
 import Focus.Exec qualified as Exec
 import Focus.Parser (parseScript)
@@ -33,17 +35,24 @@ run = do
           )
       )
   withHandles input output \inputHandle outputHandle -> flip runReaderT opts do
-    case command of
+    result <- case command of
       View script -> do
         focus <- getFocus "<selector>" ViewF script
-        liftIO $ Exec.runView focus inputHandle outputHandle
+        liftIO . runExceptT . runFocusM $ Exec.runView focus inputHandle outputHandle
       Modify script m -> do
         focus <- getFocus "<selector>" ModifyF script
         modifier <- getFocus "<modifier>" ModifyF m
-        liftIO $ Exec.runModify focus modifier inputHandle outputHandle
+        liftIO . runExceptT . runFocusM $ Exec.runModify focus modifier inputHandle outputHandle
       Set script val -> do
         focus <- getFocus "<selector>" ModifyF script
-        liftIO $ Exec.runSet focus inputHandle outputHandle val
+        liftIO . runExceptT . runFocusM $ Exec.runSet focus inputHandle outputHandle val
+    case result of
+      Left err -> do
+        case err of
+          ShellError msg -> do
+            liftIO $ TextIO.hPutStrLn UnliftIO.stderr msg
+            liftIO $ System.exitFailure
+      Right () -> pure ()
   where
     diagnoseStyle :: CliM (Diagnose.Style AnsiStyle)
     diagnoseStyle =
@@ -73,7 +82,7 @@ run = do
                 <> (Diagnose.addReport mempty report)
             )
       failWithDiagnostic diagnostic
-    getFocus :: Text -> CommandF cmd -> Text -> CliM (Focus cmd IO)
+    getFocus :: Text -> CommandF cmd -> Text -> CliM (Focus cmd FocusM)
     getFocus srcName cmdF script = do
       case parseScript srcName script of
         Left errDiagnostic -> do

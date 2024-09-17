@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TupleSections #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
@@ -6,17 +7,23 @@
 module Focus.Compile
   ( compileSelector,
     Focus (..),
+    FocusM (..),
     textChunk,
     listChunk,
+    SelectorError (..),
   )
 where
 
+import Control.Applicative (empty)
 import Control.Lens
 import Control.Lens.Regex.Text qualified as RE
 import Control.Lens.Regex.Text qualified as Re
+import Control.Monad.Error.Class (MonadError (..))
+import Control.Monad.Except (ExceptT)
 import Control.Monad.Fix (MonadFix (..))
 import Control.Monad.RWS.CPS (MonadWriter (..))
 import Control.Monad.State.Lazy
+import Control.Monad.Trans.Maybe (MaybeT (..))
 import Control.Monad.Writer (WriterT, execWriterT)
 import Data.Maybe (fromMaybe)
 import Data.Monoid (Ap (..))
@@ -25,6 +32,7 @@ import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
 import Data.Vector.Internal.Check (HasCallStack)
 import Focus.Command (CommandF (..), CommandT (..))
+import Focus.Prelude
 import Focus.Typechecker.Types (Chunk (..), TypedSelector)
 import Focus.Typechecker.Types qualified as T
 import System.Exit (ExitCode (..))
@@ -32,7 +40,11 @@ import UnliftIO qualified
 import UnliftIO.Process qualified as UnliftIO
 import Prelude hiding (reads)
 
--- data Err = TypeMismatch (ChunkType {- expected -}) (ChunkType {- actual -})
+data SelectorError
+  = ShellError Text
+
+newtype FocusM a = FocusM {runFocusM :: ExceptT SelectorError IO a}
+  deriving newtype (Functor, Applicative, Monad, MonadIO, MonadError SelectorError, MonadFix)
 
 data Focus (cmd :: CommandT) m where
   ViewFocus :: ((Chunk -> m ()) -> Chunk -> m ()) -> Focus 'ViewT m
@@ -89,7 +101,7 @@ unsafeIso p = iso (\actual -> fromJust actual . preview p $ actual) (review p)
       Just x -> x
       Nothing -> error $ "unsafeIso: Mismatch. Actual: " <> show actual
 
-compileSelector :: forall m cmd i o a. (MonadIO m, MonadFix m) => CommandF cmd -> TypedSelector i o a -> Focus cmd m
+compileSelector :: forall m cmd i o a. (MonadIO m, MonadFix m, MonadError SelectorError m) => CommandF cmd -> TypedSelector i o a -> Focus cmd m
 compileSelector cmdF = \case
   T.Compose _ l r ->
     let l' = compileSelector cmdF l
@@ -109,51 +121,78 @@ compileSelector cmdF = \case
     liftTrav cmdF $ T._RegexMatchChunk . RE.groups . traversed . from textI
   T.ListOf _ selector -> do
     case cmdF of
-      ViewF -> ViewFocus $ \f chunk -> do
-        let t :: ((Chunk -> WriterT [Chunk] IO ()) -> Chunk -> WriterT [Chunk] IO ())
-            t = getViewFocus $ compileSelector cmdF selector
-        results <-
-          chunk
-            & t
-              %%~ ( \chunk' -> do
-                      tell [chunk']
-                  )
-            & execWriterT
-            & liftIO
-        f (ListChunk $ results)
-      ModifyF -> ModifyFocus $ \f chunk -> do
-        let inner :: LensLike' (StateT ListOfS IO) Chunk Chunk
+      ViewF -> do
+        let inner :: ((Chunk -> WriterT [Chunk] m ()) -> Chunk -> WriterT [Chunk] m ())
+            inner = getViewFocus $ compileSelector cmdF selector
+        ViewFocus $ \f chunk -> do
+          results <-
+            chunk
+              & inner
+                %%~ ( \chunk' -> do
+                        tell [chunk']
+                    )
+              & execWriterT
+          f (ListChunk $ results)
+      ModifyF -> do
+        let inner :: LensLike' (StateT ListOfS m) Chunk Chunk
             inner = getModifyFocus $ compileSelector cmdF selector
-        let action :: StateT ListOfS IO Chunk
-            action =
-              chunk
-                & inner %%~ \innerChunk -> do
-                  state \(ListOfS {reads = ~reads, results = ~results}) ->
-                    let ~(result, newResults) = case results of
-                          ~(hd : rest) -> (hd, rest)
-                     in (result, ListOfS {reads = (innerChunk : reads), results = newResults})
-        ~(r, _) <- mfix $ \(~(_r, results)) -> do
-          ~(r, ListOfS {reads}) <- liftIO $ runStateT action (ListOfS {reads = [], results})
-          f (ListChunk $ reverse reads) >>= \case
-            ~(ListChunk chs) -> pure $ (r, chs)
-        pure r
+        ModifyFocus $ \f chunk -> do
+          let action :: StateT ListOfS m Chunk
+              action =
+                chunk
+                  & inner %%~ \innerChunk -> do
+                    state \(ListOfS {reads = ~reads, results = ~results}) ->
+                      let ~(result, newResults) = case results of
+                            ~(hd : rest) -> (hd, rest)
+                       in (result, ListOfS {reads = (innerChunk : reads), results = newResults})
+          ~(r, _) <- mfix $ \(~(_r, results)) -> do
+            ~(r, ListOfS {reads}) <- runStateT action (ListOfS {reads = [], results})
+            f (ListChunk $ reverse reads) >>= \case
+              ~(ListChunk chs) -> pure $ (r, chs)
+          pure r
+  T.FilterBy _ selector -> do
+    case cmdF of
+      ViewF -> do
+        let inner :: (Chunk -> MaybeT m ()) -> Chunk -> MaybeT m ()
+            inner = getViewFocus $ compileSelector cmdF selector
+        ViewFocus $ \f chunk -> do
+          runMaybeT (forOf inner chunk (\_ -> empty)) >>= \case
+            -- Nothing means we got at least one result and short-circuted.
+            Nothing -> f chunk
+            -- Just means we didn't get any results, so the computation succeeded.
+            Just _ -> pure ()
+      ModifyF -> ModifyFocus $ \f chunk -> do
+        let inner :: LensLike' (MaybeT m) Chunk Chunk
+            inner = getModifyFocus $ compileSelector cmdF selector
+        runMaybeT (forOf inner chunk (\_ -> empty)) >>= \case
+          -- Nothing means we got at least one result and short-circuted.
+          Nothing -> f chunk
+          -- Just means we didn't get any results, so the computation succeeded.
+          Just _ -> pure chunk
   T.Shell _ shellScript -> do
     let go :: forall x. (Chunk -> m x) -> Chunk -> m x
         go f chunk = do
           let proc = UnliftIO.shell (Text.unpack shellScript)
-          let proc' = proc {UnliftIO.std_in = UnliftIO.CreatePipe, UnliftIO.std_out = UnliftIO.CreatePipe}
-          out' <- liftIO $ UnliftIO.withCreateProcess proc' \mstdin mstdout _stderr phandle -> do
+          let proc' = proc {UnliftIO.std_in = UnliftIO.CreatePipe, UnliftIO.std_out = UnliftIO.CreatePipe, UnliftIO.std_err = UnliftIO.CreatePipe}
+          procResult <- liftIO $ UnliftIO.withCreateProcess proc' \mstdin mstdout mstderr phandle -> do
             let stdin = fromMaybe (error "missing stdin") mstdin
             let stdout = fromMaybe (error "missing stdout") mstdout
-            Text.hPutStrLn stdin (textChunk chunk)
+            let stderr = fromMaybe (error "missing stderr") mstderr
+            liftIO $ Text.hPutStrLn stdin (textChunk chunk)
             UnliftIO.hClose stdin
             UnliftIO.waitForProcess phandle >>= \case
-              ExitSuccess -> pure ()
-              ExitFailure code -> error $ "Shell script failed with exit code " <> show code
-            out <- Text.hGetContents stdout
-            let out' = fromMaybe out $ Text.stripSuffix "\n" out
-            pure out'
-          f (TextChunk out')
+              ExitFailure code -> do
+                errOut <- liftIO $ Text.hGetContents stderr
+                pure $ Left (code, errOut)
+              ExitSuccess -> do
+                out <- liftIO $ Text.hGetContents stdout
+                let out' = fromMaybe out $ Text.stripSuffix "\n" out
+                pure $ Right out'
+          case procResult of
+            Left (code, errOut) -> do
+              throwError $ ShellError $ "Shell script failed with exit code " <> tShow code <> ": " <> shellScript <> "\n" <> errOut
+            Right out -> do
+              f (TextChunk out)
     case cmdF of
       ViewF -> ViewFocus \f chunk -> go f chunk
       ModifyF -> ModifyFocus \f chunk -> go f chunk

@@ -125,6 +125,7 @@ data TypedSelector (i :: ChunkType) (o :: ChunkType) a where
   RegexMatches :: a -> TypedSelector RegexMatchType TextType a
   RegexGroups :: a -> TypedSelector RegexMatchType TextType a
   ListOf :: a -> TypedSelector i o a -> TypedSelector i (ListType o) a
+  FilterBy :: a -> TypedSelector i o a -> TypedSelector i o a
   Shell :: a -> Text -> TypedSelector TextType TextType a
   At :: a -> Int -> TypedSelector (ListType t) t a
 
@@ -138,6 +139,7 @@ instance Tagged (TypedSelector i o a) a where
     RegexMatches pos -> pos
     RegexGroups pos -> pos
     ListOf pos _ -> pos
+    FilterBy pos _ -> pos
     Shell pos _ -> pos
     At pos _ -> pos
 

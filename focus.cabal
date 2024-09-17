@@ -84,6 +84,7 @@ library
     , recursion-schemes
     , some
     , text
+    , transformers
     , unification-fd
     , unliftio
     , vector
@@ -138,6 +139,7 @@ executable focus
     , recursion-schemes
     , some
     , text
+    , transformers
     , unification-fd
     , unliftio
     , vector

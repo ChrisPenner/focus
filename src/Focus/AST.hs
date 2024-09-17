@@ -24,6 +24,7 @@ data Selector a
   | RegexMatches a
   | RegexGroups a
   | ListOf a (Selector a)
+  | FilterBy a (Selector a)
   | Shell a Text
   | At a Int
   deriving stock (Show, Functor, Foldable, Traversable)
@@ -38,5 +39,6 @@ instance Tagged (Selector a) a where
     RegexMatches a -> a
     RegexGroups a -> a
     ListOf a _ -> a
+    FilterBy a _ -> a
     Shell a _ -> a
     At a _ -> a

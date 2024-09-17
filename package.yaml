@@ -62,6 +62,7 @@ dependencies:
 - deriving-compat
 - prettyprinter-ansi-terminal
 - unification-fd
+- transformers
 
 ghc-options:
 - -Wall

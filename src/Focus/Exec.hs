@@ -8,12 +8,12 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
 import Focus.Command
-import Focus.Compile (Focus (..))
+import Focus.Compile (Focus (..), FocusM)
 import Focus.Typechecker.Types (Chunk (..))
 import System.IO qualified as IO
 import UnliftIO (BufferMode (LineBuffering), Handle, hSetBuffering)
 
-runView :: (MonadIO m) => Focus ViewT m -> Handle -> Handle -> m ()
+runView :: Focus ViewT FocusM -> Handle -> Handle -> FocusM ()
 runView (ViewFocus f) input output = do
   liftIO $ hSetBuffering input LineBuffering
   liftIO $ hSetBuffering output LineBuffering
@@ -28,7 +28,7 @@ runView (ViewFocus f) input output = do
             go
   go
 
-runSet :: (MonadIO m) => Focus ModifyT m -> Handle -> Handle -> Text -> m ()
+runSet :: Focus ModifyT FocusM -> Handle -> Handle -> Text -> FocusM ()
 runSet (ModifyFocus trav) input output val = do
   liftIO $ hSetBuffering input LineBuffering
   liftIO $ hSetBuffering output LineBuffering
@@ -44,7 +44,7 @@ runSet (ModifyFocus trav) input output val = do
             go
   go
 
-runModify :: (MonadIO m) => Focus ModifyT m -> Focus ModifyT m -> Handle -> Handle -> m ()
+runModify :: Focus ModifyT FocusM -> Focus ModifyT FocusM -> Handle -> Handle -> FocusM ()
 runModify (ModifyFocus trav) (ModifyFocus modifier) input output = do
   liftIO $ hSetBuffering input LineBuffering
   liftIO $ hSetBuffering output LineBuffering
