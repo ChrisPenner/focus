@@ -59,6 +59,10 @@ run() {
 
 "$focus" --help > "help.out"
 
+# Extract test cases from the readme
+
+# cat ../README.md | focus --full view '/\\\focus\n(.*?)\n\\\/' | focus view '/```focus\n(.*?)\n```/' | focus modify '{rev}' > "readme.out"
+
 # Parser errors
 echo "one,two,three" | run parser_err view 'splitOn ,'
 
@@ -72,3 +76,6 @@ echo "one,two,three" | run expected_list view 'splitOn "," | at 1'
 echo "one two 555-123-4567 three" | run regex_view view '/[\d-]+/ | matches'
 echo "one two 555-123-4567 three 999-876-5432" | run regex_modify modify '/[\d-]+/ | matches' '{rev}'
 echo "one-two-three" | run regex_modify modify '/(\w+)-\w+-(\w+)/ | matches' '{tr a-z A-Z}'
+
+# Filter
+echo "one,two,three" | run simple_filter view 'splitOn "," | filterBy /e/'

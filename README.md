@@ -11,7 +11,7 @@ extract, transform and filter data, and provides easy inter-op with other unix t
 
 Keep forgetting the syntax for `sed`? No problem:
 
-```sh
+```focus
 echo "hello world" | focus set '/hello/ | matches' goodbye
 ```
 
@@ -25,3 +25,16 @@ then capitalize and reverse those words, merging them back into the source text.
 echo "celery watermelon apples carrots" | focus modify '/\w*[oO]\w*/ | matches' '{tr a-z A-Z | rev }'
 celery NOLEMRETAW apples STORRAC
 ```
+
+## TODO
+
+- [ ] Ability to 'NOT'/invert filters
+- [ ] Add more examples
+- [ ] Add more tests
+- [ ] Support JSON
+- [ ] List splat
+- [ ] Expression language?
+- [ ] Require reversable selectors
+- [ ] Switch to input file arguments
+- [ ] Handle errors from shell commands better
+- [ ] shell 'if'
