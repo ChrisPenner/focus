@@ -46,7 +46,7 @@ parseScript :: Text -> Text -> Either (Diagnostic Text) TaggedSelector
 parseScript srcName src =
   let strSource = Text.unpack src
       strSourceName = Text.unpack srcName
-   in parse (scriptP <* M.eof) strSourceName strSource
+   in parse (M.space *> scriptP <* M.eof) strSourceName strSource
         & first
           ( \bundle ->
               bundle

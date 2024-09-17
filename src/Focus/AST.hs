@@ -123,8 +123,8 @@ unificationErrorReport = \case
      in Diagnose.Err
           Nothing
           "Type error"
-          [ (lPos, D.This $ "this selector outputs the type: " <> renderUTyp l),
-            (rPos, D.Where $ "but this selector accepts the type: " <> renderUTyp r)
+          [ (lPos, D.This $ "this selector outputs: " <> renderUTyp l),
+            (rPos, D.Where $ "but this selector expects: " <> renderUTyp r)
           ]
           []
   where
@@ -199,10 +199,9 @@ typecheckSelectorUnified t =
             RegexGroups {} -> pure $ T.Arrow pos (T.regexMatchType pos) (T.textType pos)
             ListOf _ inner -> do
               innerT <- go inner
-              inp <- freshVar
-              out <- freshVar
-              _ <- Unify.unify (T.arrow pos inp out) (UTerm innerT)
-              pure $ T.Arrow pos inp (T.listType pos out)
+              case innerT of
+                T.Arrow _ inp out -> pure $ T.Arrow pos inp (T.listType pos out)
+                _ -> error "ListOf: Expected Arrow"
             Shell {} -> pure $ T.Arrow pos (T.textType pos) (T.textType pos)
             At {} -> do
               inp <- freshVar
@@ -210,13 +209,14 @@ typecheckSelectorUnified t =
 
     compose :: forall s. ChunkTypeT Diagnose.Position (Typ s) -> TaggedSelector -> UnifyM (UnifyFailure s) s (ChunkTypeT Diagnose.Position (Typ s))
     compose lt r = do
-      rt <- go r
-      (li, m, ro) <- lift $ (,,) <$> Unify.freeVar <*> Unify.freeVar <*> Unify.freeVar
-      let posL = tag lt
-      let posR = tag rt
-      _ <- Unify.unify (T.arrow posL (Unify.UVar li) (Unify.UVar m)) (UTerm lt)
-      _ <- Unify.unify (T.arrow posR (Unify.UVar m) (Unify.UVar ro)) (UTerm rt)
-      pure (T.Arrow (posL <> posR) (Unify.UVar li) (Unify.UVar ro))
+      case lt of
+        T.Arrow lpos li lm -> do
+          go r >>= \case
+            T.Arrow rpos rm ro -> do
+              _ <- Unify.unify lm rm
+              pure $ T.Arrow (lpos <> rpos) li ro
+            _ -> error "Expected Arrow type in compose"
+        _ -> error "Expected Arrow type in compose"
 
 freshVar :: UnifyM (UnifyFailure s) s (Typ s)
 freshVar = lift $ Unify.UVar <$> Unify.freeVar
