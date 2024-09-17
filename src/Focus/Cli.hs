@@ -6,6 +6,7 @@ module Focus.Cli
     InputLocation (..),
     OutputLocation (..),
     UseColour (..),
+    ChunkSize (..),
   )
 where
 
@@ -24,6 +25,10 @@ data OutputLocation
   = StdOut
   | OutputFile FilePath
 
+data ChunkSize
+  = LineChunks
+  | EntireChunks
+
 data UseColour = Colour | NoColour
 
 data Options
@@ -31,7 +36,8 @@ data Options
   { input :: InputLocation,
     output :: OutputLocation,
     command :: Command,
-    useColour :: UseColour
+    useColour :: UseColour,
+    chunkSize :: ChunkSize
   }
 
 optionsP :: Parser Options
@@ -61,13 +67,20 @@ optionsP = do
       ( long "no-color"
           <> help "Disable colored output"
       )
+  chunkSize <-
+    flag
+      LineChunks
+      EntireChunks
+      ( long "full"
+          <> help "Process the entire input at once instead of line-by-line"
+      )
   command <-
     subparser
       ( Opt.command "view" (info viewP (progDesc "View the focus"))
           <> Opt.command "modify" (info overP (progDesc "Modify the focused field"))
           <> Opt.command "set" (info setP (progDesc "Set the focus"))
       )
-  pure Options {input, output, command, useColour}
+  pure Options {input, output, command, useColour, chunkSize}
 
 viewP :: Parser Command
 viewP = do

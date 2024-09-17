@@ -26,7 +26,7 @@ type CliM = ReaderT Options IO
 
 run :: IO ()
 run = do
-  opts@Options {command, input, output} <-
+  opts@Options {command, input, output, chunkSize} <-
     Opts.execParser $
       ( Opts.info
           (optionsP <**> Opts.helper)
@@ -38,14 +38,14 @@ run = do
     result <- case command of
       View script -> do
         focus <- getFocus "<selector>" ViewF script
-        liftIO . runExceptT . runFocusM $ Exec.runView focus inputHandle outputHandle
+        liftIO . runExceptT . runFocusM $ Exec.runView focus chunkSize inputHandle outputHandle
       Modify script m -> do
         focus <- getFocus "<selector>" ModifyF script
         modifier <- getFocus "<modifier>" ModifyF m
-        liftIO . runExceptT . runFocusM $ Exec.runModify focus modifier inputHandle outputHandle
+        liftIO . runExceptT . runFocusM $ Exec.runModify focus modifier chunkSize inputHandle outputHandle
       Set script val -> do
         focus <- getFocus "<selector>" ModifyF script
-        liftIO . runExceptT . runFocusM $ Exec.runSet focus inputHandle outputHandle val
+        liftIO . runExceptT . runFocusM $ Exec.runSet focus chunkSize inputHandle outputHandle val
     case result of
       Left err -> do
         case err of
