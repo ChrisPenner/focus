@@ -17,20 +17,17 @@ where
 import Control.Lens
 import Control.Lens.Regex.Text qualified as RE
 import Control.Monad.Error.Class (MonadError (..))
-import Control.Monad.Fix (MonadFix (..))
-import Control.Monad.RWS.CPS (MonadReader (..), MonadWriter (..))
+import Control.Monad.RWS.CPS (MonadReader (..))
 import Control.Monad.State.Lazy
 import Control.Monad.Trans.Maybe (MaybeT (..))
-import Control.Monad.Writer (WriterT, execWriterT)
 import Data.Map qualified as Map
 import Data.Maybe (fromMaybe)
-import Data.Monoid (Ap (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
-import Data.Vector.Internal.Check (HasCallStack)
 import Error.Diagnose qualified as D
 import Focus.Command (CommandF (..), CommandT (..))
+import Focus.Focus
 import Focus.Prelude
 import Focus.Typechecker.Types qualified as T
 import Focus.Types
@@ -40,59 +37,12 @@ import UnliftIO qualified
 import UnliftIO.Process qualified as UnliftIO
 import Prelude hiding (reads)
 
-getViewFocus :: Focus 'ViewT m -> ((Chunk -> m ()) -> Chunk -> m ())
-getViewFocus (ViewFocus f) = f
-
-getModifyFocus :: Focus 'ModifyT m -> LensLike' m Chunk Chunk
-getModifyFocus (ModifyFocus f) = f
-
-textChunk :: (HasCallStack) => Chunk -> Text
-textChunk = \case
-  TextChunk txt -> txt
-  actual -> error $ "Expected TextChunk, got " <> show actual
-
-listChunk :: Chunk -> [Chunk]
-listChunk = \case
-  ListChunk chs -> chs
-  actual -> error $ "Expected ListChunk, got " <> show actual
-
--- compileSelector :: (MonadIO m, MonadFix m) => CommandF cmd -> Selector -> Focus cmd m
--- compileSelector cmdF = \case
---   Compose selectors ->
---     foldr1 composeFT (compileSelector cmdF <$> selectors)
-
-composeFT :: Focus cmd m -> Focus cmd m -> Focus cmd m
-composeFT (ViewFocus l) (ViewFocus r) = ViewFocus $ l . r
-composeFT (ModifyFocus l) (ModifyFocus r) = ModifyFocus $ l . r
-composeFT (SetFocus l) (SetFocus r) = SetFocus $ l . r
-
-liftTrav :: (Applicative m) => CommandF cmd -> Traversal' Chunk Chunk -> Focus cmd m
-liftTrav cmdF trav = case cmdF of
-  ViewF -> ViewFocus $ \handler chunk -> getAp $ foldMapOf trav (Ap . handler) chunk
-  ModifyF -> ModifyFocus $ trav
-
-textI :: Iso' Chunk Text
-textI = unsafeIso _TextChunk
-
-underText :: Traversal' Text Text -> Traversal' Chunk Chunk
-underText = withinIso textI
-
-withinIso :: Iso' s a -> Traversal' a a -> Traversal' s s
-withinIso i t = i . t . from i
-
-unsafeIso :: (Show s) => Prism' s a -> Iso' s a
-unsafeIso p = iso (\actual -> fromJust actual . preview p $ actual) (review p)
-  where
-    fromJust actual = \case
-      Just x -> x
-      Nothing -> error $ "unsafeIso: Mismatch. Actual: " <> show actual
-
-compileSelector :: forall m cmd i o. (MonadReader Bindings m, MonadIO m, MonadFix m, MonadError SelectorError m) => CommandF cmd -> TypedSelector i o (D.Position) -> Focus cmd m
+compileSelector :: forall cmd i o. CommandF cmd -> TypedSelector i o (D.Position) -> Focus cmd Chunk Chunk
 compileSelector cmdF = \case
   T.Compose _ l r ->
     let l' = compileSelector cmdF l
         r' = compileSelector cmdF r
-     in composeFT l' r'
+     in l' >.> r'
   T.SplitFields _ delim ->
     liftTrav cmdF $ underText (\f txt -> (Text.intercalate delim) <$> traverse f (Text.splitOn delim txt))
   T.SplitLines _ ->
@@ -110,40 +60,11 @@ compileSelector cmdF = \case
       ViewF -> viewRegex pat \f match -> do traverse_ (f . TextChunk) (match ^.. RE.groups . traversed)
       ModifyF -> do modifyRegex pat (RE.groups . traverse)
   T.ListOf _ selector -> do
-    case cmdF of
-      ViewF -> do
-        let inner :: ((Chunk -> WriterT [Chunk] m ()) -> Chunk -> WriterT [Chunk] m ())
-            inner = getViewFocus $ compileSelector cmdF selector
-        ViewFocus $ \f chunk -> do
-          results <-
-            chunk
-              & inner
-                %%~ ( \chunk' -> do
-                        tell [chunk']
-                    )
-              & execWriterT
-          f (ListChunk $ results)
-      ModifyF -> do
-        let inner :: LensLike' (StateT ListOfS m) Chunk Chunk
-            inner = getModifyFocus $ compileSelector cmdF selector
-        ModifyFocus $ \f chunk -> do
-          let action :: StateT ListOfS m Chunk
-              action =
-                chunk
-                  & inner %%~ \innerChunk -> do
-                    state \(ListOfS {reads = ~reads, results = ~results}) ->
-                      let ~(result, newResults) = case results of
-                            ~(hd : rest) -> (hd, rest)
-                       in (result, ListOfS {reads = (innerChunk : reads), results = newResults})
-          ~(r, _) <- mfix $ \(~(_r, results)) -> do
-            ~(r, ListOfS {reads}) <- runStateT action (ListOfS {reads = [], results})
-            f (ListChunk $ reverse reads) >>= \case
-              ~(ListChunk chs) -> pure $ (r, chs)
-          pure r
+    listOfFocus (compileSelector cmdF selector) >.> liftTrav cmdF (from asListI)
   T.FilterBy _ selector -> do
     case cmdF of
       ViewF -> do
-        let inner :: (Chunk -> MaybeT m ()) -> Chunk -> MaybeT m ()
+        let inner :: (Focusable m) => (Chunk -> MaybeT m ()) -> Chunk -> MaybeT m ()
             inner = getViewFocus $ compileSelector cmdF selector
         ViewFocus $ \f chunk -> do
           runMaybeT (forOf inner chunk (\_ -> empty)) >>= \case
@@ -152,7 +73,7 @@ compileSelector cmdF = \case
             -- Just means we didn't get any results, so the computation succeeded.
             Just _ -> pure ()
       ModifyF -> ModifyFocus $ \f chunk -> do
-        let inner :: LensLike' (MaybeT m) Chunk Chunk
+        let inner :: (Focusable m) => LensLike' (MaybeT m) Chunk Chunk
             inner = getModifyFocus $ compileSelector cmdF selector
         runMaybeT (forOf inner chunk (\_ -> empty)) >>= \case
           -- Nothing means we got at least one result and short-circuted.
@@ -165,7 +86,7 @@ compileSelector cmdF = \case
         & traversed %%~ f
         <&> ListChunk
   T.Shell _ shellScript shellMode -> do
-    let go :: forall x. (Chunk -> m x) -> Chunk -> m x
+    let go :: forall x m. (Focusable m) => (Chunk -> m x) -> Chunk -> m x
         go f chunk = do
           shellTxt <- resolveBindingString shellScript
           let proc = UnliftIO.shell (Text.unpack shellTxt)
@@ -199,15 +120,10 @@ compileSelector cmdF = \case
       listChunk chunk
         & ix n %%~ f
         <&> ListChunk
-  T.Take _ n selector -> do
-    case cmdF of
-      ViewF -> do
-        let (ViewFocus inner) = compileSelector cmdF selector
-        liftTrav cmdF $ \f chunk -> taking n (inner f) chunk
-      ModifyF -> do
-        _
+  T.Take _ n selector -> do _
+  T.Drop _ n selector -> do _
   where
-    viewRegex :: RE.Regex -> ((Chunk -> m ()) -> RE.Match -> m ()) -> Focus 'ViewT m
+    viewRegex :: RE.Regex -> (forall m. (Focusable m) => (Chunk -> m ()) -> RE.Match -> m ()) -> Focus 'ViewT Chunk Chunk
     viewRegex pat go = ViewFocus \f chunk -> do
       let txt = textChunk chunk
       forOf_ (RE.regexing pat) txt \match -> do
@@ -217,7 +133,7 @@ compileSelector cmdF = \case
                 <&> TextChunk
         local (groups <>) $ go f match
 
-    modifyRegex :: RE.Regex -> (Traversal' RE.Match Text) -> Focus 'ModifyT m
+    modifyRegex :: RE.Regex -> (Traversal' RE.Match Text) -> Focus 'ModifyT Chunk Chunk
     modifyRegex pat trav = ModifyFocus \f chunk -> do
       let txt = textChunk chunk
       TextChunk <$> forOf (RE.regexing pat) txt \match -> do

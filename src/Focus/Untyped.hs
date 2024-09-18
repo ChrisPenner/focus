@@ -22,7 +22,6 @@ where
 
 import Control.Lens
 import Control.Lens.Regex.Text qualified as Re
-import Data.Generics.Product.Param (HasParam (..))
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import Data.Text (Text)

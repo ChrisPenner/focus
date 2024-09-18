@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
@@ -7,6 +8,7 @@ module Focus.Types
     BindingDeclarations,
     Chunk (..),
     Focus (..),
+    Focusable,
     FocusM (..),
     SelectorError (..),
     TypedSelector (..),
@@ -40,7 +42,8 @@ data SelectorError
 newtype FocusM a = FocusM {runFocusM :: ExceptT SelectorError (ReaderT Bindings IO) a}
   deriving newtype (Functor, Applicative, Monad, MonadIO, MonadError SelectorError, MonadFix, MonadReader Bindings)
 
-data Focus (cmd :: CommandT) m where
-  ViewFocus :: ((Chunk -> m ()) -> Chunk -> m ()) -> Focus 'ViewT m
-  ModifyFocus :: LensLike' m Chunk Chunk -> Focus 'ModifyT m
-  SetFocus :: LensLike' m Chunk Chunk -> Focus 'SetT m
+type Focusable m = (MonadReader Bindings m, MonadIO m, MonadFix m, MonadError SelectorError m)
+
+data Focus (cmd :: CommandT) i o where
+  ViewFocus :: (forall m. (Focusable m) => (o -> m ()) -> i -> m ()) -> Focus 'ViewT i o
+  ModifyFocus :: (forall m. (Focusable m) => LensLike' m i o) -> Focus 'ModifyT i o

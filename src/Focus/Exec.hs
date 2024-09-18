@@ -36,17 +36,17 @@ runGeneric chunkSize input output f = do
                 go
       go
 
-runView :: Focus ViewT FocusM -> ChunkSize -> Handle -> Handle -> FocusM ()
+runView :: Focus ViewT Chunk Chunk -> ChunkSize -> Handle -> Handle -> FocusM ()
 runView (ViewFocus f) chunkSize input output = do
   runGeneric chunkSize input output \chunk -> do
     Nothing <$ f (liftIO . Text.hPutStrLn output . renderChunk) (TextChunk chunk)
 
-runSet :: Focus ModifyT FocusM -> ChunkSize -> Handle -> Handle -> Text -> FocusM ()
+runSet :: Focus ModifyT Chunk Chunk -> ChunkSize -> Handle -> Handle -> Text -> FocusM ()
 runSet (ModifyFocus trav) chunkSize input output val = do
   runGeneric chunkSize input output \chunk -> do
     Just . renderChunk <$> forOf trav (TextChunk chunk) (const (pure $ TextChunk val))
 
-runModify :: Focus ModifyT FocusM -> Focus ModifyT FocusM -> ChunkSize -> Handle -> Handle -> FocusM ()
+runModify :: Focus ModifyT Chunk Chunk -> Focus ModifyT Chunk Chunk -> ChunkSize -> Handle -> Handle -> FocusM ()
 runModify (ModifyFocus trav) (ModifyFocus modifier) chunkSize input output = do
   runGeneric chunkSize input output \chunk -> do
     Just . renderChunk <$> forOf trav (TextChunk chunk) \chunk' -> do

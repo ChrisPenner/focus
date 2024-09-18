@@ -13,13 +13,13 @@ import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Focus.Cli (InPlace (..), Options (..), OutputLocation (..), UseColour (..), optionsP)
 import Focus.Command (Command (..), CommandF (..))
-import Focus.Compile (Focus, FocusM (..), SelectorError (..), compileSelector)
+import Focus.Compile (compileSelector)
 import Focus.Debug (debugM)
 import Focus.Exec qualified as Exec
 import Focus.Parser (parseScript)
 import Focus.Prelude
 import Focus.Typechecker (typecheckSelector)
-import Focus.Typechecker.Types (SomeTypedSelector (..))
+import Focus.Types
 import Options.Applicative qualified as Opts
 import Prettyprinter.Render.Terminal (AnsiStyle)
 import System.Exit qualified as System
@@ -139,7 +139,7 @@ run = do
             withOutputHandle (either (Just . fst) (const Nothing) input) \outputHandle ->
               action (either snd id input) outputHandle
 
-    getFocus :: Text -> CommandF cmd -> Text -> CliM (Focus cmd FocusM)
+    getFocus :: Text -> CommandF cmd -> Text -> CliM (Focus cmd Chunk Chunk)
     getFocus srcName cmdF script = do
       case parseScript srcName script of
         Left errDiagnostic -> do
