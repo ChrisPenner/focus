@@ -26,7 +26,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
 import Error.Diagnose qualified as D
-import Focus.Command (CommandF (..), CommandT (..))
+import Focus.Command (CommandF (..), CommandT (..), IsCmd)
 import Focus.Focus
 import Focus.Prelude
 import Focus.Typechecker.Types qualified as T
@@ -37,30 +37,27 @@ import UnliftIO qualified
 import UnliftIO.Process qualified as UnliftIO
 import Prelude hiding (reads)
 
-compileSelector :: forall cmd i o. CommandF cmd -> TypedSelector i o (D.Position) -> Focus cmd Chunk Chunk
+compileSelector :: forall cmd i o. (IsCmd cmd) => CommandF cmd -> TypedSelector i o (D.Position) -> Focus cmd Chunk Chunk
 compileSelector cmdF = \case
   T.Compose _ l r ->
     let l' = compileSelector cmdF l
         r' = compileSelector cmdF r
      in l' >.> r'
-  T.SplitFields _ delim ->
-    liftTrav cmdF $ underText (\f txt -> (Text.intercalate delim) <$> traverse f (Text.splitOn delim txt))
-  T.SplitLines _ ->
-    liftTrav cmdF $ underText (\f txt -> Text.unlines <$> traverse f (Text.lines txt))
-  T.SplitWords _ ->
-    liftTrav cmdF $ underText (\f txt -> Text.unwords <$> traverse f (Text.words txt))
+  T.SplitFields _ delim -> underText $ liftTrav (\f txt -> (Text.intercalate delim) <$> traverse f (Text.splitOn delim txt))
+  T.SplitLines _ -> underText $ liftTrav (\f txt -> Text.unlines <$> traverse f (Text.lines txt))
+  T.SplitWords _ -> underText $ liftTrav $ (\f txt -> Text.unwords <$> traverse f (Text.words txt))
   T.Regex _ pat -> do
     case cmdF of
       ViewF -> viewRegex pat \f match -> do f (TextChunk $ match ^. RE.match)
       ModifyF -> do modifyRegex pat RE.match
   T.RegexMatches _ ->
-    liftTrav cmdF $ _RegexMatchChunk . RE.match . from textI
+    liftTrav $ _RegexMatchChunk . RE.match . from textI
   T.RegexGroups _ pat -> do
     case cmdF of
       ViewF -> viewRegex pat \f match -> do traverse_ (f . TextChunk) (match ^.. RE.groups . traversed)
       ModifyF -> do modifyRegex pat (RE.groups . traverse)
   T.ListOf _ selector -> do
-    listOfFocus (compileSelector cmdF selector) >.> liftTrav cmdF (from asListI)
+    listOfFocus (compileSelector cmdF selector) >.> liftTrav (from asListI)
   T.FilterBy _ selector -> do
     case cmdF of
       ViewF -> do
@@ -81,7 +78,7 @@ compileSelector cmdF = \case
           -- Just means we didn't get any results, so the computation succeeded.
           Just _ -> pure chunk
   T.Splat _ -> do
-    liftTrav cmdF $ \f chunk -> do
+    liftTrav $ \f chunk -> do
       listChunk chunk
         & traversed %%~ f
         <&> ListChunk
@@ -116,12 +113,14 @@ compileSelector cmdF = \case
       ViewF -> ViewFocus \f chunk -> go f chunk
       ModifyF -> ModifyFocus \f chunk -> go f chunk
   T.At _ n -> do
-    liftTrav cmdF $ \f chunk -> do
+    liftTrav $ \f chunk -> do
       listChunk chunk
         & ix n %%~ f
         <&> ListChunk
-  T.Take _ n selector -> do _
-  T.Drop _ n selector -> do _
+  T.Take _ n selector ->
+    listOfFocus (compileSelector cmdF selector) >.> liftTrav (taking n traversed)
+  T.Drop _ n selector -> do
+    listOfFocus (compileSelector cmdF selector) >.> liftTrav (dropping n traversed)
   where
     viewRegex :: RE.Regex -> (forall m. (Focusable m) => (Chunk -> m ()) -> RE.Match -> m ()) -> Focus 'ViewT Chunk Chunk
     viewRegex pat go = ViewFocus \f chunk -> do
@@ -152,8 +151,3 @@ resolveBindingString (BindingString xs) = do
         Just chunk -> pure $ textChunk chunk
         Nothing -> throwError $ BindingError pos $ "Binding not found: " <> nameTxt
     Right txt -> pure txt
-
-data ListOfS = ListOfS
-  { reads :: [Chunk],
-    results :: [Chunk]
-  }

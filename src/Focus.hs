@@ -12,7 +12,7 @@ import Data.Text.IO qualified as TextIO
 import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Focus.Cli (InPlace (..), Options (..), OutputLocation (..), UseColour (..), optionsP)
-import Focus.Command (Command (..), CommandF (..))
+import Focus.Command (Command (..), CommandF (..), IsCmd)
 import Focus.Compile (compileSelector)
 import Focus.Debug (debugM)
 import Focus.Exec qualified as Exec
@@ -139,7 +139,7 @@ run = do
             withOutputHandle (either (Just . fst) (const Nothing) input) \outputHandle ->
               action (either snd id input) outputHandle
 
-    getFocus :: Text -> CommandF cmd -> Text -> CliM (Focus cmd Chunk Chunk)
+    getFocus :: (IsCmd cmd) => Text -> CommandF cmd -> Text -> CliM (Focus cmd Chunk Chunk)
     getFocus srcName cmdF script = do
       case parseScript srcName script of
         Left errDiagnostic -> do

@@ -26,7 +26,7 @@ import Control.Monad.Writer.CPS
 import Data.Monoid (Ap (..))
 import Data.Text (Text)
 import Data.Vector.Internal.Check (HasCallStack)
-import Focus.Command (CommandF (..), CommandT (..))
+import Focus.Command (CommandF (..), CommandT (..), IsCmd (..))
 import Focus.Prelude
 import Focus.Types
 import Focus.Untyped
@@ -55,13 +55,13 @@ composeFocus (ModifyFocus l) (ModifyFocus r) = ModifyFocus $ l . r
 (>.>) :: Focus cmd i mid -> Focus cmd mid o -> Focus cmd i o
 (>.>) = composeFocus
 
-liftTrav :: CommandF cmd -> Traversal' i o -> Focus cmd i o
-liftTrav cmdF trav = case cmdF of
+liftTrav :: forall cmd i o. (IsCmd cmd) => Traversal' i o -> Focus cmd i o
+liftTrav trav = case getCmd @cmd of
   ViewF -> ViewFocus $ \handler chunk -> getAp $ foldMapOf trav (Ap . handler) chunk
   ModifyF -> ModifyFocus $ trav
 
-liftIso :: CommandF cmd -> Iso' i o -> Focus cmd i o
-liftIso cmdF i = case cmdF of
+liftIso :: forall cmd i o. (IsCmd cmd) => Iso' i o -> Focus cmd i o
+liftIso i = case getCmd @cmd of
   ViewF -> ViewFocus $ \handler chunk -> handler (chunk ^. i)
   ModifyF -> ModifyFocus $ i
 
@@ -71,11 +71,11 @@ textI = unsafeIso _TextChunk
 asListI :: Iso' Chunk [Chunk]
 asListI = unsafeIso _ListChunk
 
-underText :: Traversal' Text Text -> Traversal' Chunk Chunk
+underText :: (IsCmd cmd) => Focus cmd Text Text -> Focus cmd Chunk Chunk
 underText = withinIso textI
 
-withinIso :: Iso' s a -> Traversal' a a -> Traversal' s s
-withinIso i t = i . t . from i
+withinIso :: (IsCmd cmd) => Iso' s a -> Focus cmd a a -> Focus cmd s s
+withinIso i t = liftIso i >.> t >.> liftIso (from i)
 
 unsafeIso :: (Show s) => Prism' s a -> Iso' s a
 unsafeIso p = iso (\actual -> fromJust actual . preview p $ actual) (review p)
