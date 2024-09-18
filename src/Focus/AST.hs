@@ -11,6 +11,7 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 import Error.Diagnose qualified as D
 import Focus.Tagged (Tagged (..))
+import Focus.Types
 import Text.Regex.PCRE.Heavy (Regex)
 
 type TaggedSelector = Selector D.Position
@@ -20,7 +21,7 @@ data Selector a
   | SplitFields a Text {- delimeter -}
   | SplitLines a
   | SplitWords a
-  | Regex a Regex
+  | Regex a Regex BindingDeclarations
   | RegexMatches a
   | RegexGroups a
   | ListOf a (Selector a)
@@ -36,7 +37,7 @@ instance Tagged (Selector a) a where
     SplitFields a _ -> a
     SplitLines a -> a
     SplitWords a -> a
-    Regex a _ -> a
+    Regex a _ _ -> a
     RegexMatches a -> a
     RegexGroups a -> a
     ListOf a _ -> a

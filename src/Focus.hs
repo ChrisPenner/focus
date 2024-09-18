@@ -42,16 +42,16 @@ run = do
     case command of
       View script inputFiles -> withHandles inPlace inputFiles output \inputHandle outputHandle -> do
         focus <- getFocus "<selector>" ViewF script
-        r <- liftIO . runExceptT . runFocusM $ Exec.runView focus chunkSize inputHandle outputHandle
+        r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runView focus chunkSize inputHandle outputHandle
         handleError r
       Modify script m inputFiles -> withHandles inPlace inputFiles output \inputHandle outputHandle -> do
         focus <- getFocus "<selector>" ModifyF script
         modifier <- getFocus "<modifier>" ModifyF m
-        r <- liftIO . runExceptT . runFocusM $ Exec.runModify focus modifier chunkSize inputHandle outputHandle
+        r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runModify focus modifier chunkSize inputHandle outputHandle
         handleError r
       Set script val inputFiles -> withHandles inPlace inputFiles output \inputHandle outputHandle -> do
         focus <- getFocus "<selector>" ModifyF script
-        r <- liftIO . runExceptT . runFocusM $ Exec.runSet focus chunkSize inputHandle outputHandle val
+        r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runSet focus chunkSize inputHandle outputHandle val
         handleError r
   where
     handleError :: Either SelectorError () -> CliM ()

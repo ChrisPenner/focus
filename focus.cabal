@@ -38,6 +38,7 @@ library
       Focus.Tagged
       Focus.Typechecker
       Focus.Typechecker.Types
+      Focus.Types
   other-modules:
       Paths_focus
   autogen-modules:
@@ -71,6 +72,7 @@ library
   build-depends:
       base >=4.7 && <5
     , bytestring
+    , containers
     , deriving-compat
     , diagnose
     , lens
@@ -80,6 +82,7 @@ library
     , mtl
     , optparse-applicative
     , pcre-heavy
+    , pcre-light
     , prettyprinter-ansi-terminal
     , recursion-schemes
     , some
@@ -125,6 +128,7 @@ executable focus
   build-depends:
       base >=4.7 && <5
     , bytestring
+    , containers
     , deriving-compat
     , diagnose
     , focus
@@ -135,6 +139,7 @@ executable focus
     , mtl
     , optparse-applicative
     , pcre-heavy
+    , pcre-light
     , prettyprinter-ansi-terminal
     , recursion-schemes
     , some

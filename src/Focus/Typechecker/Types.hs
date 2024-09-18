@@ -11,7 +11,6 @@ module Focus.Typechecker.Types
     _NumberChunk,
     _RegexMatchChunk,
     renderType,
-    unifies,
     ChunkTypeT (..),
     Typ,
     UVar,
@@ -50,7 +49,6 @@ data ChunkType
   = TextType
   | ListType ChunkType
   | NumberType
-  | AnyType
   | RegexMatchType
   deriving (Show, Eq)
 
@@ -102,26 +100,19 @@ instance Unifiable (ChunkTypeT a) where
     RegexMatchTypeT {} _ -> Nothing
     Arrow {} _ -> Nothing
 
-unifies :: ChunkType -> ChunkType -> Bool
-unifies AnyType _ = True
-unifies _ AnyType = True
-unifies (ListType x) (ListType y) = x `unifies` y
-unifies x y = x == y
-
 renderType :: ChunkType -> Text
 renderType = \case
   TextType -> "text"
   ListType t -> "[" <> renderType t <> "]"
   NumberType -> "number"
   RegexMatchType -> "regex-match"
-  AnyType -> "any"
 
 data TypedSelector (i :: ChunkType) (o :: ChunkType) a where
   Compose :: a -> TypedSelector i m a -> TypedSelector m o a -> TypedSelector i o a
   SplitFields :: a -> Text -> TypedSelector TextType TextType a
   SplitLines :: a -> TypedSelector TextType TextType a
   SplitWords :: a -> TypedSelector TextType TextType a
-  Regex :: a -> Re.Regex -> TypedSelector TextType RegexMatchType a
+  Regex :: a -> Re.Regex -> TypedSelector TextType TextType a
   RegexMatches :: a -> TypedSelector RegexMatchType TextType a
   RegexGroups :: a -> TypedSelector RegexMatchType TextType a
   ListOf :: a -> TypedSelector i o a -> TypedSelector i (ListType o) a

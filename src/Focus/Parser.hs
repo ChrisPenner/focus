@@ -1,3 +1,5 @@
+{-# LANGUAGE TupleSections #-}
+
 module Focus.Parser (parseScript) where
 
 import Control.Monad
@@ -5,6 +7,7 @@ import Data.Bifunctor (Bifunctor (..))
 import Data.Function
 import Data.Functor (($>))
 import Data.List.NonEmpty qualified as NE
+import Data.Map qualified as M
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
@@ -14,11 +17,13 @@ import Error.Diagnose qualified as Diagnose
 import Error.Diagnose.Compat.Megaparsec
 import Focus.AST
 import Focus.Prelude ((<&>))
+import Focus.Typechecker.Types (ChunkType (..))
 import Text.Megaparsec
 import Text.Megaparsec qualified as M
 import Text.Megaparsec.Char qualified as M
 import Text.Megaparsec.Char.Lexer qualified as L
 import Text.Regex.PCRE.Heavy qualified as Regex
+import Text.Regex.PCRE.Light qualified as PCRE.Light
 
 data CustomError
   = BadRegex Text
@@ -85,7 +90,13 @@ regexP =
       Text.pack <$> many (escaped <|> M.anySingleBut '/')
     case Regex.compileM (Text.encodeUtf8 pat) [] of
       Left err -> M.customFailure $ BadRegex (Text.pack err)
-      Right re -> pure $ \pos -> Regex pos re
+      Right re -> pure $ \pos ->
+        let bindingDeclarations =
+              (PCRE.Light.captureNames re)
+                & fmap (Text.decodeUtf8 . fst)
+                & fmap (,(pos, TextType))
+                & M.fromList
+         in Regex pos re bindingDeclarations
   where
     escaped = M.string "\\/" $> '/'
 

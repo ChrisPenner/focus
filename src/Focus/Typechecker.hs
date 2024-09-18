@@ -1,6 +1,8 @@
 module Focus.Typechecker (typecheckSelector) where
 
+import Control.Lens
 import Control.Monad.Except (ExceptT, runExceptT, withExceptT)
+import Control.Monad.State (MonadState (..), StateT, evalStateT, mapStateT)
 import Control.Monad.Trans (lift)
 import Control.Unification qualified as Unify
 import Control.Unification.STVar qualified as Unify
@@ -8,15 +10,17 @@ import Control.Unification.Types (UFailure, UTerm (..))
 import Control.Unification.Types qualified as Unify
 import Data.Functor.Fixedpoint (Fix)
 import Data.List.NonEmpty qualified as NE
+import Data.Map qualified as M
 import Data.Text (Text)
 import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Focus.AST (Selector (..), TaggedSelector)
 import Focus.Prelude
 import Focus.Tagged (Tagged (..))
-import Focus.Typechecker.Types (ChunkTypeT, SomeTypedSelector (..), Typ, UVar, renderType)
+import Focus.Typechecker.Types (ChunkType, ChunkTypeT, SomeTypedSelector (..), Typ, UVar, renderType)
 import Focus.Typechecker.Types qualified as T
 import Focus.Typechecker.Types qualified as Typechecked
+import Focus.Types
 import Unsafe.Coerce (unsafeCoerce)
 
 type TypeErrorReport = D.Report Text
@@ -56,23 +60,55 @@ unificationErrorReport = \case
       T.NumberTypeT _ -> renderType T.NumberType
       T.RegexMatchTypeT _ -> renderType T.RegexMatchType
 
-type UnifyM e s = ExceptT e (Unify.STBinding s)
+type UBindings s = M.Map Text (Typ s)
+
+type UnifyM s = StateT (UBindings s) (ExceptT (UnifyFailure s) (Unify.STBinding s))
+
+type UnifyME e s = StateT (UBindings s) (ExceptT e (Unify.STBinding s))
 
 type UnifyFailure s = UFailure (ChunkTypeT D.Position) (UVar s)
 
+liftUnify :: (ExceptT (UnifyFailure s) (Unify.STBinding s)) a -> UnifyM s a
+liftUnify = lift
+
+declareBindings :: BindingDeclarations -> UnifyM s ()
+declareBindings bd = do
+  ifor_ bd $ \name (pos, typ) -> do
+    v <- getOrInitBinding name
+    r <- liftUnify $ Unify.unify v (chunkTypeToChunkTypeT pos typ)
+    bindings <- get
+    put $ M.insert name r bindings
+  where
+    chunkTypeToChunkTypeT :: D.Position -> ChunkType -> Typ s
+    chunkTypeToChunkTypeT pos = \case
+      T.TextType -> T.textType pos
+      T.ListType t -> T.listType pos (chunkTypeToChunkTypeT pos t)
+      T.NumberType -> T.numberType pos
+      T.RegexMatchType -> T.regexMatchType pos
+
+getOrInitBinding :: Text -> UnifyM s (Typ s)
+getOrInitBinding name = do
+  bindings <- get
+  case M.lookup name bindings of
+    Just v -> pure v
+    Nothing -> do
+      v <- lift . lift $ (UVar <$> Unify.freeVar)
+      put $ M.insert name v bindings
+      pure v
+
 typecheckSelector :: TaggedSelector -> Either TypeErrorReport (SomeTypedSelector D.Position)
 typecheckSelector t =
-  fmap snd $ Unify.runSTBinding $ runExceptT $ runUnification t
+  fmap snd $ Unify.runSTBinding $ runExceptT $ flip evalStateT mempty $ runUnification t
   where
-    runUnification :: forall s. TaggedSelector -> UnifyM TypeErrorReport s (Fix (ChunkTypeT D.Position), SomeTypedSelector D.Position)
-    runUnification taggedSelector = withExceptT unificationErrorReport $ do
+    runUnification :: forall s. TaggedSelector -> UnifyME TypeErrorReport s (Fix (ChunkTypeT D.Position), SomeTypedSelector D.Position)
+    runUnification taggedSelector = mapStateT (withExceptT unificationErrorReport) $ do
       (typ, typedSelector) <- go taggedSelector
-      trm <- Unify.applyBindings (UTerm typ)
+      trm <- liftUnify $ Unify.applyBindings (UTerm typ)
       case Unify.freeze trm of
         Nothing -> pure $ error "Freeze failed"
         Just r -> pure (r, typedSelector)
 
-    go :: TaggedSelector -> UnifyM (UnifyFailure s) s (ChunkTypeT D.Position (Typ s), SomeTypedSelector D.Position)
+    go :: TaggedSelector -> UnifyM s (ChunkTypeT D.Position (Typ s), SomeTypedSelector D.Position)
     go = \case
       Compose _pos (s NE.:| rest) -> do
         s' <- go s
@@ -89,9 +125,10 @@ typecheckSelector t =
         let typ = T.Arrow pos (T.textType pos) (T.textType pos)
         let ts = SomeTypedSelector $ Typechecked.SplitWords pos
         pure (typ, ts)
-      Regex pos re -> do
-        let typ = T.Arrow pos (T.textType pos) (T.regexMatchType pos)
-        let ts = SomeTypedSelector $ Typechecked.Regex pos re
+      Regex pos regex bindings -> do
+        declareBindings bindings
+        let typ = T.Arrow pos (T.textType pos) (T.textType pos)
+        let ts = SomeTypedSelector $ Typechecked.Regex pos regex
         pure (typ, ts)
       RegexMatches pos -> do
         let typ = T.Arrow pos (T.regexMatchType pos) (T.textType pos)
@@ -134,13 +171,13 @@ typecheckSelector t =
       forall s.
       (ChunkTypeT Diagnose.Position (Typ s), SomeTypedSelector Diagnose.Position) ->
       TaggedSelector ->
-      UnifyM (UnifyFailure s) s (ChunkTypeT Diagnose.Position (Typ s), SomeTypedSelector Diagnose.Position)
+      UnifyM s (ChunkTypeT Diagnose.Position (Typ s), SomeTypedSelector Diagnose.Position)
     compose l rTagged = do
       case l of
         (T.Arrow lpos li lm, lTS) -> do
           go rTagged >>= \case
             (T.Arrow rpos rm ro, rTS) -> do
-              _ <- Unify.unify lm rm
+              _ <- liftUnify $ Unify.unify lm rm
               let typ = T.Arrow (lpos <> rpos) li ro
               pure (typ, coerceCompose lTS rTS)
             _ -> error "Expected Arrow type in compose"
@@ -150,5 +187,5 @@ typecheckSelector t =
     coerceCompose :: SomeTypedSelector Diagnose.Position -> SomeTypedSelector Diagnose.Position -> SomeTypedSelector Diagnose.Position
     coerceCompose (SomeTypedSelector l) (SomeTypedSelector r) = SomeTypedSelector $ Typechecked.Compose (tag l <> tag r) l (unsafeCoerce r)
 
-freshVar :: UnifyM (UnifyFailure s) s (Typ s)
-freshVar = lift $ Unify.UVar <$> Unify.freeVar
+freshVar :: UnifyM s (Typ s)
+freshVar = (Unify.UVar <$> (lift . lift $ Unify.freeVar))

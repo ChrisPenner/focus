@@ -16,11 +16,9 @@ where
 
 import Control.Lens
 import Control.Lens.Regex.Text qualified as RE
-import Control.Lens.Regex.Text qualified as Re
 import Control.Monad.Error.Class (MonadError (..))
-import Control.Monad.Except (ExceptT)
 import Control.Monad.Fix (MonadFix (..))
-import Control.Monad.RWS.CPS (MonadWriter (..))
+import Control.Monad.RWS.CPS (MonadReader (..), MonadWriter (..))
 import Control.Monad.State.Lazy
 import Control.Monad.Trans.Maybe (MaybeT (..))
 import Control.Monad.Writer (WriterT, execWriterT)
@@ -32,23 +30,12 @@ import Data.Text.IO qualified as Text
 import Data.Vector.Internal.Check (HasCallStack)
 import Focus.Command (CommandF (..), CommandT (..))
 import Focus.Prelude
-import Focus.Typechecker.Types (Chunk (..), TypedSelector)
 import Focus.Typechecker.Types qualified as T
+import Focus.Types
 import System.Exit (ExitCode (..))
 import UnliftIO qualified
 import UnliftIO.Process qualified as UnliftIO
 import Prelude hiding (reads)
-
-data SelectorError
-  = ShellError Text
-
-newtype FocusM a = FocusM {runFocusM :: ExceptT SelectorError IO a}
-  deriving newtype (Functor, Applicative, Monad, MonadIO, MonadError SelectorError, MonadFix)
-
-data Focus (cmd :: CommandT) m where
-  ViewFocus :: ((Chunk -> m ()) -> Chunk -> m ()) -> Focus 'ViewT m
-  ModifyFocus :: LensLike' m Chunk Chunk -> Focus 'ModifyT m
-  SetFocus :: LensLike' m Chunk Chunk -> Focus 'SetT m
 
 getViewFocus :: Focus 'ViewT m -> ((Chunk -> m ()) -> Chunk -> m ())
 getViewFocus (ViewFocus f) = f
@@ -84,9 +71,6 @@ liftTrav cmdF trav = case cmdF of
 textI :: Iso' Chunk Text
 textI = unsafeIso T._TextChunk
 
-matchI :: Iso' Chunk Re.Match
-matchI = unsafeIso T._RegexMatchChunk
-
 underText :: Traversal' Text Text -> Traversal' Chunk Chunk
 underText = withinIso textI
 
@@ -100,7 +84,7 @@ unsafeIso p = iso (\actual -> fromJust actual . preview p $ actual) (review p)
       Just x -> x
       Nothing -> error $ "unsafeIso: Mismatch. Actual: " <> show actual
 
-compileSelector :: forall m cmd i o a. (MonadIO m, MonadFix m, MonadError SelectorError m) => CommandF cmd -> TypedSelector i o a -> Focus cmd m
+compileSelector :: forall m cmd i o a. (MonadReader Bindings m, MonadIO m, MonadFix m, MonadError SelectorError m) => CommandF cmd -> TypedSelector i o a -> Focus cmd m
 compileSelector cmdF = \case
   T.Compose _ l r ->
     let l' = compileSelector cmdF l
@@ -113,7 +97,19 @@ compileSelector cmdF = \case
   T.SplitWords _ ->
     liftTrav cmdF $ underText (\f txt -> Text.unwords <$> traverse f (Text.words txt))
   T.Regex _ pat -> do
-    liftTrav cmdF $ textI . RE.regexing pat . from matchI
+    case cmdF of
+      ViewF ->
+        ViewFocus $ \f chunk -> do
+          let txt = textChunk chunk
+          forOf_ (RE.regexing pat) txt \match -> do
+            let groups = TextChunk <$> match ^. RE.namedGroups
+            local (groups <>) $ forOf_ RE.match match (f . TextChunk)
+      ModifyF -> do
+        ModifyFocus $ \f chunk -> do
+          let txt = textChunk chunk
+          TextChunk <$> forOf (RE.regexing pat) txt \match -> do
+            let groups = TextChunk <$> match ^. RE.namedGroups
+            local (groups <>) $ forOf RE.match match (fmap textChunk . f . TextChunk)
   T.RegexMatches _ ->
     liftTrav cmdF $ T._RegexMatchChunk . RE.match . from textI
   T.RegexGroups _ ->
