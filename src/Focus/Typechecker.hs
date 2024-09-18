@@ -115,6 +115,11 @@ typecheckSelector t =
         case innerTS of
           SomeTypedSelector inner' -> do
             pure $ (innerTyp, SomeTypedSelector $ Typechecked.FilterBy pos inner')
+      Splat pos -> do
+        inp <- freshVar
+        let typ = T.Arrow pos (T.listType pos inp) inp
+        let ts = SomeTypedSelector $ Typechecked.Splat pos
+        pure (typ, ts)
       Shell pos script ->
         let typ = T.Arrow pos (T.textType pos) (T.textType pos)
             ts = SomeTypedSelector $ Typechecked.Shell pos script

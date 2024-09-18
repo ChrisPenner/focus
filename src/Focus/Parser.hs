@@ -103,7 +103,7 @@ shellP = withPos do
 
 groupedP :: P TaggedSelector
 groupedP = do
-  shellP <|> listOfP <|> regexP <|> between (lexeme (M.char '(')) (lexeme (M.char ')')) simpleSelectorP
+  shellP <|> listOfP <|> regexP <|> between (lexeme (M.char '(')) (lexeme (M.char ')')) selectorsP
 
 selectorP :: P TaggedSelector
 selectorP = shellP <|> listOfP <|> regexP <|> simpleSelectorP
@@ -118,7 +118,8 @@ simpleSelectorP = withPos do
             M.string "lines",
             M.string "at",
             M.string "matches",
-            M.string "filterBy"
+            M.string "filterBy",
+            M.string "..."
           ]
       )
   case name of
@@ -136,4 +137,6 @@ simpleSelectorP = withPos do
       pure RegexGroups
     "filterBy" -> do
       flip FilterBy <$> groupedP
+    "..." -> do
+      pure Splat
     _ -> error "impossible"

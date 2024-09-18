@@ -168,6 +168,11 @@ compileSelector cmdF = \case
           Nothing -> f chunk
           -- Just means we didn't get any results, so the computation succeeded.
           Just _ -> pure chunk
+  T.Splat _ -> do
+    liftTrav cmdF $ \f chunk -> do
+      listChunk chunk
+        & traversed %%~ f
+        <&> ListChunk
   T.Shell _ shellScript -> do
     let go :: forall x. (Chunk -> m x) -> Chunk -> m x
         go f chunk = do

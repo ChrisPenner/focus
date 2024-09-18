@@ -61,7 +61,7 @@ run() {
 
 # Extract test cases from the readme
 
-# cat ../README.md | focus --full view '/\\\focus\n(.*?)\n\\\/' | focus view '/```focus\n(.*?)\n```/' | focus modify '{rev}' > "readme.out"
+# focus --full modify '/```focus\n(.*?)\n```/' README.md 
 
 # Parser errors
 echo "one,two,three" | run parser_err view 'splitOn ,'
@@ -72,6 +72,13 @@ echo "one,two,three" | run basic_view view 'splitOn ","'
 # Basic typechecking
 echo "one,two,three" | run expected_list view 'splitOn "," | at 1'
 
+# Splat
+echo "one,two,three" | run splat view '[splitOn ","] | ...'
+
+# 'At'
+echo "one,two,three" | run at view '[splitOn ","] | at 1'
+
+
 # Regex
 echo "one two 555-123-4567 three" | run regex_view view '/[\d-]+/ | matches'
 echo "one two 555-123-4567 three 999-876-5432" | run regex_modify modify '/[\d-]+/ | matches' '{rev}'
@@ -79,3 +86,6 @@ echo "one-two-three" | run regex_modify modify '/(\w+)-\w+-(\w+)/ | matches' '{t
 
 # Filter
 echo "one,two,three" | run simple_filter view 'splitOn "," | filterBy /e/'
+
+# Variable bindings
+# echo "one,two,three" | run variable_binding modify 'splitOn "," | ->x' '{~ x }'

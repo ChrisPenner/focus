@@ -28,11 +28,12 @@ celery NOLEMRETAW apples STORRAC
 
 ## TODO
 
-- [ ] Switch to input file arguments
-- [ ] In-place editing
+- [x] ~Switch to input file arguments~
+- [x] ~In-place editing~
 - [ ] Ability to 'NOT'/invert filters
 - [ ] Add more examples
 - [ ] Add more tests
+- [ ] README tests
 - [ ] Support JSON
 - [ ] List splat
 - [ ] Expression language?
