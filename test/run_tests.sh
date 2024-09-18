@@ -61,7 +61,8 @@ run() {
 
 # Extract test cases from the readme
 
-# focus --full modify 'groups /```focus\n(.*?)\n```/' 'take 1 lines | -{ cat %script }' README.md 
+# focus --full modify 'groups /```focus\n(.*?)\n```/' 'take 1 lines | -{ echo %script }' README.md 
+focus --full view 'groups /```focus\n(.*?)\n```/ | take 1 lines | -{ echo %script }' README.md 
 
 # Parser errors
 echo "one,two,three" | run parser_err view 'splitOn ,'
@@ -73,10 +74,10 @@ echo "one,two,three" | run basic_view view 'splitOn ","'
 echo "one,two,three" | run expected_list view 'splitOn "," | at 1'
 
 # Splat
-echo "one,two,three" | run splat view '[splitOn ","] | ...'
+echo "one,two,three" | run splat_view view '[splitOn ","] | ...'
 
 # 'At'
-echo "one,two,three" | run at view '[splitOn ","] | at 1'
+echo "one,two,three" | run at_view view '[splitOn ","] | at 1'
 
 
 # Regex
@@ -89,7 +90,13 @@ echo "one two 555-123-4567 three" | run regex_groups_view view 'groups /(\d+)-(\
 echo "one two 555-123-4567 three" | run regex_groups_modify modify 'groups /(\d+)-(\d+)-(\d+)/' '{rev}'
 
 # Filter
-echo "one,two,three" | run simple_filter view 'splitOn "," | filterBy /e/'
+echo "one,two,three" | run filter_view view 'splitOn "," | filterBy /e/'
+
+# Take/Drop
+echo "one,two,three" | run take_view view 'take 2 (splitOn ",")'
+echo "one,two,three" | run take_modify modify 'take 2 (splitOn ",")' '{rev}'
+echo "one,two,three" | run drop_view view 'drop 1 (splitOn ",")'
+echo "one,two,three" | run drop_modify modify 'drop 1 (splitOn ",")' '{rev}'
 
 # Variable bindings
 # echo "one,two,three" | run variable_binding modify 'splitOn "," | ->x' '{~ x }'

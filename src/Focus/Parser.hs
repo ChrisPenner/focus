@@ -136,7 +136,7 @@ bindingP = M.try do
 
 groupedP :: P TaggedSelector
 groupedP = do
-  shellP <|> listOfP <|> regexP <|> M.between (lexeme (M.char '(')) (lexeme (M.char ')')) selectorsP
+  shellP <|> listOfP <|> regexP <|> M.between (lexeme (M.char '(')) (lexeme (M.char ')')) selectorsP <|> simpleSelectorP
 
 selectorP :: P TaggedSelector
 selectorP = shellP <|> listOfP <|> regexP <|> simpleSelectorP
@@ -150,10 +150,11 @@ simpleSelectorP = withPos do
             M.string "words",
             M.string "lines",
             M.string "at",
-            M.string "matches",
             M.string "filterBy",
             M.string "...",
-            M.string "groups"
+            M.string "groups",
+            M.string "take",
+            M.string "drop"
           ]
       )
   case name of
@@ -171,4 +172,12 @@ simpleSelectorP = withPos do
       flip FilterBy <$> groupedP
     "..." -> do
       pure Splat
+    "take" -> do
+      n <- lexeme L.decimal
+      selector <- groupedP
+      pure $ \pos -> Take pos n selector
+    "drop" -> do
+      n <- lexeme L.decimal
+      selector <- groupedP
+      pure $ \pos -> Drop pos n selector
     _ -> error "impossible"

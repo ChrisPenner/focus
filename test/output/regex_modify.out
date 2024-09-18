@@ -3,9 +3,14 @@ focus modify '/[\d-]+/ | matches' '{rev}'
 ===INPUT===============================================================================
 one two 555-123-4567 three 999-876-5432
 ===OUTPUT===============================================================================
-focus: impossible
-CallStack (from HasCallStack):
-  error, called at src/Focus/Parser.hs:174:10 in focus-0.1.0.0-H7lDl9pw7I29noxsFXnEcS:Focus.Parser
+[error]: Invalid selector
+     ╭──▶ <selector>@1:12-1:13
+     │
+   1 │ /[\d-]+/ | matches
+     •            ┬ 
+     •            ├╸ unexpected "matches"
+     •            ╰╸ expecting "...", "at", "drop", "filterBy", "groups", "lines", "splitOn", "take", "words", '-', '[', '{', regex, or white space
+─────╯
 ===EXIT CODE===============================================================================
 0
 ===COMMAND===============================================================================
@@ -13,8 +18,13 @@ focus modify '/(\w+)-\w+-(\w+)/ | matches' '{tr a-z A-Z}'
 ===INPUT===============================================================================
 one-two-three
 ===OUTPUT===============================================================================
-focus: impossible
-CallStack (from HasCallStack):
-  error, called at src/Focus/Parser.hs:174:10 in focus-0.1.0.0-H7lDl9pw7I29noxsFXnEcS:Focus.Parser
+[error]: Invalid selector
+     ╭──▶ <selector>@1:21-1:22
+     │
+   1 │ /(\w+)-\w+-(\w+)/ | matches
+     •                     ┬ 
+     •                     ├╸ unexpected "matches"
+     •                     ╰╸ expecting "...", "at", "drop", "filterBy", "groups", "lines", "splitOn", "take", "words", '-', '[', '{', regex, or white space
+─────╯
 ===EXIT CODE===============================================================================
 0
