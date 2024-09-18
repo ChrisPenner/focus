@@ -3,6 +3,7 @@ module Focus.Prelude
     (&),
     (<&>),
     module X,
+    Generic,
   )
 where
 
@@ -15,6 +16,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Traversable as X
 import Focus.Orphans ()
+import GHC.Generics (Generic)
 
 tShow :: (Show a) => a -> Text
 tShow = Text.pack . show

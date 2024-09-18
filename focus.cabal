@@ -76,6 +76,7 @@ library
     , containers
     , deriving-compat
     , diagnose
+    , generic-lens
     , lens
     , lens-action
     , lens-regex-pcre
@@ -133,6 +134,7 @@ executable focus
     , deriving-compat
     , diagnose
     , focus
+    , generic-lens
     , lens
     , lens-action
     , lens-regex-pcre

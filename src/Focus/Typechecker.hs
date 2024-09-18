@@ -177,6 +177,12 @@ typecheckSelector t =
         let typ = T.Arrow pos (T.listType pos inp) inp
         let ts = SomeTypedSelector $ Typechecked.At pos n
         pure (typ, ts)
+      UT.Take pos n inner -> do
+        (innerTyp, SomeTypedSelector innerTS) <- go inner
+        pure (innerTyp, SomeTypedSelector $ Typechecked.Take pos n innerTS)
+      UT.Drop pos n inner -> do
+        (innerTyp, SomeTypedSelector innerTS) <- go inner
+        pure (innerTyp, SomeTypedSelector $ Typechecked.Drop pos n innerTS)
 
     compose ::
       forall s.

@@ -22,6 +22,7 @@ where
 
 import Control.Lens
 import Control.Lens.Regex.Text qualified as Re
+import Data.Generics.Product.Param (HasParam (..))
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import Data.Text (Text)
@@ -69,6 +70,8 @@ data Selector a
   | Splat a
   | Shell a BindingString ShellMode
   | At a Int
+  | Take a Int (Selector a)
+  | Drop a Int (Selector a)
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Selector a) a where
@@ -85,6 +88,8 @@ instance Tagged (Selector a) a where
     Splat a -> a
     Shell a _ _ -> a
     At a _ -> a
+    Take a _ _ -> a
+    Drop a _ _ -> a
 
 data Chunk
   = TextChunk Text

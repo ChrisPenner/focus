@@ -199,6 +199,13 @@ compileSelector cmdF = \case
       listChunk chunk
         & ix n %%~ f
         <&> ListChunk
+  T.Take _ n selector -> do
+    case cmdF of
+      ViewF -> do
+        let (ViewFocus inner) = compileSelector cmdF selector
+        liftTrav cmdF $ \f chunk -> taking n (inner f) chunk
+      ModifyF -> do
+        _
   where
     viewRegex :: RE.Regex -> ((Chunk -> m ()) -> RE.Match -> m ()) -> Focus 'ViewT m
     viewRegex pat go = ViewFocus \f chunk -> do
