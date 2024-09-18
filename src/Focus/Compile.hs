@@ -32,6 +32,7 @@ import Focus.Command (CommandF (..), CommandT (..))
 import Focus.Prelude
 import Focus.Typechecker.Types qualified as T
 import Focus.Types
+import Focus.Untyped
 import System.Exit (ExitCode (..))
 import UnliftIO qualified
 import UnliftIO.Process qualified as UnliftIO
@@ -69,7 +70,7 @@ liftTrav cmdF trav = case cmdF of
   ModifyF -> ModifyFocus $ trav
 
 textI :: Iso' Chunk Text
-textI = unsafeIso T._TextChunk
+textI = unsafeIso _TextChunk
 
 underText :: Traversal' Text Text -> Traversal' Chunk Chunk
 underText = withinIso textI
@@ -111,9 +112,9 @@ compileSelector cmdF = \case
             let groups = TextChunk <$> match ^. RE.namedGroups
             local (groups <>) $ forOf RE.match match (fmap textChunk . f . TextChunk)
   T.RegexMatches _ ->
-    liftTrav cmdF $ T._RegexMatchChunk . RE.match . from textI
+    liftTrav cmdF $ _RegexMatchChunk . RE.match . from textI
   T.RegexGroups _ ->
-    liftTrav cmdF $ T._RegexMatchChunk . RE.groups . traversed . from textI
+    liftTrav cmdF $ _RegexMatchChunk . RE.groups . traversed . from textI
   T.ListOf _ selector -> do
     case cmdF of
       ViewF -> do
@@ -169,7 +170,7 @@ compileSelector cmdF = \case
       listChunk chunk
         & traversed %%~ f
         <&> ListChunk
-  T.Shell _ shellScript -> do
+  T.Shell _ shellScript shellMode -> do
     let go :: forall x. (Chunk -> m x) -> Chunk -> m x
         go f chunk = do
           let proc = UnliftIO.shell (Text.unpack shellScript)
@@ -178,7 +179,9 @@ compileSelector cmdF = \case
             let stdin = fromMaybe (error "missing stdin") mstdin
             let stdout = fromMaybe (error "missing stdout") mstdout
             let stderr = fromMaybe (error "missing stderr") mstderr
-            liftIO $ Text.hPutStrLn stdin (textChunk chunk)
+            case shellMode of
+              Normal -> liftIO $ Text.hPutStrLn stdin (textChunk chunk)
+              NullStdin -> pure ()
             UnliftIO.hClose stdin
             UnliftIO.waitForProcess phandle >>= \case
               ExitFailure code -> do

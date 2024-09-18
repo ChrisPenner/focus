@@ -26,7 +26,6 @@ source-repository head
 library
   exposed-modules:
       Focus
-      Focus.AST
       Focus.Cli
       Focus.Command
       Focus.Compile
@@ -36,9 +35,11 @@ library
       Focus.Parser
       Focus.Prelude
       Focus.Tagged
+      Focus.Typechecked
       Focus.Typechecker
       Focus.Typechecker.Types
       Focus.Types
+      Focus.Untyped
   other-modules:
       Paths_focus
   autogen-modules:

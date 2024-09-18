@@ -15,9 +15,8 @@ import Error.Diagnose (Diagnostic)
 import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Error.Diagnose.Compat.Megaparsec
-import Focus.AST
 import Focus.Prelude ((<&>))
-import Focus.Typechecker.Types (ChunkType (..))
+import Focus.Untyped
 import Text.Megaparsec
 import Text.Megaparsec qualified as M
 import Text.Megaparsec.Char qualified as M
@@ -107,9 +106,17 @@ listOfP = withPos do
 
 shellP :: P TaggedSelector
 shellP = withPos do
-  between (lexeme $ M.char '{') (lexeme $ M.char '}') $ do
-    flip Shell . Text.pack <$> many (escaped <|> M.anySingleBut '}')
+  shellMode <- opener
+  script <- Text.pack <$> many (escaped <|> M.anySingleBut '}')
+  _ <- lexeme $ M.char '}'
+  pure \pos -> Shell pos script shellMode
   where
+    opener = do
+      _ <- M.char '{'
+      optional (M.char '-') >>= \case
+        Just _ -> do
+          pure NullStdin
+        Nothing -> pure Normal
     escaped = M.char '\\' >> M.anySingle
 
 groupedP :: P TaggedSelector

@@ -9,7 +9,13 @@ module Focus.Types
     Focus (..),
     FocusM (..),
     SelectorError (..),
-    TypedSelector,
+    TypedSelector (..),
+    ShellMode (..),
+    Typ,
+    UVar,
+    SomeTypedSelector (..),
+    ChunkType (..),
+    ChunkTypeT (..),
   )
 where
 
@@ -20,19 +26,12 @@ import Control.Monad.Fix (MonadFix (..))
 import Control.Monad.RWS.CPS (MonadReader (..))
 import Control.Monad.Reader (ReaderT)
 import Control.Monad.State.Lazy
-import Data.Map (Map)
 import Data.Text (Text)
-import Error.Diagnose qualified as D
 import Focus.Command (CommandT (..))
 import Focus.Prelude
-import Focus.Typechecker.Types
+import Focus.Typechecked
+import Focus.Untyped
 import Prelude hiding (reads)
-
-type BindingName = Text
-
-type Bindings = Map BindingName Chunk
-
-type BindingDeclarations = Map Text (D.Position, ChunkType)
 
 data SelectorError
   = ShellError Text
