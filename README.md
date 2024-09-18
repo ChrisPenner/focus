@@ -12,7 +12,8 @@ extract, transform and filter data, and provides easy inter-op with other unix t
 Keep forgetting the syntax for `sed`? No problem:
 
 ```focus
-echo "hello world" | focus set '/hello/ | matches' goodbye
+echo "hello world" | focus set '/hello/' goodbye
+Result
 ```
 
 A key part of selectors in `focus` are that they work in both directions!

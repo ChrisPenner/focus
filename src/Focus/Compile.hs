@@ -149,5 +149,5 @@ resolveBindingString (BindingString xs) = do
     Left (name@(BindingName nameTxt), pos) -> do
       case Map.lookup name bindings of
         Just chunk -> pure $ textChunk chunk
-        Nothing -> throwError $ BindingError pos $ "Binding not found: " <> nameTxt
+        Nothing -> throwError $ BindingError pos $ "Binding not in scope: " <> nameTxt
     Right txt -> pure txt

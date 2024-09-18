@@ -122,7 +122,7 @@ shellP = withPos do
       M.choice
         [ Left <$> withPos ((,) <$> bindingP),
           Right . Text.pack
-            <$> some (escaped <|> M.anySingleBut '}')
+            <$> some (escaped <|> M.noneOf ("%}" :: String))
         ]
     pure \pos -> Shell pos (BindingString script) shellMode
   where
