@@ -27,6 +27,7 @@ import Control.Monad.RWS.CPS (MonadReader (..))
 import Control.Monad.Reader (ReaderT)
 import Control.Monad.State.Lazy
 import Data.Text (Text)
+import Error.Diagnose qualified as D
 import Focus.Command (CommandT (..))
 import Focus.Prelude
 import Focus.Typechecked
@@ -35,6 +36,7 @@ import Prelude hiding (reads)
 
 data SelectorError
   = ShellError Text
+  | BindingError D.Position Text
 
 newtype FocusM a = FocusM {runFocusM :: ExceptT SelectorError (ReaderT Bindings IO) a}
   deriving newtype (Functor, Applicative, Monad, MonadIO, MonadError SelectorError, MonadFix, MonadReader Bindings)

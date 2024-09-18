@@ -2,10 +2,14 @@ module Focus (run) where
 
 import Control.Applicative
 import Control.Monad.Except (runExceptT)
-import Control.Monad.Reader (MonadIO (liftIO), ReaderT (..), asks)
+import Control.Monad.Reader (ReaderT (..), asks)
+import Control.Monad.State
+import Data.Map (Map)
+import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
+import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Focus.Cli (InPlace (..), Options (..), OutputLocation (..), UseColour (..), optionsP)
 import Focus.Command (Command (..), CommandF (..))
@@ -19,13 +23,21 @@ import Focus.Typechecker.Types (SomeTypedSelector (..))
 import Options.Applicative qualified as Opts
 import Prettyprinter.Render.Terminal (AnsiStyle)
 import System.Exit qualified as System
-import UnliftIO (Handle)
+import UnliftIO (Handle, MonadUnliftIO)
 import UnliftIO qualified as IO
 import UnliftIO.Directory qualified as UnliftIO
 import UnliftIO.IO qualified as UnliftIO
 import UnliftIO.Temporary qualified as UnliftIO
 
-type CliM = ReaderT Options IO
+data CliState = CliState
+  { sources :: Map Text Text
+  }
+
+addSource :: Text -> Text -> CliM ()
+addSource name src = do
+  modify \s -> s {sources = Map.insert name src (sources s)}
+
+type CliM = StateT CliState (ReaderT Options IO)
 
 run :: IO ()
 run = do
@@ -40,25 +52,39 @@ run = do
       )
   flip runReaderT opts do
     case command of
-      View script inputFiles -> withHandles inPlace inputFiles output \inputHandle outputHandle -> do
+      View script inputFiles -> withHandles inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
+        addSource "<selector>" script
         focus <- getFocus "<selector>" ViewF script
         r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runView focus chunkSize inputHandle outputHandle
         handleError r
-      Modify script m inputFiles -> withHandles inPlace inputFiles output \inputHandle outputHandle -> do
+      Modify script m inputFiles -> withHandles inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
+        addSource "<selector>" script
         focus <- getFocus "<selector>" ModifyF script
+        addSource "<modifier>" m
         modifier <- getFocus "<modifier>" ModifyF m
         r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runModify focus modifier chunkSize inputHandle outputHandle
         handleError r
-      Set script val inputFiles -> withHandles inPlace inputFiles output \inputHandle outputHandle -> do
+      Set script val inputFiles -> withHandles inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
+        addSource "<selector>" script
         focus <- getFocus "<selector>" ModifyF script
         r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runSet focus chunkSize inputHandle outputHandle val
         handleError r
   where
     handleError :: Either SelectorError () -> CliM ()
     handleError = \case
-      Left (ShellError msg) -> do
-        liftIO $ TextIO.hPutStrLn UnliftIO.stderr msg
-        liftIO $ System.exitFailure
+      Left err -> case err of
+        ShellError msg -> do
+          liftIO $ TextIO.hPutStrLn UnliftIO.stderr msg
+          liftIO $ System.exitFailure
+        BindingError pos msg -> do
+          let report =
+                D.Err
+                  Nothing
+                  "Binding error"
+                  [ (pos, D.This $ msg)
+                  ]
+                  []
+          failWithReport report
       Right () -> pure ()
     diagnoseStyle :: CliM (Diagnose.Style AnsiStyle)
     diagnoseStyle =
@@ -71,20 +97,18 @@ run = do
       Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style diagnostic
       liftIO $ System.exitFailure
 
-    failWithReport :: Text -> Text -> Diagnose.Report Text -> CliM a
-    failWithReport srcName src report = do
-      let diagnostic =
-            ( Diagnose.addFile mempty (Text.unpack srcName) (Text.unpack src)
-                <> (Diagnose.addReport mempty report)
-            )
-      failWithDiagnostic diagnostic
+    failWithReport :: Diagnose.Report Text -> CliM a
+    failWithReport report = do
+      CliState srcs <- get
+      let diagnostic = Map.toList srcs & foldMap \(srcName, src) -> Diagnose.addFile mempty (Text.unpack srcName) (Text.unpack src)
+      failWithDiagnostic $ Diagnose.addReport diagnostic report
 
     failWith :: (MonadIO m) => Text -> m a
     failWith msg = do
       liftIO $ TextIO.hPutStrLn UnliftIO.stderr msg
       liftIO $ System.exitFailure
 
-    withHandles :: InPlace -> [FilePath] -> OutputLocation -> (IO.Handle -> IO.Handle -> CliM ()) -> CliM ()
+    withHandles :: forall m. (MonadUnliftIO m) => InPlace -> [FilePath] -> OutputLocation -> (IO.Handle -> IO.Handle -> m ()) -> m ()
     withHandles inPlace inputFiles output action = do
       case (inPlace, inputFiles) of
         (InPlace, []) -> failWith "In-place mode specified, but no input files provided."
@@ -93,13 +117,13 @@ run = do
             exists <- UnliftIO.doesFileExist inpFile
             when (not exists) do
               failWith $ "Input file does not exist: " <> (Text.pack inpFile)
-          let withInputHandler :: (Either (FilePath, Handle) Handle -> CliM ()) -> CliM ()
+          let withInputHandler :: (Either (FilePath, Handle) Handle -> m ()) -> m ()
               withInputHandler = case inputFiles of
                 [] -> \go -> go (Right IO.stdin)
                 _ -> \go -> do
                   for_ inputFiles \inputFile -> do
                     IO.withFile inputFile IO.ReadMode \inputHandle -> go $ Left (inputFile, inputHandle)
-          let withOutputHandle :: Maybe FilePath -> ((UnliftIO.Handle -> CliM ()) -> CliM ())
+          let withOutputHandle :: Maybe FilePath -> ((UnliftIO.Handle -> m ()) -> m ())
               withOutputHandle inputFile = case (inputFile, inPlace) of
                 (_, NotInPlace) -> case output of
                   StdOut -> \go -> go IO.stdout
@@ -125,6 +149,6 @@ run = do
         Right ast -> do
           debugM "Selector" ast
           case typecheckSelector ast of
-            Left errReport -> failWithReport srcName script errReport
+            Left errReport -> failWithReport errReport
             Right (SomeTypedSelector typedSelector) -> do
               pure $ compileSelector cmdF typedSelector

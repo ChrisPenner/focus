@@ -13,6 +13,7 @@ import Data.Function ((&))
 import Data.Functor ((<&>))
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Traversable as X
 import Focus.Orphans ()
 
 tShow :: (Show a) => a -> Text

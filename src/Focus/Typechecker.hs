@@ -6,8 +6,7 @@ import Control.Monad.State (MonadState (..), StateT, evalStateT, mapStateT)
 import Control.Monad.Trans (lift)
 import Control.Unification qualified as Unify
 import Control.Unification.STVar qualified as Unify
-import Control.Unification.Types (UFailure, UTerm (..))
-import Control.Unification.Types qualified as Unify
+import Control.Unification.Types (UTerm (..))
 import Data.Functor.Fixedpoint (Fix)
 import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as M
@@ -20,14 +19,15 @@ import Focus.Typechecker.Types (renderType)
 import Focus.Typechecker.Types qualified as T
 import Focus.Typechecker.Types qualified as Typechecked
 import Focus.Types
+import Focus.Untyped (BindingName (..), BindingString (..))
 import Focus.Untyped qualified as UT
 import Unsafe.Coerce (unsafeCoerce)
 
 type TypeErrorReport = D.Report Text
 
-unificationErrorReport :: UnifyFailure s -> D.Report Text
+unificationErrorReport :: TypecheckFailure s -> D.Report Text
 unificationErrorReport = \case
-  Unify.OccursFailure _ trm ->
+  OccursFailure _ trm ->
     case trm of
       UTerm trm' ->
         Diagnose.Err
@@ -37,7 +37,7 @@ unificationErrorReport = \case
           ]
           []
       _ -> error "OccursFailure: Please report this issue."
-  Unify.MismatchFailure l r ->
+  MismatchFailure l r ->
     let lPos = tag l
         rPos = tag r
      in Diagnose.Err
@@ -62,13 +62,19 @@ unificationErrorReport = \case
 
 type UBindings s = M.Map Text (Typ s)
 
-type UnifyM s = StateT (UBindings s) (ExceptT (UnifyFailure s) (Unify.STBinding s))
+type UnifyM s = StateT (UBindings s) (ExceptT (TypecheckFailure s) (Unify.STBinding s))
 
 type UnifyME e s = StateT (UBindings s) (ExceptT e (Unify.STBinding s))
 
-type UnifyFailure s = UFailure (ChunkTypeT D.Position) (UVar s)
+data TypecheckFailure s
+  = OccursFailure (UVar s) (Typ s)
+  | MismatchFailure (ChunkTypeT Diagnose.Position (Typ s)) (ChunkTypeT Diagnose.Position (Typ s))
 
-liftUnify :: (ExceptT (UnifyFailure s) (Unify.STBinding s)) a -> UnifyM s a
+instance Unify.Fallible (ChunkTypeT D.Position) (UVar s) (TypecheckFailure s) where
+  occursFailure = OccursFailure
+  mismatchFailure = MismatchFailure
+
+liftUnify :: (ExceptT (TypecheckFailure s) (Unify.STBinding s)) a -> UnifyM s a
 liftUnify = lift
 
 declareBindings :: BindingDeclarations -> UnifyM s ()
@@ -158,6 +164,7 @@ typecheckSelector t =
         let ts = SomeTypedSelector $ Typechecked.Splat pos
         pure (typ, ts)
       UT.Shell pos script shellMode -> do
+        unifyBindingString script
         inp <- case shellMode of
           Normal -> pure $ T.textType pos
           NullStdin -> freshVar
@@ -189,6 +196,15 @@ typecheckSelector t =
     -- This is safe because we'll just fail typechecking if the types don't match.
     coerceCompose :: SomeTypedSelector Diagnose.Position -> SomeTypedSelector Diagnose.Position -> SomeTypedSelector Diagnose.Position
     coerceCompose (SomeTypedSelector l) (SomeTypedSelector r) = SomeTypedSelector $ Typechecked.Compose (tag l <> tag r) l (unsafeCoerce r)
+
+unifyBindingString :: BindingString -> UnifyM s ()
+unifyBindingString (BindingString bindings) = do
+  for_ bindings $ \case
+    Left (BindingName name, pos) -> do
+      v <- getOrInitBinding name
+      _ <- liftUnify $ Unify.unify v (T.textType pos)
+      pure ()
+    Right _ -> pure ()
 
 freshVar :: UnifyM s (Typ s)
 freshVar = (Unify.UVar <$> (lift . lift $ Unify.freeVar))

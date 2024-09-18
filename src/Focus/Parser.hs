@@ -38,7 +38,7 @@ instance HasHints CustomError a where
 
 type P = Parsec CustomError String
 
-withPos :: P (D.Position -> TaggedSelector) -> P TaggedSelector
+withPos :: P (D.Position -> a) -> P a
 withPos p = do
   SourcePos {sourceName, sourceLine = startLine, sourceColumn = startCol} <- M.getSourcePos
   f <- p
@@ -106,18 +106,26 @@ listOfP = withPos do
 
 shellP :: P TaggedSelector
 shellP = withPos do
-  shellMode <- opener
-  script <- Text.pack <$> many (escaped <|> M.anySingleBut '}')
-  _ <- lexeme $ M.char '}'
-  pure \pos -> Shell pos script shellMode
+  shellMode <-
+    optional (M.char '-') >>= \case
+      Just _ -> pure NullStdin
+      Nothing -> pure Normal
+  between (lexeme $ M.char '{') (lexeme $ M.char '}') $ do
+    script <- many do
+      M.choice
+        [ Left <$> withPos ((,) <$> bindingP),
+          Right . Text.pack
+            <$> some (escaped <|> M.anySingleBut '}')
+        ]
+    pure \pos -> Shell pos (BindingString script) shellMode
   where
-    opener = do
-      _ <- M.char '{'
-      optional (M.char '-') >>= \case
-        Just _ -> do
-          pure NullStdin
-        Nothing -> pure Normal
-    escaped = M.char '\\' >> M.anySingle
+    -- Escape bindings
+    escaped = M.string "\\%" $> '%'
+
+bindingP :: P BindingName
+bindingP = try do
+  between (lexeme (M.string "%{")) (M.char '}') $ do
+    BindingName . Text.pack <$> lexeme (M.some M.alphaNumChar)
 
 groupedP :: P TaggedSelector
 groupedP = do

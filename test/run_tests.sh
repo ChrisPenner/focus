@@ -61,7 +61,7 @@ run() {
 
 # Extract test cases from the readme
 
-# focus --full modify '/```focus\n(.*?)\n```/' README.md 
+focus --full modify '/```focus\n(?<script>.*?)\n```/' '-{ cat %script }' README.md 
 
 # Parser errors
 echo "one,two,three" | run parser_err view 'splitOn ,'

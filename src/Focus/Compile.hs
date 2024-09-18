@@ -22,12 +22,14 @@ import Control.Monad.RWS.CPS (MonadReader (..), MonadWriter (..))
 import Control.Monad.State.Lazy
 import Control.Monad.Trans.Maybe (MaybeT (..))
 import Control.Monad.Writer (WriterT, execWriterT)
+import Data.Map qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Monoid (Ap (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
 import Data.Vector.Internal.Check (HasCallStack)
+import Error.Diagnose qualified as D
 import Focus.Command (CommandF (..), CommandT (..))
 import Focus.Prelude
 import Focus.Typechecker.Types qualified as T
@@ -85,7 +87,7 @@ unsafeIso p = iso (\actual -> fromJust actual . preview p $ actual) (review p)
       Just x -> x
       Nothing -> error $ "unsafeIso: Mismatch. Actual: " <> show actual
 
-compileSelector :: forall m cmd i o a. (MonadReader Bindings m, MonadIO m, MonadFix m, MonadError SelectorError m) => CommandF cmd -> TypedSelector i o a -> Focus cmd m
+compileSelector :: forall m cmd i o. (MonadReader Bindings m, MonadIO m, MonadFix m, MonadError SelectorError m) => CommandF cmd -> TypedSelector i o (D.Position) -> Focus cmd m
 compileSelector cmdF = \case
   T.Compose _ l r ->
     let l' = compileSelector cmdF l
@@ -103,13 +105,19 @@ compileSelector cmdF = \case
         ViewFocus $ \f chunk -> do
           let txt = textChunk chunk
           forOf_ (RE.regexing pat) txt \match -> do
-            let groups = TextChunk <$> match ^. RE.namedGroups
+            let groups =
+                  match ^. RE.namedGroups
+                    & Map.mapKeys BindingName
+                    <&> TextChunk
             local (groups <>) $ forOf_ RE.match match (f . TextChunk)
       ModifyF -> do
         ModifyFocus $ \f chunk -> do
           let txt = textChunk chunk
           TextChunk <$> forOf (RE.regexing pat) txt \match -> do
-            let groups = TextChunk <$> match ^. RE.namedGroups
+            let groups =
+                  match ^. RE.namedGroups
+                    & Map.mapKeys BindingName
+                    <&> TextChunk
             local (groups <>) $ forOf RE.match match (fmap textChunk . f . TextChunk)
   T.RegexMatches _ ->
     liftTrav cmdF $ _RegexMatchChunk . RE.match . from textI
@@ -173,7 +181,8 @@ compileSelector cmdF = \case
   T.Shell _ shellScript shellMode -> do
     let go :: forall x. (Chunk -> m x) -> Chunk -> m x
         go f chunk = do
-          let proc = UnliftIO.shell (Text.unpack shellScript)
+          shellTxt <- resolveBindingString shellScript
+          let proc = UnliftIO.shell (Text.unpack shellTxt)
           let proc' = proc {UnliftIO.std_in = UnliftIO.CreatePipe, UnliftIO.std_out = UnliftIO.CreatePipe, UnliftIO.std_err = UnliftIO.CreatePipe}
           procResult <- liftIO $ UnliftIO.withCreateProcess proc' \mstdin mstdout mstderr phandle -> do
             let stdin = fromMaybe (error "missing stdin") mstdin
@@ -193,7 +202,7 @@ compileSelector cmdF = \case
                 pure $ Right out'
           case procResult of
             Left (code, errOut) -> do
-              throwError $ ShellError $ "Shell script failed with exit code " <> tShow code <> ": " <> shellScript <> "\n" <> errOut
+              throwError $ ShellError $ "Shell script failed with exit code " <> tShow code <> ": " <> renderBindingString shellScript <> "\n" <> errOut
             Right out -> do
               f (TextChunk out)
     case cmdF of
@@ -204,6 +213,16 @@ compileSelector cmdF = \case
       listChunk chunk
         & ix n %%~ f
         <&> ListChunk
+
+resolveBindingString :: (MonadReader Bindings m, MonadError SelectorError m) => BindingString -> m Text
+resolveBindingString (BindingString xs) = do
+  bindings <- ask
+  Text.concat <$> for xs \case
+    Left (name@(BindingName nameTxt), pos) -> do
+      case Map.lookup name bindings of
+        Just chunk -> pure $ textChunk chunk
+        Nothing -> throwError $ BindingError pos $ "Binding not found: " <> nameTxt
+    Right txt -> pure txt
 
 data ListOfS = ListOfS
   { reads :: [Chunk],

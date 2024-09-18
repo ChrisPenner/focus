@@ -61,7 +61,7 @@ data TypedSelector (i :: ChunkType) (o :: ChunkType) a where
   ListOf :: a -> TypedSelector i o a -> TypedSelector i (ListType o) a
   FilterBy :: a -> TypedSelector i o a -> TypedSelector i o a
   Splat :: a -> TypedSelector (ListType t) t a
-  Shell :: a -> Text -> ShellMode -> TypedSelector TextType TextType a
+  Shell :: a -> BindingString -> ShellMode -> TypedSelector TextType TextType a
   At :: a -> Int -> TypedSelector (ListType t) t a
 
 instance Tagged (TypedSelector i o a) a where

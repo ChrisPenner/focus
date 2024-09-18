@@ -5,7 +5,9 @@ module Focus.Untyped
   ( Selector (..),
     TaggedSelector,
     ShellMode (..),
-    BindingName,
+    BindingName (..),
+    BindingString (..),
+    renderBindingString,
     Bindings,
     BindingDeclarations,
     Chunk (..),
@@ -28,7 +30,19 @@ import Text.Regex.PCRE.Heavy (Regex)
 
 type TaggedSelector = Selector D.Position
 
-type BindingName = Text
+newtype BindingName = BindingName Text
+  deriving stock (Show, Eq, Ord)
+
+newtype BindingString = BindingString [Either (BindingName, D.Position) Text]
+  deriving stock (Show, Eq, Ord)
+
+renderBindingString :: BindingString -> Text
+renderBindingString (BindingString xs) =
+  xs
+    <&> \case
+      Left (BindingName name, _pos) -> "%{" <> name <> "}"
+      Right txt -> txt
+    & mconcat
 
 type Bindings = Map BindingName Chunk
 
@@ -50,7 +64,7 @@ data Selector a
   | ListOf a (Selector a)
   | FilterBy a (Selector a)
   | Splat a
-  | Shell a Text ShellMode
+  | Shell a BindingString ShellMode
   | At a Int
   deriving stock (Show, Functor, Foldable, Traversable)
 
