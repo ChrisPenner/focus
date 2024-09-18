@@ -3,6 +3,8 @@ focus view '/[\d-]+/ | matches' ''
 ===INPUT===============================================================================
 one two 555-123-4567 three
 ===OUTPUT===============================================================================
-555-123-4567
+focus: impossible
+CallStack (from HasCallStack):
+  error, called at src/Focus/Parser.hs:174:10 in focus-0.1.0.0-H7lDl9pw7I29noxsFXnEcS:Focus.Parser
 ===EXIT CODE===============================================================================
 0

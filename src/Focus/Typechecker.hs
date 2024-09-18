@@ -140,9 +140,10 @@ typecheckSelector t =
         let typ = T.Arrow pos (T.regexMatchType pos) (T.textType pos)
         let ts = SomeTypedSelector $ Typechecked.RegexMatches pos
         pure (typ, ts)
-      UT.RegexGroups pos -> do
-        let typ = T.Arrow pos (T.regexMatchType pos) (T.listType pos (T.textType pos))
-        let ts = SomeTypedSelector $ Typechecked.RegexGroups pos
+      UT.RegexGroups pos pat bindings -> do
+        declareBindings bindings
+        let typ = T.Arrow pos (T.textType pos) (T.textType pos)
+        let ts = SomeTypedSelector $ Typechecked.RegexGroups pos pat
         pure (typ, ts)
       UT.ListOf pos inner -> do
         (innerTyp, innerTS) <- go inner

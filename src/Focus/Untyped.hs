@@ -12,6 +12,7 @@ module Focus.Untyped
     BindingDeclarations,
     Chunk (..),
     ChunkType (..),
+    Pos,
     _TextChunk,
     _ListChunk,
     _NumberChunk,
@@ -28,12 +29,14 @@ import Error.Diagnose qualified as D
 import Focus.Tagged (Tagged (..))
 import Text.Regex.PCRE.Heavy (Regex)
 
-type TaggedSelector = Selector D.Position
+type Pos = D.Position
+
+type TaggedSelector = Selector Pos
 
 newtype BindingName = BindingName Text
   deriving stock (Show, Eq, Ord)
 
-newtype BindingString = BindingString [Either (BindingName, D.Position) Text]
+newtype BindingString = BindingString [Either (BindingName, Pos) Text]
   deriving stock (Show, Eq, Ord)
 
 renderBindingString :: BindingString -> Text
@@ -46,7 +49,7 @@ renderBindingString (BindingString xs) =
 
 type Bindings = Map BindingName Chunk
 
-type BindingDeclarations = Map Text (D.Position, ChunkType)
+type BindingDeclarations = Map Text (Pos, ChunkType)
 
 data ShellMode
   = Normal
@@ -60,7 +63,7 @@ data Selector a
   | SplitWords a
   | Regex a Regex BindingDeclarations
   | RegexMatches a
-  | RegexGroups a
+  | RegexGroups a Regex BindingDeclarations
   | ListOf a (Selector a)
   | FilterBy a (Selector a)
   | Splat a
@@ -76,7 +79,7 @@ instance Tagged (Selector a) a where
     SplitWords a -> a
     Regex a _ _ -> a
     RegexMatches a -> a
-    RegexGroups a -> a
+    RegexGroups a _ _ -> a
     ListOf a _ -> a
     FilterBy a _ -> a
     Splat a -> a

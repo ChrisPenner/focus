@@ -38,12 +38,12 @@ run() {
   divider "OUTPUT" "$out_file"
   case "$cmd" in
     "view")
-      { "$focus" --no-color "$cmd"  "$selector" < "$input_file" >> "$out_file" 2>&1;
+      { <"$input_file"  "$focus" --no-color "$cmd"  "$selector" 2>&1 | ansifilter >> "$out_file"
         exit_code="$?"
       } || true
       ;;
     "modify" | "set")
-      { "$focus" --no-color "$cmd" "$selector" "$arg" < "$input_file" >> "$out_file" 2>&1  
+      { <"$input_file"  "$focus" --no-color "$cmd" "$selector" "$arg"  2>&1 | ansifilter >> "$out_file"
         exit_code="$?"
       } ||  true
       ;;
@@ -61,7 +61,7 @@ run() {
 
 # Extract test cases from the readme
 
-focus --full modify '/```focus\n(?<script>.*?)\n```/' '-{ cat %script }' README.md 
+# focus --full modify 'groups /```focus\n(.*?)\n```/' '-{ cat %script }' README.md 
 
 # Parser errors
 echo "one,two,three" | run parser_err view 'splitOn ,'
@@ -83,6 +83,10 @@ echo "one,two,three" | run at view '[splitOn ","] | at 1'
 echo "one two 555-123-4567 three" | run regex_view view '/[\d-]+/ | matches'
 echo "one two 555-123-4567 three 999-876-5432" | run regex_modify modify '/[\d-]+/ | matches' '{rev}'
 echo "one-two-three" | run regex_modify modify '/(\w+)-\w+-(\w+)/ | matches' '{tr a-z A-Z}'
+
+# Regex Groups
+echo "one two 555-123-4567 three" | run regex_groups_view view 'groups /(\d+)-(\d+)-(\d+)/'
+echo "one two 555-123-4567 three" | run regex_groups_modify modify 'groups /(\d+)-(\d+)-(\d+)/' '{rev}'
 
 # Filter
 echo "one,two,three" | run simple_filter view 'splitOn "," | filterBy /e/'

@@ -3,7 +3,9 @@ focus modify '/[\d-]+/ | matches' '{rev}'
 ===INPUT===============================================================================
 one two 555-123-4567 three 999-876-5432
 ===OUTPUT===============================================================================
-one two 7654-321-555 three 2345-678-999
+focus: impossible
+CallStack (from HasCallStack):
+  error, called at src/Focus/Parser.hs:174:10 in focus-0.1.0.0-H7lDl9pw7I29noxsFXnEcS:Focus.Parser
 ===EXIT CODE===============================================================================
 0
 ===COMMAND===============================================================================
@@ -11,6 +13,8 @@ focus modify '/(\w+)-\w+-(\w+)/ | matches' '{tr a-z A-Z}'
 ===INPUT===============================================================================
 one-two-three
 ===OUTPUT===============================================================================
-ONE-TWO-THREE
+focus: impossible
+CallStack (from HasCallStack):
+  error, called at src/Focus/Parser.hs:174:10 in focus-0.1.0.0-H7lDl9pw7I29noxsFXnEcS:Focus.Parser
 ===EXIT CODE===============================================================================
 0

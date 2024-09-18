@@ -57,7 +57,7 @@ data TypedSelector (i :: ChunkType) (o :: ChunkType) a where
   SplitWords :: a -> TypedSelector TextType TextType a
   Regex :: a -> Re.Regex -> TypedSelector TextType TextType a
   RegexMatches :: a -> TypedSelector RegexMatchType TextType a
-  RegexGroups :: a -> TypedSelector RegexMatchType TextType a
+  RegexGroups :: a -> Re.Regex -> TypedSelector TextType TextType a
   ListOf :: a -> TypedSelector i o a -> TypedSelector i (ListType o) a
   FilterBy :: a -> TypedSelector i o a -> TypedSelector i o a
   Splat :: a -> TypedSelector (ListType t) t a
@@ -72,7 +72,7 @@ instance Tagged (TypedSelector i o a) a where
     SplitWords pos -> pos
     Regex pos _ -> pos
     RegexMatches pos -> pos
-    RegexGroups pos -> pos
+    RegexGroups pos _ -> pos
     ListOf pos _ -> pos
     Splat pos -> pos
     FilterBy pos _ -> pos

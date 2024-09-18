@@ -15,9 +15,8 @@ import Error.Diagnose (Diagnostic)
 import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Error.Diagnose.Compat.Megaparsec
-import Focus.Prelude ((<&>))
+import Focus.Prelude
 import Focus.Untyped
-import Text.Megaparsec
 import Text.Megaparsec qualified as M
 import Text.Megaparsec.Char qualified as M
 import Text.Megaparsec.Char.Lexer qualified as L
@@ -28,7 +27,7 @@ data CustomError
   = BadRegex Text
   deriving stock (Show, Eq, Ord)
 
-instance ShowErrorComponent CustomError where
+instance M.ShowErrorComponent CustomError where
   showErrorComponent = \case
     BadRegex s -> "Invalid Regex: " <> Text.unpack s
 
@@ -36,11 +35,11 @@ instance HasHints CustomError a where
   hints e = case e of
     BadRegex _ -> []
 
-type P = Parsec CustomError String
+type P = M.Parsec CustomError String
 
-withPos :: P (D.Position -> a) -> P a
+withPos :: P (Pos -> a) -> P a
 withPos p = do
-  SourcePos {sourceName, sourceLine = startLine, sourceColumn = startCol} <- M.getSourcePos
+  M.SourcePos {M.sourceName, M.sourceLine = startLine, M.sourceColumn = startCol} <- M.getSourcePos
   f <- p
   end <- M.getSourcePos
   let pos = Diagnose.Position (M.unPos startLine, M.unPos startCol) (M.unPos (M.sourceLine end), M.unPos (M.sourceColumn end)) sourceName
@@ -50,7 +49,7 @@ parseScript :: Text -> Text -> Either (Diagnostic Text) TaggedSelector
 parseScript srcName src =
   let strSource = Text.unpack src
       strSourceName = Text.unpack srcName
-   in parse (M.space *> scriptP <* M.eof) strSourceName strSource
+   in M.parse (M.space *> scriptP <* M.eof) strSourceName strSource
         & first
           ( \bundle ->
               bundle
@@ -77,15 +76,19 @@ separatorP = do
 strP :: P Text
 strP =
   M.label "string" $ do
-    lexeme $ between (M.char '"') (M.char '"') $ do
-      Text.pack <$> many (escaped <|> M.anySingleBut '"')
+    lexeme $ M.between (M.char '"') (M.char '"') $ do
+      Text.pack <$> M.many (escaped <|> M.anySingleBut '"')
   where
     escaped = M.char '\\' >> M.anySingle
 
 regexP :: P TaggedSelector
-regexP =
+regexP = do
+  regexLiteralP <&> \(pos, re, bindings) -> Regex pos re bindings
+
+regexLiteralP :: P (Pos, PCRE.Light.Regex, BindingDeclarations)
+regexLiteralP =
   withPos $ M.label "regex" $ do
-    pat <- lexeme $ between (M.char '/') (M.char '/') $ do
+    pat <- lexeme $ M.between (M.char '/') (M.char '/') $ do
       Text.pack <$> many (escaped <|> M.anySingleBut '/')
     case Regex.compileM (Text.encodeUtf8 pat) [] of
       Left err -> M.customFailure $ BadRegex (Text.pack err)
@@ -95,13 +98,17 @@ regexP =
                 & fmap (Text.decodeUtf8 . fst)
                 & fmap (,(pos, TextType))
                 & M.fromList
-         in Regex pos re bindingDeclarations
+         in (pos, re, bindingDeclarations)
   where
     escaped = M.string "\\/" $> '/'
 
+reGroupsP :: P (D.Position -> TaggedSelector)
+reGroupsP = do
+  regexLiteralP <&> \(_pos, re, bindings) -> \pos -> RegexGroups pos re bindings
+
 listOfP :: P TaggedSelector
 listOfP = withPos do
-  between (lexeme $ M.char '[') (lexeme $ M.char ']') $ do
+  M.between (lexeme $ M.char '[') (lexeme $ M.char ']') $ do
     flip ListOf <$> selectorsP
 
 shellP :: P TaggedSelector
@@ -110,7 +117,7 @@ shellP = withPos do
     optional (M.char '-') >>= \case
       Just _ -> pure NullStdin
       Nothing -> pure Normal
-  between (lexeme $ M.char '{') (lexeme $ M.char '}') $ do
+  M.between (lexeme $ M.char '{') (lexeme $ M.char '}') $ do
     script <- many do
       M.choice
         [ Left <$> withPos ((,) <$> bindingP),
@@ -123,13 +130,13 @@ shellP = withPos do
     escaped = M.string "\\%" $> '%'
 
 bindingP :: P BindingName
-bindingP = try do
-  between (lexeme (M.string "%{")) (M.char '}') $ do
+bindingP = M.try do
+  M.between (lexeme (M.string "%{")) (M.char '}') $ do
     BindingName . Text.pack <$> lexeme (M.some M.alphaNumChar)
 
 groupedP :: P TaggedSelector
 groupedP = do
-  shellP <|> listOfP <|> regexP <|> between (lexeme (M.char '(')) (lexeme (M.char ')')) selectorsP
+  shellP <|> listOfP <|> regexP <|> M.between (lexeme (M.char '(')) (lexeme (M.char ')')) selectorsP
 
 selectorP :: P TaggedSelector
 selectorP = shellP <|> listOfP <|> regexP <|> simpleSelectorP
@@ -145,7 +152,8 @@ simpleSelectorP = withPos do
             M.string "at",
             M.string "matches",
             M.string "filterBy",
-            M.string "..."
+            M.string "...",
+            M.string "groups"
           ]
       )
   case name of
@@ -157,10 +165,8 @@ simpleSelectorP = withPos do
     "at" -> do
       n <- lexeme L.decimal
       pure $ flip At n
-    "matches" -> do
-      pure RegexMatches
     "groups" -> do
-      pure RegexGroups
+      reGroupsP
     "filterBy" -> do
       flip FilterBy <$> groupedP
     "..." -> do

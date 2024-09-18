@@ -101,28 +101,14 @@ compileSelector cmdF = \case
     liftTrav cmdF $ underText (\f txt -> Text.unwords <$> traverse f (Text.words txt))
   T.Regex _ pat -> do
     case cmdF of
-      ViewF ->
-        ViewFocus $ \f chunk -> do
-          let txt = textChunk chunk
-          forOf_ (RE.regexing pat) txt \match -> do
-            let groups =
-                  match ^. RE.namedGroups
-                    & Map.mapKeys BindingName
-                    <&> TextChunk
-            local (groups <>) $ forOf_ RE.match match (f . TextChunk)
-      ModifyF -> do
-        ModifyFocus $ \f chunk -> do
-          let txt = textChunk chunk
-          TextChunk <$> forOf (RE.regexing pat) txt \match -> do
-            let groups =
-                  match ^. RE.namedGroups
-                    & Map.mapKeys BindingName
-                    <&> TextChunk
-            local (groups <>) $ forOf RE.match match (fmap textChunk . f . TextChunk)
+      ViewF -> viewRegex pat \f match -> do f (TextChunk $ match ^. RE.match)
+      ModifyF -> do modifyRegex pat RE.match
   T.RegexMatches _ ->
     liftTrav cmdF $ _RegexMatchChunk . RE.match . from textI
-  T.RegexGroups _ ->
-    liftTrav cmdF $ _RegexMatchChunk . RE.groups . traversed . from textI
+  T.RegexGroups _ pat -> do
+    case cmdF of
+      ViewF -> viewRegex pat \f match -> do traverse_ (f . TextChunk) (match ^.. RE.groups . traversed)
+      ModifyF -> do modifyRegex pat (RE.groups . traverse)
   T.ListOf _ selector -> do
     case cmdF of
       ViewF -> do
@@ -213,6 +199,26 @@ compileSelector cmdF = \case
       listChunk chunk
         & ix n %%~ f
         <&> ListChunk
+  where
+    viewRegex :: RE.Regex -> ((Chunk -> m ()) -> RE.Match -> m ()) -> Focus 'ViewT m
+    viewRegex pat go = ViewFocus \f chunk -> do
+      let txt = textChunk chunk
+      forOf_ (RE.regexing pat) txt \match -> do
+        let groups =
+              match ^. RE.namedGroups
+                & Map.mapKeys BindingName
+                <&> TextChunk
+        local (groups <>) $ go f match
+
+    modifyRegex :: RE.Regex -> (Traversal' RE.Match Text) -> Focus 'ModifyT m
+    modifyRegex pat trav = ModifyFocus \f chunk -> do
+      let txt = textChunk chunk
+      TextChunk <$> forOf (RE.regexing pat) txt \match -> do
+        let groups =
+              match ^. RE.namedGroups
+                & Map.mapKeys BindingName
+                <&> TextChunk
+        local (groups <>) $ forOf trav match (fmap textChunk . f . TextChunk)
 
 resolveBindingString :: (MonadReader Bindings m, MonadError SelectorError m) => BindingString -> m Text
 resolveBindingString (BindingString xs) = do
