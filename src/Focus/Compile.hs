@@ -120,6 +120,11 @@ compileSelector cmdF = \case
     listOfFocus (compileSelector cmdF selector) >.> liftTrav (dropping n traversed)
   DropEnd _ n selector -> do
     listOfFocus (compileSelector cmdF selector) >.> liftTrav (droppingEnd n)
+  Contains _ needle -> do
+    liftTrav $ \f chunk -> do
+      case needle `Text.isInfixOf` textChunk chunk of
+        True -> f chunk
+        False -> pure chunk
   where
     takingEnd :: Int -> Traversal' [a] a
     takingEnd n f xs = do

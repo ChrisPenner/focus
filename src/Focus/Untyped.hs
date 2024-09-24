@@ -73,6 +73,7 @@ data Selector a
   | TakeEnd a Int (Selector a)
   | Drop a Int (Selector a)
   | DropEnd a Int (Selector a)
+  | Contains a Text
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Selector a) a where
@@ -93,6 +94,7 @@ instance Tagged (Selector a) a where
     TakeEnd a _ _ -> a
     Drop a _ _ -> a
     DropEnd a _ _ -> a
+    Contains a _ -> a
 
 data Chunk
   = TextChunk Text

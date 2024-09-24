@@ -152,6 +152,8 @@ typecheckSelector t =
       UT.TakeEnd _pos _n inner -> do go inner
       UT.Drop _pos _n inner -> do go inner
       UT.DropEnd _pos _n inner -> do go inner
+      UT.Contains pos _txt -> do
+        pure $ T.Arrow pos (T.textType pos) (T.textType pos)
 
     compose ::
       forall s.

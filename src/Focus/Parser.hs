@@ -150,13 +150,14 @@ simpleSelectorP = withPos do
             M.string "words",
             M.string "lines",
             M.string "at",
-            M.string "filterBy",
+            M.string "filter",
             M.string "...",
             M.string "groups",
             M.string "takeEnd",
             M.string "dropEnd",
             M.string "take",
-            M.string "drop"
+            M.string "drop",
+            M.string "contains"
           ]
       )
   case name of
@@ -170,7 +171,7 @@ simpleSelectorP = withPos do
       pure $ flip At n
     "groups" -> do
       reGroupsP
-    "filterBy" -> do
+    "filter" -> do
       flip FilterBy <$> groupedP
     "..." -> do
       pure Splat
@@ -190,4 +191,7 @@ simpleSelectorP = withPos do
       n <- lexeme L.decimal
       selector <- groupedP
       pure $ \pos -> DropEnd pos n selector
+    "contains" -> do
+      str <- strP
+      pure $ \pos -> Contains pos str
     _ -> error "impossible"

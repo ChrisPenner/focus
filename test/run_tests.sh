@@ -85,7 +85,7 @@ echo "one two 555-123-4567 three" | run regex_groups_view view 'groups /(\d+)-(\
 echo "one two 555-123-4567 three" | run regex_groups_modify modify 'groups /(\d+)-(\d+)-(\d+)/' '{rev}'
 
 # Filter
-echo "one,two,three" | run filter_view view 'splitOn "," | filterBy /e/'
+echo "one,two,three" | run filter_view view 'splitOn "," | filter /e/'
 
 # Take/Drop
 echo "one,two,three" | run take_view view 'take 2 (splitOn ",")'
@@ -97,6 +97,9 @@ echo "one,two,three" | run take_end_view view 'takeEnd 1 (splitOn ",")'
 echo "one,two,three" | run take_end_modify modify 'takeEnd 1 (splitOn ",")' '{rev}'
 echo "one,two,three" | run drop_end_view view 'dropEnd 1 (splitOn ",")'
 echo "one,two,three" | run drop_end_modify modify 'dropEnd 1 (splitOn ",")' '{rev}'
+
+# Contains
+echo "one,two,three" | run contains_view view 'splitOn "," | filter contains "two"'
 
 # Template strings
 # run template_view view 'match @"_-_-_" -> [one, two, three] '
@@ -110,5 +113,5 @@ echo "one,two,three" | run drop_end_modify modify 'dropEnd 1 (splitOn ",")' '{re
 # Extract test cases from the readme
 
 # focus --full modify 'groups /```focus\n(.*?)\n```/' 'take 1 lines | -{ echo %script }' README.md 
-# focus --full view 'groups /```focus\n(.*?)\n```/ | take 1 lines | -{ echo %script }' README.md 
+focus --full view 'groups /```focus\n(.*?)\n```/ | take 1 lines | -{ echo %script }' README.md 
 
