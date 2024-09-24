@@ -100,6 +100,12 @@ echo "one,two,three" | run drop_end_modify modify 'dropEnd 1 (splitOn ",")' '{re
 
 # Contains
 echo "one,two,three" | run contains_view view 'splitOn "," | filter contains "two"'
+echo "one,two,three" | run contains_modify modify 'splitOn "," | filter contains "two"' '{rev}'
+
+# Not
+echo "one,two,three" | run not_view view 'splitOn "," | filter (not (contains "two"))'
+echo "one,two,three" | run not_modify modify 'splitOn "," | filter (not (contains "two"))' '{rev}'
+
 
 # Template strings
 # run template_view view 'match @"_-_-_" -> [one, two, three] '

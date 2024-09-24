@@ -139,7 +139,7 @@ groupedP = do
   shellP <|> listOfP <|> regexP <|> M.between (lexeme (M.char '(')) (lexeme (M.char ')')) selectorsP <|> simpleSelectorP
 
 selectorP :: P TaggedSelector
-selectorP = shellP <|> listOfP <|> regexP <|> simpleSelectorP
+selectorP = shellP <|> listOfP <|> regexP <|> groupedP <|> simpleSelectorP
 
 simpleSelectorP :: P TaggedSelector
 simpleSelectorP = withPos do
@@ -196,6 +196,6 @@ simpleSelectorP = withPos do
       str <- strP
       pure $ \pos -> Contains pos str
     "not" -> do
-      selector <- simpleSelectorP
+      selector <- selectorP
       pure $ \pos -> Not pos selector
     _ -> error "impossible"
