@@ -87,7 +87,7 @@ compileSelector cmdF = \case
   Shell _ shellScript shellMode -> do
     let go :: forall x m. (Focusable m) => (Chunk -> m x) -> Chunk -> m x
         go f chunk = do
-          shellTxt <- resolveBindingString shellScript
+          shellTxt <- resolveBindingString chunk shellScript
           let proc = UnliftIO.shell (Text.unpack shellTxt)
           let proc' = proc {UnliftIO.std_in = UnliftIO.CreatePipe, UnliftIO.std_out = UnliftIO.CreatePipe, UnliftIO.std_err = UnliftIO.CreatePipe}
           procResult <- liftIO $ UnliftIO.withCreateProcess proc' \mstdin mstdout mstderr phandle -> do
@@ -173,12 +173,13 @@ compileSelector cmdF = \case
                 <&> TextChunk
         local (groups <>) $ forOf trav match (fmap textChunk . f . TextChunk)
 
-resolveBindingString :: (MonadReader Bindings m, MonadError SelectorError m) => BindingString -> m Text
-resolveBindingString (BindingString xs) = do
+resolveBindingString :: (MonadReader Bindings m, MonadError SelectorError m) => Chunk -> BindingString -> m Text
+resolveBindingString input (BindingString xs) = do
   bindings <- ask
   Text.concat <$> for xs \case
     Left (name@(BindingName nameTxt), pos) -> do
       case Map.lookup name bindings of
         Just chunk -> pure $ textChunk chunk
         Nothing -> throwError $ BindingError pos $ "Binding not in scope: " <> nameTxt
+    Left (InputBinding, _) -> pure $ textChunk input
     Right txt -> pure txt

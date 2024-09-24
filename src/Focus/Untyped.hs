@@ -33,7 +33,9 @@ type Pos = D.Position
 
 type TaggedSelector = Selector Pos
 
-newtype BindingName = BindingName Text
+data BindingName
+  = BindingName Text
+  | InputBinding
   deriving stock (Show, Eq, Ord)
 
 newtype BindingString = BindingString [Either (BindingName, Pos) Text]
@@ -44,6 +46,7 @@ renderBindingString (BindingString xs) =
   xs
     <&> \case
       Left (BindingName name, _pos) -> "%{" <> name <> "}"
+      Left (InputBinding, _pos) -> "%{.}"
       Right txt -> txt
     & mconcat
 

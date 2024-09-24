@@ -131,8 +131,10 @@ shellP = withPos do
 
 bindingP :: P BindingName
 bindingP = M.try do
-  M.between (lexeme (M.string "%{")) (M.char '}') $ do
-    BindingName . Text.pack <$> lexeme (M.some M.alphaNumChar)
+  M.between (lexeme (M.string "%{")) (M.char '}') $
+    do
+      (BindingName . Text.pack <$> lexeme (M.some M.alphaNumChar))
+      <|> (M.string "." $> InputBinding)
 
 groupedP :: P TaggedSelector
 groupedP = do

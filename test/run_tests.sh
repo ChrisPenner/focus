@@ -118,6 +118,6 @@ echo "one,two,three" | run not_modify modify 'splitOn "," | filter (not (contain
 
 # Extract test cases from the readme
 
-# focus --full modify 'groups /```focus\n(.*?)\n```/' 'take 1 lines | -{ echo %script }' README.md 
-# focus --full view 'groups /```focus\n(.*?)\n```/ | take 1 lines | -{ echo %script }' README.md 
+# focus --full view '/```focus\n((.|\s)*?)\n```/ | drop 1 (dropEnd 1 lines) | filter (not (contains "Result")) | -{ echo %{.} }' README.md
+# focus --full view '"```focus\n_\n```" | drop 1 (dropEnd 1 lines) | filter (not (contains "Result")) | . + "\nOutput: " -{ echo %{.} }' README.md
 

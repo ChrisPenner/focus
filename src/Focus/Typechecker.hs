@@ -141,10 +141,10 @@ typecheckSelector t =
         inp <- freshVar
         pure $ T.Arrow pos (T.listType pos inp) inp
       UT.Shell pos script shellMode -> do
-        unifyBindingString script
         inp <- case shellMode of
           Normal -> pure $ T.textType pos
           NullStdin -> freshVar
+        unifyBindingString inp script
         pure $ T.Arrow pos inp (T.textType pos)
       UT.At pos _n -> do
         inp <- freshVar
@@ -172,12 +172,15 @@ typecheckSelector t =
             _ -> error "Expected Arrow type in compose"
         _ -> error "Expected Arrow type in compose"
 
-unifyBindingString :: BindingString -> UnifyM s ()
-unifyBindingString (BindingString bindings) = do
+unifyBindingString :: Typ s -> BindingString -> UnifyM s ()
+unifyBindingString inputTyp (BindingString bindings) = do
   for_ bindings $ \case
     Left (BindingName name, pos) -> do
       v <- getOrInitBinding name
       _ <- liftUnify $ Unify.unify v (T.textType pos)
+      pure ()
+    Left (InputBinding, pos) -> do
+      _ <- liftUnify $ Unify.unify inputTyp (T.textType pos)
       pure ()
     Right _ -> pure ()
 
