@@ -20,6 +20,7 @@ import Control.Monad.Error.Class (MonadError (..))
 import Control.Monad.RWS.CPS (MonadReader (..))
 import Control.Monad.State.Lazy
 import Control.Monad.Trans.Maybe (MaybeT (..))
+import Data.List qualified as List
 import Data.Map qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
@@ -121,10 +122,15 @@ compileSelector cmdF = \case
   DropEnd _ n selector -> do
     listOfFocus (compileSelector cmdF selector) >.> liftTrav (droppingEnd n)
   Contains _ needle -> do
-    liftTrav $ \f chunk -> do
-      case needle `Text.isInfixOf` textChunk chunk of
-        True -> f chunk
-        False -> pure chunk
+    liftTrav $ \f chunk ->
+      do
+        Text.splitOn needle (textChunk chunk)
+        & fmap Left
+        & List.intersperse (Right needle)
+        & traverse \case
+          Left txt -> pure (TextChunk txt)
+          Right txt -> f (TextChunk txt)
+        & fmap (TextChunk . Text.concat . fmap textChunk)
   where
     takingEnd :: Int -> Traversal' [a] a
     takingEnd n f xs = do

@@ -52,19 +52,19 @@ run = do
       )
   flip runReaderT opts do
     case command of
-      View script inputFiles -> withHandles inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
+      View script inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
         addSource "<selector>" script
         focus <- getFocus "<selector>" ViewF script
         r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runView focus chunkSize inputHandle outputHandle
         handleError r
-      Modify script m inputFiles -> withHandles inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
+      Modify script m inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
         addSource "<selector>" script
         focus <- getFocus "<selector>" ModifyF script
         addSource "<modifier>" m
         modifier <- getFocus "<modifier>" ModifyF m
         r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runModify focus modifier chunkSize inputHandle outputHandle
         handleError r
-      Set script val inputFiles -> withHandles inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
+      Set script val inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
         addSource "<selector>" script
         focus <- getFocus "<selector>" ModifyF script
         r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runSet focus chunkSize inputHandle outputHandle val
@@ -108,10 +108,11 @@ run = do
       liftIO $ TextIO.hPutStrLn UnliftIO.stderr msg
       liftIO $ System.exitFailure
 
-    withHandles :: forall m. (MonadUnliftIO m) => InPlace -> [FilePath] -> OutputLocation -> (IO.Handle -> IO.Handle -> m ()) -> m ()
-    withHandles inPlace inputFiles output action = do
-      case (inPlace, inputFiles) of
-        (InPlace, []) -> failWith "In-place mode specified, but no input files provided."
+    withHandles :: forall m. (MonadUnliftIO m) => Command -> InPlace -> [FilePath] -> OutputLocation -> (IO.Handle -> IO.Handle -> m ()) -> m ()
+    withHandles cmd inPlace inputFiles output action = do
+      case (cmd, inPlace, inputFiles) of
+        (View {}, InPlace, _) -> failWith "In-place mode not supported for view command."
+        (_, InPlace, []) -> failWith "In-place mode specified, but no input files provided."
         _ -> do
           for_ inputFiles \inpFile -> do
             exists <- UnliftIO.doesFileExist inpFile
