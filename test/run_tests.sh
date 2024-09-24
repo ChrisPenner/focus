@@ -113,5 +113,5 @@ echo "one,two,three" | run contains_view view 'splitOn "," | filter contains "tw
 # Extract test cases from the readme
 
 # focus --full modify 'groups /```focus\n(.*?)\n```/' 'take 1 lines | -{ echo %script }' README.md 
-focus --full view 'groups /```focus\n(.*?)\n```/ | take 1 lines | -{ echo %script }' README.md 
+# focus --full view 'groups /```focus\n(.*?)\n```/ | take 1 lines | -{ echo %script }' README.md 
 

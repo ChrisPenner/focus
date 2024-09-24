@@ -157,7 +157,8 @@ simpleSelectorP = withPos do
             M.string "dropEnd",
             M.string "take",
             M.string "drop",
-            M.string "contains"
+            M.string "contains",
+            M.string "not"
           ]
       )
   case name of
@@ -194,4 +195,7 @@ simpleSelectorP = withPos do
     "contains" -> do
       str <- strP
       pure $ \pos -> Contains pos str
+    "not" -> do
+      selector <- simpleSelectorP
+      pure $ \pos -> Not pos selector
     _ -> error "impossible"

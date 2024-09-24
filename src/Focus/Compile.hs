@@ -22,7 +22,6 @@ import Control.Monad.State.Lazy
 import Control.Monad.Trans.Maybe (MaybeT (..))
 import Data.List qualified as List
 import Data.Map qualified as Map
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
@@ -55,24 +54,31 @@ compileSelector cmdF = \case
   ListOf _ selector -> do
     listOfFocus (compileSelector cmdF selector) >.> liftTrav (from asListI)
   Filter _ selector -> do
+    let inner :: Focus cmd Chunk Chunk
+        inner = compileSelector cmdF selector
     case cmdF of
       ViewF -> do
-        let inner :: (Focusable m) => (Chunk -> MaybeT m ()) -> Chunk -> MaybeT m ()
-            inner = getViewFocus $ compileSelector cmdF selector
         ViewFocus $ \f chunk -> do
-          runMaybeT (forOf inner chunk (\_ -> empty)) >>= \case
-            -- Nothing means we got at least one result and short-circuted.
-            Nothing -> f chunk
-            -- Just means we didn't get any results, so the computation succeeded.
-            Just _ -> pure ()
+          hasMatches cmdF inner chunk >>= \case
+            True -> f chunk
+            False -> pure ()
       ModifyF -> ModifyFocus $ \f chunk -> do
-        let inner :: (Focusable m) => LensLike' (MaybeT m) Chunk Chunk
-            inner = getModifyFocus $ compileSelector cmdF selector
-        runMaybeT (forOf inner chunk (\_ -> empty)) >>= \case
-          -- Nothing means we got at least one result and short-circuted.
-          Nothing -> f chunk
-          -- Just means we didn't get any results, so the computation succeeded.
-          Just _ -> pure chunk
+        hasMatches cmdF inner chunk >>= \case
+          True -> f chunk
+          False -> pure chunk
+  Not _ selector -> do
+    let inner :: Focus cmd Chunk Chunk
+        inner = compileSelector cmdF selector
+    case cmdF of
+      ViewF -> do
+        ViewFocus $ \f chunk -> do
+          hasMatches cmdF inner chunk >>= \case
+            True -> pure ()
+            False -> f chunk
+      ModifyF -> ModifyFocus $ \f chunk -> do
+        hasMatches cmdF inner chunk >>= \case
+          True -> pure chunk
+          False -> f chunk
   Splat _ -> do
     liftTrav $ \f chunk -> do
       listChunk chunk
@@ -132,6 +138,11 @@ compileSelector cmdF = \case
           Right txt -> f (TextChunk txt)
         & fmap (TextChunk . Text.concat . fmap textChunk)
   where
+    hasMatches :: (Focusable m) => CommandF cmd -> Focus cmd i o -> i -> m Bool
+    hasMatches cmd foc i = do
+      case cmd of
+        ViewF {} -> isNothing <$> runMaybeT (forOf (getViewFocus foc) i (\_ -> empty))
+        ModifyF {} -> isNothing <$> runMaybeT (forOf (getModifyFocus foc) i (\_ -> empty))
     takingEnd :: Int -> Traversal' [a] a
     takingEnd n f xs = do
       let len = length xs

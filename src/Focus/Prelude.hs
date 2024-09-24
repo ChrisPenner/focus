@@ -12,6 +12,7 @@ import Control.Monad as X
 import Data.Foldable as X
 import Data.Function ((&))
 import Data.Functor ((<&>))
+import Data.Maybe as X
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Traversable as X

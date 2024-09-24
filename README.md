@@ -38,7 +38,7 @@ celery NOLEMRETAW apples STORRAC
 - [ ] Support JSON
 - [x] List splat
 - [ ] Expression language?
-- [ ] Require reversable selectors
+- [ ] Require reversible selectors
 - [ ] Handle errors from shell commands better
 - [ ] shell 'if'
 - [ ] Fix annoying ansi codes coming from diagnose even on no-color mode.

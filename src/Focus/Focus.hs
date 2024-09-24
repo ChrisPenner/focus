@@ -78,9 +78,9 @@ withinIso :: (IsCmd cmd) => Iso' s a -> Focus cmd a a -> Focus cmd s s
 withinIso i t = liftIso i >.> t >.> liftIso (from i)
 
 unsafeIso :: (Show s) => Prism' s a -> Iso' s a
-unsafeIso p = iso (\actual -> fromJust actual . preview p $ actual) (review p)
+unsafeIso p = iso (\actual -> fromJust' actual . preview p $ actual) (review p)
   where
-    fromJust actual = \case
+    fromJust' actual = \case
       Just x -> x
       Nothing -> error $ "unsafeIso: Mismatch. Actual: " <> show actual
 

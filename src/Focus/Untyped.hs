@@ -66,6 +66,7 @@ data Selector a
   | RegexGroups a Regex BindingDeclarations
   | ListOf a (Selector a)
   | Filter a (Selector a)
+  | Not a (Selector a)
   | Splat a
   | Shell a BindingString ShellMode
   | At a Int
@@ -87,6 +88,7 @@ instance Tagged (Selector a) a where
     RegexGroups a _ _ -> a
     ListOf a _ -> a
     Filter a _ -> a
+    Not a _ -> a
     Splat a -> a
     Shell a _ _ -> a
     At a _ -> a
