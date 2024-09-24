@@ -172,7 +172,7 @@ simpleSelectorP = withPos do
     "groups" -> do
       reGroupsP
     "filter" -> do
-      flip FilterBy <$> groupedP
+      flip Filter <$> groupedP
     "..." -> do
       pure Splat
     "take" -> do

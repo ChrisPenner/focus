@@ -54,7 +54,7 @@ compileSelector cmdF = \case
       ModifyF -> do modifyRegex pat (RE.groups . traverse)
   ListOf _ selector -> do
     listOfFocus (compileSelector cmdF selector) >.> liftTrav (from asListI)
-  FilterBy _ selector -> do
+  Filter _ selector -> do
     case cmdF of
       ViewF -> do
         let inner :: (Focusable m) => (Chunk -> MaybeT m ()) -> Chunk -> MaybeT m ()

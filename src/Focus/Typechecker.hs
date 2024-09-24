@@ -135,7 +135,7 @@ typecheckSelector t =
           T.Arrow _ inp out -> do
             pure $ T.Arrow pos inp (T.listType pos out)
           _ -> error "ListOf: Expected Arrow"
-      UT.FilterBy _pos inner -> go inner
+      UT.Filter _pos inner -> go inner
       UT.Splat pos -> do
         inp <- freshVar
         pure $ T.Arrow pos (T.listType pos inp) inp
