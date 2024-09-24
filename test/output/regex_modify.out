@@ -9,7 +9,7 @@ one two 555-123-4567 three 999-876-5432
    1 │ /[\d-]+/ | matches
      •            ┬ 
      •            ├╸ unexpected "matches"
-     •            ╰╸ expecting "...", "at", "drop", "filterBy", "groups", "lines", "splitOn", "take", "words", '-', '[', '{', regex, or white space
+     •            ╰╸ expecting "...", "at", "drop", "dropEnd", "filterBy", "groups", "lines", "splitOn", "take", "takeEnd", "words", '-', '[', '{', regex, or white space
 ─────╯
 ===EXIT CODE===============================================================================
 0
@@ -24,7 +24,7 @@ one-two-three
    1 │ /(\w+)-\w+-(\w+)/ | matches
      •                     ┬ 
      •                     ├╸ unexpected "matches"
-     •                     ╰╸ expecting "...", "at", "drop", "filterBy", "groups", "lines", "splitOn", "take", "words", '-', '[', '{', regex, or white space
+     •                     ╰╸ expecting "...", "at", "drop", "dropEnd", "filterBy", "groups", "lines", "splitOn", "take", "takeEnd", "words", '-', '[', '{', regex, or white space
 ─────╯
 ===EXIT CODE===============================================================================
 0

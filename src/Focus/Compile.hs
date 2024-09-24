@@ -119,9 +119,23 @@ compileSelector cmdF = \case
         <&> ListChunk
   T.Take _ n selector ->
     listOfFocus (compileSelector cmdF selector) >.> liftTrav (taking n traversed)
+  T.TakeEnd _ n selector -> do
+    listOfFocus (compileSelector cmdF selector) >.> liftTrav (takingEnd n)
   T.Drop _ n selector -> do
     listOfFocus (compileSelector cmdF selector) >.> liftTrav (dropping n traversed)
+  T.DropEnd _ n selector -> do
+    listOfFocus (compileSelector cmdF selector) >.> liftTrav (droppingEnd n)
   where
+    takingEnd :: Int -> Traversal' [a] a
+    takingEnd n f xs = do
+      let len = length xs
+      let (before, after) = splitAt (len - n) xs
+      (before <>) <$> traverse f after
+    droppingEnd :: Int -> Traversal' [a] a
+    droppingEnd n f xs = do
+      let len = length xs
+      let (before, after) = splitAt (len - n) xs
+      (<> after) <$> traverse f before
     viewRegex :: RE.Regex -> (forall m. (Focusable m) => (Chunk -> m ()) -> RE.Match -> m ()) -> Focus 'ViewT Chunk Chunk
     viewRegex pat go = ViewFocus \f chunk -> do
       let txt = textChunk chunk

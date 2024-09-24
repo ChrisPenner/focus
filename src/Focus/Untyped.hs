@@ -70,7 +70,9 @@ data Selector a
   | Shell a BindingString ShellMode
   | At a Int
   | Take a Int (Selector a)
+  | TakeEnd a Int (Selector a)
   | Drop a Int (Selector a)
+  | DropEnd a Int (Selector a)
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Selector a) a where
@@ -88,7 +90,9 @@ instance Tagged (Selector a) a where
     Shell a _ _ -> a
     At a _ -> a
     Take a _ _ -> a
+    TakeEnd a _ _ -> a
     Drop a _ _ -> a
+    DropEnd a _ _ -> a
 
 data Chunk
   = TextChunk Text

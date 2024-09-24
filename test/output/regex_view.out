@@ -9,7 +9,7 @@ one two 555-123-4567 three
    1 │ /[\d-]+/ | matches
      •            ┬ 
      •            ├╸ unexpected "matches"
-     •            ╰╸ expecting "...", "at", "drop", "filterBy", "groups", "lines", "splitOn", "take", "words", '-', '[', '{', regex, or white space
+     •            ╰╸ expecting "...", "at", "drop", "dropEnd", "filterBy", "groups", "lines", "splitOn", "take", "takeEnd", "words", '-', '[', '{', regex, or white space
 ─────╯
 ===EXIT CODE===============================================================================
 0

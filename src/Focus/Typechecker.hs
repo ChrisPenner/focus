@@ -180,9 +180,15 @@ typecheckSelector t =
       UT.Take pos n inner -> do
         (innerTyp, SomeTypedSelector innerTS) <- go inner
         pure (innerTyp, SomeTypedSelector $ Typechecked.Take pos n innerTS)
+      UT.TakeEnd pos n inner -> do
+        (innerTyp, SomeTypedSelector innerTS) <- go inner
+        pure (innerTyp, SomeTypedSelector $ Typechecked.TakeEnd pos n innerTS)
       UT.Drop pos n inner -> do
         (innerTyp, SomeTypedSelector innerTS) <- go inner
         pure (innerTyp, SomeTypedSelector $ Typechecked.Drop pos n innerTS)
+      UT.DropEnd pos n inner -> do
+        (innerTyp, SomeTypedSelector innerTS) <- go inner
+        pure (innerTyp, SomeTypedSelector $ Typechecked.DropEnd pos n innerTS)
 
     compose ::
       forall s.

@@ -59,11 +59,6 @@ run() {
 
 "$focus" --help > "help.out"
 
-# Extract test cases from the readme
-
-# focus --full modify 'groups /```focus\n(.*?)\n```/' 'take 1 lines | -{ echo %script }' README.md 
-focus --full view 'groups /```focus\n(.*?)\n```/ | take 1 lines | -{ echo %script }' README.md 
-
 # Parser errors
 echo "one,two,three" | run parser_err view 'splitOn ,'
 
@@ -98,5 +93,22 @@ echo "one,two,three" | run take_modify modify 'take 2 (splitOn ",")' '{rev}'
 echo "one,two,three" | run drop_view view 'drop 1 (splitOn ",")'
 echo "one,two,three" | run drop_modify modify 'drop 1 (splitOn ",")' '{rev}'
 
+echo "one,two,three" | run take_end_view view 'takeEnd 1 (splitOn ",")'
+echo "one,two,three" | run take_end_modify modify 'takeEnd 1 (splitOn ",")' '{rev}'
+echo "one,two,three" | run drop_end_view view 'dropEnd 1 (splitOn ",")'
+echo "one,two,three" | run drop_end_modify modify 'dropEnd 1 (splitOn ",")' '{rev}'
+
+# Template strings
+# run template_view view 'match @"_-_-_" -> [one, two, three] '
+# run template_view view 'groups @"_-_-_" -> [one, two, three] '
+
 # Variable bindings
 # echo "one,two,three" | run variable_binding modify 'splitOn "," | ->x' '{~ x }'
+
+
+
+# Extract test cases from the readme
+
+# focus --full modify 'groups /```focus\n(.*?)\n```/' 'take 1 lines | -{ echo %script }' README.md 
+# focus --full view 'groups /```focus\n(.*?)\n```/ | take 1 lines | -{ echo %script }' README.md 
+

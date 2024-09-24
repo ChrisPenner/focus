@@ -153,6 +153,8 @@ simpleSelectorP = withPos do
             M.string "filterBy",
             M.string "...",
             M.string "groups",
+            M.string "takeEnd",
+            M.string "dropEnd",
             M.string "take",
             M.string "drop"
           ]
@@ -180,4 +182,12 @@ simpleSelectorP = withPos do
       n <- lexeme L.decimal
       selector <- groupedP
       pure $ \pos -> Drop pos n selector
+    "takeEnd" -> do
+      n <- lexeme L.decimal
+      selector <- groupedP
+      pure $ \pos -> TakeEnd pos n selector
+    "dropEnd" -> do
+      n <- lexeme L.decimal
+      selector <- groupedP
+      pure $ \pos -> DropEnd pos n selector
     _ -> error "impossible"

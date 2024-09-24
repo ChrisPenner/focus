@@ -64,7 +64,9 @@ data TypedSelector (i :: ChunkType) (o :: ChunkType) a where
   Shell :: a -> BindingString -> ShellMode -> TypedSelector TextType TextType a
   At :: a -> Int -> TypedSelector (ListType t) t a
   Take :: a -> Int -> TypedSelector i o a -> TypedSelector i o a
+  TakeEnd :: a -> Int -> TypedSelector i o a -> TypedSelector i o a
   Drop :: a -> Int -> TypedSelector i o a -> TypedSelector i o a
+  DropEnd :: a -> Int -> TypedSelector i o a -> TypedSelector i o a
 
 instance Tagged (TypedSelector i o a) a where
   tag = \case
@@ -82,6 +84,8 @@ instance Tagged (TypedSelector i o a) a where
     At pos _ -> pos
     Take pos _ _ -> pos
     Drop pos _ _ -> pos
+    TakeEnd pos _ _ -> pos
+    DropEnd pos _ _ -> pos
 
 deriving instance Functor (TypedSelector i o)
 
