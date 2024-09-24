@@ -36,7 +36,6 @@ library
       Focus.Parser
       Focus.Prelude
       Focus.Tagged
-      Focus.Typechecked
       Focus.Typechecker
       Focus.Typechecker.Types
       Focus.Types

@@ -11,13 +11,12 @@ module Focus.Types
     Focusable,
     FocusM (..),
     SelectorError (..),
-    TypedSelector (..),
     ShellMode (..),
     Typ,
     UVar,
-    SomeTypedSelector (..),
     ChunkType (..),
     ChunkTypeT (..),
+    TypeErrorReport,
   )
 where
 
@@ -28,10 +27,14 @@ import Control.Monad.Fix (MonadFix (..))
 import Control.Monad.RWS.CPS (MonadReader (..))
 import Control.Monad.Reader (ReaderT)
 import Control.Monad.State.Lazy
+import Control.Unification (UTerm, Unifiable)
+import Control.Unification.STVar qualified as Unify
+import Control.Unification.Types (Unifiable (..))
 import Data.Text (Text)
+import Error.Diagnose qualified as D
 import Focus.Command (CommandT (..))
 import Focus.Prelude
-import Focus.Typechecked
+import Focus.Tagged (Tagged (..))
 import Focus.Untyped
 import Prelude hiding (reads)
 
@@ -47,3 +50,38 @@ type Focusable m = (MonadReader Bindings m, MonadIO m, MonadFix m, MonadError Se
 data Focus (cmd :: CommandT) i o where
   ViewFocus :: (forall m. (Focusable m) => (o -> m ()) -> i -> m ()) -> Focus 'ViewT i o
   ModifyFocus :: (forall m. (Focusable m) => LensLike' m i o) -> Focus 'ModifyT i o
+
+type UVar s = Unify.STVar s (ChunkTypeT D.Position)
+
+type Typ s = UTerm (ChunkTypeT D.Position) (UVar s)
+
+data ChunkTypeT a r
+  = Arrow a r r
+  | TextTypeT a
+  | ListTypeT a r
+  | NumberTypeT a
+  | RegexMatchTypeT a
+  deriving stock (Show, Eq, Functor, Foldable, Traversable)
+
+instance Unifiable (ChunkTypeT a) where
+  zipMatch = \cases
+    (Arrow pos x y) (Arrow _ x' y') -> Just (Arrow pos (Right (x, x')) (Right (y, y')))
+    (TextTypeT pos) TextTypeT {} -> Just (TextTypeT pos)
+    (ListTypeT pos x) (ListTypeT _ y) -> Just (ListTypeT pos $ Right (x, y))
+    (NumberTypeT pos) NumberTypeT {} -> Just $ NumberTypeT pos
+    (RegexMatchTypeT pos) RegexMatchTypeT {} -> Just $ RegexMatchTypeT pos
+    TextTypeT {} _ -> Nothing
+    ListTypeT {} _ -> Nothing
+    NumberTypeT {} _ -> Nothing
+    RegexMatchTypeT {} _ -> Nothing
+    Arrow {} _ -> Nothing
+
+instance Tagged (ChunkTypeT a r) a where
+  tag = \case
+    Arrow pos _ _ -> pos
+    TextTypeT pos -> pos
+    ListTypeT pos _ -> pos
+    NumberTypeT pos -> pos
+    RegexMatchTypeT pos -> pos
+
+type TypeErrorReport = D.Report Text

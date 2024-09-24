@@ -2,9 +2,7 @@
 {-# LANGUAGE PolyKinds #-}
 
 module Focus.Typechecker.Types
-  ( TypedSelector (..),
-    SomeTypedSelector (..),
-    Chunk (..),
+  ( Chunk (..),
     ChunkType (..),
     renderType,
     ChunkTypeT (..),

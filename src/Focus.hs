@@ -150,5 +150,5 @@ run = do
           debugM "Selector" ast
           case typecheckSelector ast of
             Left errReport -> failWithReport errReport
-            Right (SomeTypedSelector typedSelector) -> do
-              pure $ compileSelector cmdF typedSelector
+            Right () -> do
+              pure $ compileSelector cmdF ast

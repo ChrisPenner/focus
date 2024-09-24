@@ -17,13 +17,9 @@ import Focus.Prelude
 import Focus.Tagged (Tagged (..))
 import Focus.Typechecker.Types (renderType)
 import Focus.Typechecker.Types qualified as T
-import Focus.Typechecker.Types qualified as Typechecked
 import Focus.Types
 import Focus.Untyped (BindingName (..), BindingString (..))
 import Focus.Untyped qualified as UT
-import Unsafe.Coerce (unsafeCoerce)
-
-type TypeErrorReport = D.Report Text
 
 unificationErrorReport :: TypecheckFailure s -> D.Report Text
 unificationErrorReport = \case
@@ -102,113 +98,76 @@ getOrInitBinding name = do
       put $ M.insert name v bindings
       pure v
 
-typecheckSelector :: UT.TaggedSelector -> Either TypeErrorReport (SomeTypedSelector D.Position)
+typecheckSelector :: UT.TaggedSelector -> Either TypeErrorReport ()
 typecheckSelector t =
-  fmap snd $ Unify.runSTBinding $ runExceptT $ flip evalStateT mempty $ runUnification t
+  void $ Unify.runSTBinding $ runExceptT $ flip evalStateT mempty $ runUnification t
   where
-    runUnification :: forall s. UT.TaggedSelector -> UnifyME TypeErrorReport s (Fix (ChunkTypeT D.Position), SomeTypedSelector D.Position)
+    runUnification :: forall s. UT.TaggedSelector -> UnifyME TypeErrorReport s (Fix (ChunkTypeT D.Position))
     runUnification taggedSelector = mapStateT (withExceptT unificationErrorReport) $ do
-      (typ, typedSelector) <- go taggedSelector
+      typ <- go taggedSelector
       trm <- liftUnify $ Unify.applyBindings (UTerm typ)
       case Unify.freeze trm of
         Nothing -> pure $ error "Freeze failed"
-        Just r -> pure (r, typedSelector)
+        Just r -> pure r
 
-    go :: UT.TaggedSelector -> UnifyM s (ChunkTypeT D.Position (Typ s), SomeTypedSelector D.Position)
+    go :: UT.TaggedSelector -> UnifyM s (ChunkTypeT D.Position (Typ s))
     go = \case
       UT.Compose _pos (s NE.:| rest) -> do
         s' <- go s
         foldlM compose s' rest
-      UT.SplitFields pos delim -> do
-        let typ = T.Arrow pos (T.textType pos) (T.textType pos)
-        let ts = SomeTypedSelector $ Typechecked.SplitFields pos delim
-        pure (typ, ts)
+      UT.SplitFields pos _delim -> pure $ T.Arrow pos (T.textType pos) (T.textType pos)
       UT.SplitLines pos -> do
         let typ = T.Arrow pos (T.textType pos) (T.textType pos)
-        let ts = SomeTypedSelector $ Typechecked.SplitLines pos
-        pure (typ, ts)
+        pure (typ)
       UT.SplitWords pos -> do
         let typ = T.Arrow pos (T.textType pos) (T.textType pos)
-        let ts = SomeTypedSelector $ Typechecked.SplitWords pos
-        pure (typ, ts)
-      UT.Regex pos regex bindings -> do
+        pure (typ)
+      UT.Regex pos _regex bindings -> do
         declareBindings bindings
-        let typ = T.Arrow pos (T.textType pos) (T.textType pos)
-        let ts = SomeTypedSelector $ Typechecked.Regex pos regex
-        pure (typ, ts)
-      UT.RegexMatches pos -> do
-        let typ = T.Arrow pos (T.regexMatchType pos) (T.textType pos)
-        let ts = SomeTypedSelector $ Typechecked.RegexMatches pos
-        pure (typ, ts)
-      UT.RegexGroups pos pat bindings -> do
+        pure $ T.Arrow pos (T.textType pos) (T.textType pos)
+      UT.RegexMatches pos -> pure $ T.Arrow pos (T.regexMatchType pos) (T.textType pos)
+      UT.RegexGroups pos _pat bindings -> do
         declareBindings bindings
-        let typ = T.Arrow pos (T.textType pos) (T.textType pos)
-        let ts = SomeTypedSelector $ Typechecked.RegexGroups pos pat
-        pure (typ, ts)
+        pure $ T.Arrow pos (T.textType pos) (T.textType pos)
       UT.ListOf pos inner -> do
-        (innerTyp, innerTS) <- go inner
+        (innerTyp) <- go inner
         case innerTyp of
           T.Arrow _ inp out -> do
-            let typ = T.Arrow pos inp (T.listType pos out)
-            case innerTS of
-              SomeTypedSelector inner' -> do
-                pure $ (typ, SomeTypedSelector $ Typechecked.ListOf pos inner')
+            pure $ T.Arrow pos inp (T.listType pos out)
           _ -> error "ListOf: Expected Arrow"
-      UT.FilterBy pos inner -> do
-        (innerTyp, innerTS) <- go inner
-        case innerTS of
-          SomeTypedSelector inner' -> do
-            pure $ (innerTyp, SomeTypedSelector $ Typechecked.FilterBy pos inner')
+      UT.FilterBy _pos inner -> go inner
       UT.Splat pos -> do
         inp <- freshVar
-        let typ = T.Arrow pos (T.listType pos inp) inp
-        let ts = SomeTypedSelector $ Typechecked.Splat pos
-        pure (typ, ts)
+        pure $ T.Arrow pos (T.listType pos inp) inp
       UT.Shell pos script shellMode -> do
         unifyBindingString script
         inp <- case shellMode of
           Normal -> pure $ T.textType pos
           NullStdin -> freshVar
-        let typ = T.Arrow pos inp (T.textType pos)
-            ts = SomeTypedSelector $ Typechecked.Shell pos script shellMode
-         in pure (typ, ts)
-      UT.At pos n -> do
+        pure $ T.Arrow pos inp (T.textType pos)
+      UT.At pos _n -> do
         inp <- freshVar
-        let typ = T.Arrow pos (T.listType pos inp) inp
-        let ts = SomeTypedSelector $ Typechecked.At pos n
-        pure (typ, ts)
-      UT.Take pos n inner -> do
-        (innerTyp, SomeTypedSelector innerTS) <- go inner
-        pure (innerTyp, SomeTypedSelector $ Typechecked.Take pos n innerTS)
-      UT.TakeEnd pos n inner -> do
-        (innerTyp, SomeTypedSelector innerTS) <- go inner
-        pure (innerTyp, SomeTypedSelector $ Typechecked.TakeEnd pos n innerTS)
-      UT.Drop pos n inner -> do
-        (innerTyp, SomeTypedSelector innerTS) <- go inner
-        pure (innerTyp, SomeTypedSelector $ Typechecked.Drop pos n innerTS)
-      UT.DropEnd pos n inner -> do
-        (innerTyp, SomeTypedSelector innerTS) <- go inner
-        pure (innerTyp, SomeTypedSelector $ Typechecked.DropEnd pos n innerTS)
+        pure $ T.Arrow pos (T.listType pos inp) inp
+      UT.Take _pos _n inner -> do go inner
+      UT.TakeEnd _pos _n inner -> do go inner
+      UT.Drop _pos _n inner -> do go inner
+      UT.DropEnd _pos _n inner -> do go inner
 
     compose ::
       forall s.
-      (ChunkTypeT Diagnose.Position (Typ s), SomeTypedSelector Diagnose.Position) ->
+      (ChunkTypeT Diagnose.Position (Typ s)) ->
       UT.TaggedSelector ->
-      UnifyM s (ChunkTypeT Diagnose.Position (Typ s), SomeTypedSelector Diagnose.Position)
+      UnifyM s (ChunkTypeT Diagnose.Position (Typ s))
     compose l rTagged = do
       case l of
-        (T.Arrow lpos li lm, lTS) -> do
+        (T.Arrow lpos li lm) -> do
           go rTagged >>= \case
-            (T.Arrow rpos rm ro, rTS) -> do
+            (T.Arrow rpos rm ro) -> do
               _ <- liftUnify $ Unify.unify lm rm
               let typ = T.Arrow (lpos <> rpos) li ro
-              pure (typ, coerceCompose lTS rTS)
+              pure typ
             _ -> error "Expected Arrow type in compose"
         _ -> error "Expected Arrow type in compose"
-    -- Use unsafeCoerce in this one place so we can be typesafe everywhere else.
-    -- This is safe because we'll just fail typechecking if the types don't match.
-    coerceCompose :: SomeTypedSelector Diagnose.Position -> SomeTypedSelector Diagnose.Position -> SomeTypedSelector Diagnose.Position
-    coerceCompose (SomeTypedSelector l) (SomeTypedSelector r) = SomeTypedSelector $ Typechecked.Compose (tag l <> tag r) l (unsafeCoerce r)
 
 unifyBindingString :: BindingString -> UnifyM s ()
 unifyBindingString (BindingString bindings) = do
