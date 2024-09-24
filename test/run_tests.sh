@@ -99,8 +99,8 @@ echo "one,two,three" | run drop_end_view view 'dropEnd 1 (splitOn ",")'
 echo "one,two,three" | run drop_end_modify modify 'dropEnd 1 (splitOn ",")' '{rev}'
 
 # Contains
-echo "one,two,three" | run contains_view view 'splitOn "," | filter contains "two"'
-echo "one,two,three" | run contains_modify modify 'splitOn "," | filter contains "two"' '{rev}'
+echo "one,two,three" | run contains_view view 'splitOn "," | filter (contains "two")'
+echo "one,two,three" | run contains_modify modify 'splitOn "," | filter (contains "two")' '{rev}'
 
 # Not
 echo "one,two,three" | run not_view view 'splitOn "," | filter (not (contains "two"))'

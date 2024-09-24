@@ -17,6 +17,9 @@ module Focus.Untyped
     _ListChunk,
     _NumberChunk,
     _RegexMatchChunk,
+    Expr (..),
+    TaggedExpr,
+    NumberT (..),
   )
 where
 
@@ -120,5 +123,19 @@ data ChunkType
   | NumberType
   | RegexMatchType
   deriving (Show, Eq)
+
+type TaggedExpr = Expr Pos
+
+data Expr a
+  = Pipeline a (Expr a) (Selector a)
+  | Binding a BindingName
+  | Str a BindingString
+  | Number a (NumberT)
+  deriving stock (Show, Functor, Foldable, Traversable)
+
+data NumberT
+  = IntNumber Int
+  | DoubleNumber Double
+  deriving stock (Show, Eq)
 
 makePrisms ''Chunk

@@ -16,7 +16,7 @@ import Focus.Command (Command (..), CommandF (..), IsCmd)
 import Focus.Compile (compileSelector)
 import Focus.Debug (debugM)
 import Focus.Exec qualified as Exec
-import Focus.Parser (parseScript)
+import Focus.Parser (parseSelector)
 import Focus.Prelude
 import Focus.Typechecker (typecheckSelector)
 import Focus.Types
@@ -142,7 +142,7 @@ run = do
 
     getFocus :: (IsCmd cmd) => Text -> CommandF cmd -> Text -> CliM (Focus cmd Chunk Chunk)
     getFocus srcName cmdF script = do
-      case parseScript srcName script of
+      case parseSelector srcName script of
         Left errDiagnostic -> do
           style <- diagnoseStyle
           Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style errDiagnostic

@@ -1,6 +1,6 @@
 {-# LANGUAGE TupleSections #-}
 
-module Focus.Parser (parseScript) where
+module Focus.Parser (parseSelector, parseExpr) where
 
 import Control.Monad
 import Data.Bifunctor (Bifunctor (..))
@@ -45,15 +45,21 @@ withPos p = do
   let pos = Diagnose.Position (M.unPos startLine, M.unPos startCol) (M.unPos (M.sourceLine end), M.unPos (M.sourceColumn end)) sourceName
   pure $ f pos
 
-parseScript :: Text -> Text -> Either (Diagnostic Text) TaggedSelector
-parseScript srcName src =
+parseSelector :: Text -> Text -> Either (Diagnostic Text) TaggedSelector
+parseSelector srcName src = parseThing scriptP "Invalid selector" srcName src
+
+parseExpr :: Text -> Text -> Either (Diagnostic Text) TaggedExpr
+parseExpr srcName src = parseThing exprP "Invalid expression" srcName src
+
+parseThing :: P a -> Text -> Text -> Text -> Either (Diagnostic Text) a
+parseThing parser err srcName src =
   let strSource = Text.unpack src
       strSourceName = Text.unpack srcName
-   in M.parse (M.space *> scriptP <* M.eof) strSourceName strSource
+   in M.parse (M.space *> parser <* M.eof) strSourceName strSource
         & first
           ( \bundle ->
               bundle
-                & errorDiagnosticFromBundle Nothing "Invalid selector" Nothing
+                & errorDiagnosticFromBundle Nothing err Nothing
                 & \d -> Diagnose.addFile d strSourceName strSource
           )
 
@@ -118,19 +124,23 @@ shellP = withPos do
       Just _ -> pure NullStdin
       Nothing -> pure Normal
   M.between (lexeme $ M.char '{') (lexeme $ M.char '}') $ do
-    script <- many do
-      M.choice
-        [ Left <$> withPos ((,) <$> bindingP),
-          Right . Text.pack
-            <$> some (escaped <|> M.noneOf ("%}" :: String))
-        ]
-    pure \pos -> Shell pos (BindingString script) shellMode
+    script <- bindingStringP
+    pure $ \pos -> Shell pos script shellMode
+
+bindingStringP :: P BindingString
+bindingStringP = do
+  BindingString <$> many do
+    M.choice
+      [ Left <$> withPos ((,) <$> strBindingP),
+        Right . Text.pack
+          <$> some (escaped <|> M.noneOf ("%}" :: String))
+      ]
   where
     -- Escape bindings
     escaped = M.string "\\%" $> '%'
 
-bindingP :: P BindingName
-bindingP = M.try do
+strBindingP :: P BindingName
+strBindingP = M.try do
   M.between (lexeme (M.string "%{")) (M.char '}') $
     do
       (BindingName . Text.pack <$> lexeme (M.some M.alphaNumChar))
@@ -138,7 +148,13 @@ bindingP = M.try do
 
 groupedP :: P TaggedSelector
 groupedP = do
-  shellP <|> listOfP <|> regexP <|> M.between (lexeme (M.char '(')) (lexeme (M.char ')')) selectorsP <|> simpleSelectorP
+  shellP <|> listOfP <|> regexP <|> bracketedP selectorsP <|> bracketedP simpleSelectorP
+
+bracketedP :: P a -> P a
+bracketedP p = M.between (lexeme (M.char '(')) (lexeme (M.char ')')) p
+
+mayBracketedP :: P a -> P a
+mayBracketedP p = bracketedP p <|> p
 
 selectorP :: P TaggedSelector
 selectorP = shellP <|> listOfP <|> regexP <|> groupedP <|> simpleSelectorP
@@ -201,3 +217,37 @@ simpleSelectorP = withPos do
       selector <- selectorP
       pure $ \pos -> Not pos selector
     _ -> error "impossible"
+
+numberP :: P NumberT
+numberP = lexeme $ do
+  M.choice
+    [ fmap DoubleNumber . M.try $ L.signed (pure ()) L.float,
+      fmap IntNumber . M.try $ L.signed (pure ()) L.decimal
+    ]
+
+bareBindingP :: P BindingName
+bareBindingP =
+  lexeme do
+    (BindingName . Text.pack <$> lexeme (M.some M.alphaNumChar))
+    <|> (M.string "." $> InputBinding)
+
+exprP :: P TaggedExpr
+exprP = mayBracketedP $ withPos do
+  e <- basicExprP
+  pipe <- optional do
+    separatorP
+    selectorP
+  case pipe of
+    Just s -> do
+      pure $ \pos -> Pipeline pos e s
+    Nothing -> do
+      pure \_ -> e
+
+basicExprP :: P TaggedExpr
+basicExprP = mayBracketedP $ withPos do
+  M.choice
+    [ flip Number <$> numberP,
+      flip Binding
+        <$> bareBindingP,
+      flip Str <$> bindingStringP
+    ]
