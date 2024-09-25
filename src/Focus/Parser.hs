@@ -46,9 +46,11 @@ withPos p = do
   pure $ f pos
 
 parseSelector :: Text -> Text -> Either (Diagnostic Text) (Selector expr Pos)
-parseSelector srcName src = parseThing scriptP "Invalid selector" srcName src
+parseSelector srcName src = parseThing (scriptP noExprP) "Invalid selector" srcName src
+  where
+    noExprP = exprP *> fail "Expressions are not valid where a selector was expected."
 
-parseExpr :: Text -> Text -> Either (Diagnostic Text) TaggedExpr
+parseExpr :: Text -> Text -> Either (Diagnostic Text) (Selector Expr Pos)
 parseExpr srcName src = parseThing exprP "Invalid expression" srcName src
 
 parseThing :: P a -> Text -> Text -> Text -> Either (Diagnostic Text) a
@@ -63,12 +65,12 @@ parseThing parser err srcName src =
                 & \d -> Diagnose.addFile d strSourceName strSource
           )
 
-scriptP :: P (Selector expr Pos)
-scriptP = selectorsP
+scriptP :: (P (expr Pos)) -> P (Selector expr Pos)
+scriptP expr = selectorsP expr
 
-selectorsP :: P (Selector expr Pos)
-selectorsP = withPos do
-  M.sepBy1 selectorP separatorP
+selectorsP :: P (expr Pos) -> P (Selector expr Pos)
+selectorsP expr = withPos do
+  M.sepBy1 (selectorP expr) separatorP
     <&> \r pos -> Compose pos . NE.fromList $ r
 
 lexeme :: P a -> P a
@@ -112,10 +114,10 @@ reGroupsP :: P (D.Position -> (Selector expr Pos))
 reGroupsP = do
   regexLiteralP <&> \(_pos, re, bindings) -> \pos -> RegexGroups pos re bindings
 
-listOfP :: P (Selector expr Pos)
-listOfP = withPos do
+listOfP :: P (expr Pos) -> P (Selector expr Pos)
+listOfP expr = withPos do
   M.between (lexeme $ M.char '[') (lexeme $ M.char ']') $ do
-    flip ListOf <$> selectorsP
+    flip ListOf <$> selectorsP expr
 
 shellP :: P (Selector expr Pos)
 shellP = withPos do
@@ -146,9 +148,9 @@ strBindingP = M.try do
       (BindingName . Text.pack <$> lexeme (M.some M.alphaNumChar))
       <|> (M.string "." $> InputBinding)
 
-groupedP :: P (Selector expr Pos)
-groupedP = do
-  shellP <|> listOfP <|> regexP <|> bracketedP selectorsP <|> bracketedP simpleSelectorP
+groupedP :: P (expr Pos) -> P (Selector expr Pos)
+groupedP expr = do
+  shellP <|> listOfP expr <|> regexP <|> bracketedP (selectorsP expr) <|> bracketedP (simpleSelectorP expr)
 
 bracketedP :: P a -> P a
 bracketedP p = M.between (lexeme (M.char '(')) (lexeme (M.char ')')) p
@@ -156,11 +158,14 @@ bracketedP p = M.between (lexeme (M.char '(')) (lexeme (M.char ')')) p
 mayBracketedP :: P a -> P a
 mayBracketedP p = bracketedP p <|> p
 
-selectorP :: P (Selector expr Pos)
-selectorP = shellP <|> listOfP <|> regexP <|> groupedP <|> simpleSelectorP
+selectorP :: P (expr Pos) -> P (Selector expr Pos)
+selectorP expr = shellP <|> listOfP expr <|> regexP <|> groupedP expr <|> simpleSelectorP expr <|> evalP expr
 
-simpleSelectorP :: P (Selector expr Pos)
-simpleSelectorP = withPos do
+evalP :: P (expr Pos) -> P (Selector expr Pos)
+evalP expr = withPos do flip Eval <$> expr
+
+simpleSelectorP :: P (expr Pos) -> P (Selector expr Pos)
+simpleSelectorP expr = withPos do
   name <-
     lexeme
       ( M.choice
@@ -191,30 +196,30 @@ simpleSelectorP = withPos do
     "groups" -> do
       reGroupsP
     "filter" -> do
-      flip Filter <$> groupedP
+      flip Filter <$> groupedP expr
     "..." -> do
       pure Splat
     "take" -> do
       n <- lexeme L.decimal
-      selector <- groupedP
+      selector <- groupedP expr
       pure $ \pos -> Take pos n selector
     "drop" -> do
       n <- lexeme L.decimal
-      selector <- groupedP
+      selector <- groupedP expr
       pure $ \pos -> Drop pos n selector
     "takeEnd" -> do
       n <- lexeme L.decimal
-      selector <- groupedP
+      selector <- groupedP expr
       pure $ \pos -> TakeEnd pos n selector
     "dropEnd" -> do
       n <- lexeme L.decimal
-      selector <- groupedP
+      selector <- groupedP expr
       pure $ \pos -> DropEnd pos n selector
     "contains" -> do
       str <- strP
       pure $ \pos -> Contains pos str
     "not" -> do
-      selector <- selectorP
+      selector <- selectorP expr
       pure $ \pos -> Not pos selector
     _ -> error "impossible"
 
@@ -231,17 +236,8 @@ bareBindingP =
     (BindingName . Text.pack <$> lexeme (M.some M.alphaNumChar))
     <|> (M.string "." $> InputBinding)
 
-exprP :: P TaggedExpr
-exprP = mayBracketedP $ withPos do
-  e <- basicExprP
-  pipe <- optional do
-    separatorP
-    selectorP
-  case pipe of
-    Just s -> do
-      pure $ \pos -> Pipeline pos e s
-    Nothing -> do
-      pure \_ -> e
+exprP :: P (Selector Expr Pos)
+exprP = selectorP basicExprP
 
 basicExprP :: P TaggedExpr
 basicExprP = mayBracketedP $ withPos do

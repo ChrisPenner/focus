@@ -164,4 +164,4 @@ run = do
           case typecheckExpr expr of
             Left errReport -> failWithReport errReport
             Right () -> do
-              pure $ compileExpr cmdF expr
+              pure $ compileSelector (compileExpr cmdF) cmdF expr

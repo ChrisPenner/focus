@@ -140,8 +140,7 @@ data ChunkType
 type TaggedExpr = Expr Pos
 
 data Expr a
-  = Pipeline a (Expr a) (Selector Expr a)
-  | Binding a BindingName
+  = Binding a BindingName
   | Str a BindingString
   | Number a (NumberT)
   deriving stock (Show, Functor, Foldable, Traversable)

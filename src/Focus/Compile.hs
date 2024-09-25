@@ -39,10 +39,6 @@ import Prelude hiding (reads)
 
 compileExpr :: forall cmd. (IsCmd cmd) => CommandF cmd -> TaggedExpr -> Focus cmd Chunk Chunk
 compileExpr cmdF = \case
-  Pipeline _pos expr selector -> do
-    let goExpr :: TaggedExpr -> Focus cmd Chunk Chunk
-        goExpr = compileExpr cmdF
-    compileExpr cmdF expr >.> compileSelector goExpr cmdF selector
   Binding pos bindingName -> do
     case cmdF of
       ViewF -> ViewFocus \f inp -> do

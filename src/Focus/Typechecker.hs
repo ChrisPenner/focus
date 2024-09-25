@@ -120,8 +120,8 @@ expectBinding pos name = do
 typecheckSelector :: UT.TaggedSelector -> Either TypeErrorReport ()
 typecheckSelector = typecheckThing (unifySelector absurdF)
 
-typecheckExpr :: UT.TaggedExpr -> Either TypeErrorReport ()
-typecheckExpr = typecheckThing unifyExpr
+typecheckExpr :: UT.Selector Expr D.Position -> Either TypeErrorReport ()
+typecheckExpr = typecheckThing (unifySelector unifyExpr)
 
 typecheckThing :: forall thing. (forall s. thing -> UnifyME (TypecheckFailure s) s (ChunkTypeT D.Position (Typ s))) -> thing -> Either TypeErrorReport ()
 typecheckThing typechecker t =
@@ -155,11 +155,8 @@ unifySelector goExpr = \case
     declareBindings bindings
     pure $ T.Arrow pos (T.textType pos) (T.textType pos)
   UT.ListOf pos inner -> do
-    innerTyp <- unifySelector goExpr inner
-    case innerTyp of
-      T.Arrow _ inp out -> do
-        pure $ T.Arrow pos inp (T.listType pos out)
-      _ -> error "ListOf: Expected Arrow"
+    (_pos, inp, out) <- unifySelector goExpr inner >>= expectArr
+    pure $ T.Arrow pos inp (T.listType pos out)
   UT.Filter _pos inner -> unifySelector goExpr inner
   UT.Not _pos inner -> unifySelector goExpr inner
   UT.Splat pos -> do
@@ -188,23 +185,13 @@ unifySelector goExpr = \case
       UT.Selector expr Diagnose.Position ->
       UnifyM s (ChunkTypeT Diagnose.Position (Typ s))
     compose l rTagged = do
-      case l of
-        (T.Arrow lpos li lm) -> do
-          unifySelector goExpr rTagged >>= \case
-            (T.Arrow rpos rm ro) -> do
-              _ <- liftUnify $ Unify.unify lm rm
-              let typ = T.Arrow (lpos <> rpos) li ro
-              pure typ
-            _ -> error "Expected Arrow type in compose"
-        _ -> error "Expected Arrow type in compose"
+      (lpos, li, lm) <- expectArr l
+      (rpos, rm, ro) <- unifySelector goExpr rTagged >>= expectArr
+      _ <- liftUnify $ Unify.unify lm rm
+      pure $ T.Arrow (lpos <> rpos) li ro
 
 unifyExpr :: UT.TaggedExpr -> UnifyME (TypecheckFailure s) s (ChunkTypeT D.Position (Typ s))
 unifyExpr = \case
-  Pipeline pos expr selector -> do
-    (inputTyp, midTypL) <- unifyExpr expr >>= expectArr
-    (midTypR, outTyp) <- unifySelector unifyExpr selector >>= expectArr
-    _ <- liftUnify $ Unify.unify midTypL midTypR
-    pure $ T.Arrow pos inputTyp outTyp
   Binding pos InputBinding -> do
     inputTyp <- freshVar
     pure $ T.Arrow pos inputTyp inputTyp
@@ -221,10 +208,10 @@ unifyExpr = \case
     inputTyp <- freshVar
     pure $ T.Arrow pos inputTyp (T.numberType pos)
 
-expectArr :: (HasCallStack) => ChunkTypeT pos (Typ s) -> UnifyM s (Typ s, Typ s)
+expectArr :: (HasCallStack) => ChunkTypeT pos (Typ s) -> UnifyM s (pos, Typ s, Typ s)
 expectArr typ = do
   case typ of
-    (T.Arrow _ a b) -> pure (a, b)
+    (T.Arrow pos a b) -> pure (pos, a, b)
     _ -> error "Expected Arrow type"
 
 unifyBindingString :: Typ s -> BindingString -> UnifyM s ()
