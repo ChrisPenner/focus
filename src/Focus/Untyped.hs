@@ -1,3 +1,5 @@
+{-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE EmptyDataDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -20,11 +22,14 @@ module Focus.Untyped
     Expr (..),
     TaggedExpr,
     NumberT (..),
+    VoidF,
+    absurdF,
   )
 where
 
 import Control.Lens
 import Control.Lens.Regex.Text qualified as Re
+import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import Data.Text (Text)
@@ -34,7 +39,13 @@ import Text.Regex.PCRE.Heavy (Regex)
 
 type Pos = D.Position
 
-type TaggedSelector = Selector Pos
+data VoidF a
+  deriving stock (Show, Eq, Ord, Functor, Foldable, Traversable)
+
+absurdF :: VoidF a -> b
+absurdF = \case {}
+
+type TaggedSelector = Selector VoidF Pos
 
 data BindingName
   = BindingName Text
@@ -62,28 +73,29 @@ data ShellMode
   | NullStdin
   deriving stock (Show)
 
-data Selector a
-  = Compose a (NonEmpty (Selector a))
+data Selector (expr :: Type -> Type) a
+  = Compose a (NonEmpty (Selector expr a))
   | SplitFields a Text {- delimeter -}
   | SplitLines a
   | SplitWords a
   | Regex a Regex BindingDeclarations
   | RegexMatches a
   | RegexGroups a Regex BindingDeclarations
-  | ListOf a (Selector a)
-  | Filter a (Selector a)
-  | Not a (Selector a)
+  | ListOf a (Selector expr a)
+  | Filter a (Selector expr a)
+  | Not a (Selector expr a)
   | Splat a
   | Shell a BindingString ShellMode
   | At a Int
-  | Take a Int (Selector a)
-  | TakeEnd a Int (Selector a)
-  | Drop a Int (Selector a)
-  | DropEnd a Int (Selector a)
+  | Take a Int (Selector expr a)
+  | TakeEnd a Int (Selector expr a)
+  | Drop a Int (Selector expr a)
+  | DropEnd a Int (Selector expr a)
   | Contains a Text
+  | Eval a (expr a)
   deriving stock (Show, Functor, Foldable, Traversable)
 
-instance Tagged (Selector a) a where
+instance Tagged (Selector expr a) a where
   tag = \case
     Compose a _ -> a
     SplitFields a _ -> a
@@ -103,6 +115,7 @@ instance Tagged (Selector a) a where
     Drop a _ _ -> a
     DropEnd a _ _ -> a
     Contains a _ -> a
+    Eval a _ -> a
 
 data Chunk
   = TextChunk Text
@@ -127,7 +140,7 @@ data ChunkType
 type TaggedExpr = Expr Pos
 
 data Expr a
-  = Pipeline a (Expr a) (Selector a)
+  = Pipeline a (Expr a) (Selector Expr a)
   | Binding a BindingName
   | Str a BindingString
   | Number a (NumberT)

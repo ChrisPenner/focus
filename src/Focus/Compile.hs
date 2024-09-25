@@ -6,6 +6,7 @@
 
 module Focus.Compile
   ( compileSelector,
+    compileExpr,
     Focus (..),
     FocusM (..),
     textChunk,
@@ -25,6 +26,7 @@ import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
+import Error.Diagnose qualified as D
 import Focus.Command (CommandF (..), CommandT (..), IsCmd)
 import Focus.Focus
 import Focus.Prelude
@@ -35,9 +37,16 @@ import UnliftIO qualified
 import UnliftIO.Process qualified as UnliftIO
 import Prelude hiding (reads)
 
-compileSelector :: forall cmd. (IsCmd cmd) => CommandF cmd -> TaggedSelector -> Focus cmd Chunk Chunk
-compileSelector cmdF = \case
-  Compose _ xs -> foldr1 (>.>) (compileSelector cmdF <$> xs)
+compileExpr :: forall cmd. (IsCmd cmd) => CommandF cmd -> TaggedExpr -> Focus cmd Chunk Chunk
+compileExpr cmdF = \case
+  Pipeline pos expr selector -> _
+  Binding pos bindingName -> _
+  Str pos bindingStr -> _
+  Number pos num -> _
+
+compileSelector :: forall cmd expr. (IsCmd cmd) => (expr D.Position -> Focus cmd Chunk Chunk) -> CommandF cmd -> Selector expr D.Position -> Focus cmd Chunk Chunk
+compileSelector goExpr cmdF = \case
+  Compose _ xs -> foldr1 (>.>) (compileSelector goExpr cmdF <$> xs)
   SplitFields _ delim -> underText $ liftTrav (\f txt -> (Text.intercalate delim) <$> traverse f (Text.splitOn delim txt))
   SplitLines _ -> underText $ liftTrav (\f txt -> Text.unlines <$> traverse f (Text.lines txt))
   SplitWords _ -> underText $ liftTrav $ (\f txt -> Text.unwords <$> traverse f (Text.words txt))
@@ -52,10 +61,10 @@ compileSelector cmdF = \case
       ViewF -> viewRegex pat \f match -> do traverse_ (f . TextChunk) (match ^.. RE.groups . traversed)
       ModifyF -> do modifyRegex pat (RE.groups . traverse)
   ListOf _ selector -> do
-    listOfFocus (compileSelector cmdF selector) >.> liftTrav (from asListI)
+    listOfFocus (compileSelector goExpr cmdF selector) >.> liftTrav (from asListI)
   Filter _ selector -> do
     let inner :: Focus cmd Chunk Chunk
-        inner = compileSelector cmdF selector
+        inner = compileSelector goExpr cmdF selector
     case cmdF of
       ViewF -> do
         ViewFocus $ \f chunk -> do
@@ -68,7 +77,7 @@ compileSelector cmdF = \case
           False -> pure chunk
   Not _ selector -> do
     let inner :: Focus cmd Chunk Chunk
-        inner = compileSelector cmdF selector
+        inner = compileSelector goExpr cmdF selector
     case cmdF of
       ViewF -> do
         ViewFocus $ \f chunk -> do
@@ -120,13 +129,13 @@ compileSelector cmdF = \case
         & ix n %%~ f
         <&> ListChunk
   Take _ n selector ->
-    listOfFocus (compileSelector cmdF selector) >.> liftTrav (taking n traversed)
+    listOfFocus (compileSelector goExpr cmdF selector) >.> liftTrav (taking n traversed)
   TakeEnd _ n selector -> do
-    listOfFocus (compileSelector cmdF selector) >.> liftTrav (takingEnd n)
+    listOfFocus (compileSelector goExpr cmdF selector) >.> liftTrav (takingEnd n)
   Drop _ n selector -> do
-    listOfFocus (compileSelector cmdF selector) >.> liftTrav (dropping n traversed)
+    listOfFocus (compileSelector goExpr cmdF selector) >.> liftTrav (dropping n traversed)
   DropEnd _ n selector -> do
-    listOfFocus (compileSelector cmdF selector) >.> liftTrav (droppingEnd n)
+    listOfFocus (compileSelector goExpr cmdF selector) >.> liftTrav (droppingEnd n)
   Contains _ needle -> do
     liftTrav $ \f chunk ->
       do
@@ -137,6 +146,7 @@ compileSelector cmdF = \case
           Left txt -> pure (TextChunk txt)
           Right txt -> f (TextChunk txt)
         & fmap (TextChunk . Text.concat . fmap textChunk)
+  Eval _ expr -> goExpr expr
   where
     hasMatches :: (Focusable m) => CommandF cmd -> Focus cmd i o -> i -> m Bool
     hasMatches cmd foc i = do

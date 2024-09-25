@@ -121,3 +121,4 @@ echo "one,two,three" | run not_modify modify 'splitOn "," | filter (not (contain
 # focus --full view '/```focus\n((.|\s)*?)\n```/ | drop 1 (dropEnd 1 lines) | filter (not (contains "Result")) | -{ echo %{.} }' README.md
 # focus --full view '"```focus\n_\n```" | drop 1 (dropEnd 1 lines) | filter (not (contains "Result")) | . + "\nOutput: " -{ echo %{.} }' README.md
 
+# focus --full view '"```focus\n_\n```" | drop 1 (dropEnd 1 lines) | filter (not (contains "Result")) | . + "\nOutput: " -{ echo %{.} }' README.md

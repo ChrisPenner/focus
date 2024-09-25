@@ -13,13 +13,13 @@ import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Focus.Cli (InPlace (..), Options (..), OutputLocation (..), UseColour (..), optionsP)
 import Focus.Command (Command (..), CommandF (..), IsCmd)
-import Focus.Compile (compileSelector)
-import Focus.Debug (debugM)
+import Focus.Compile (compileExpr, compileSelector)
 import Focus.Exec qualified as Exec
-import Focus.Parser (parseSelector)
+import Focus.Parser (parseExpr, parseSelector)
 import Focus.Prelude
-import Focus.Typechecker (typecheckSelector)
+import Focus.Typechecker (typecheckExpr, typecheckSelector)
 import Focus.Types
+import Focus.Untyped (absurdF)
 import Options.Applicative qualified as Opts
 import Prettyprinter.Render.Terminal (AnsiStyle)
 import System.Exit qualified as System
@@ -54,19 +54,19 @@ run = do
     case command of
       View script inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
         addSource "<selector>" script
-        focus <- getFocus "<selector>" ViewF script
+        focus <- getSelectorFocus "<selector>" ViewF script
         r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runView focus chunkSize inputHandle outputHandle
         handleError r
       Modify script m inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
         addSource "<selector>" script
-        focus <- getFocus "<selector>" ModifyF script
-        addSource "<modifier>" m
-        modifier <- getFocus "<modifier>" ModifyF m
+        focus <- getSelectorFocus "<selector>" ModifyF script
+        addSource "<expr>" m
+        modifier <- getExprFocus "<expr>" ModifyF m
         r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runModify focus modifier chunkSize inputHandle outputHandle
         handleError r
       Set script val inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
         addSource "<selector>" script
-        focus <- getFocus "<selector>" ModifyF script
+        focus <- getSelectorFocus "<selector>" ModifyF script
         r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runSet focus chunkSize inputHandle outputHandle val
         handleError r
   where
@@ -140,16 +140,28 @@ run = do
             withOutputHandle (either (Just . fst) (const Nothing) input) \outputHandle ->
               action (either snd id input) outputHandle
 
-    getFocus :: (IsCmd cmd) => Text -> CommandF cmd -> Text -> CliM (Focus cmd Chunk Chunk)
-    getFocus srcName cmdF script = do
+    getSelectorFocus :: (IsCmd cmd) => Text -> CommandF cmd -> Text -> CliM (Focus cmd Chunk Chunk)
+    getSelectorFocus srcName cmdF script = do
       case parseSelector srcName script of
         Left errDiagnostic -> do
           style <- diagnoseStyle
           Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style errDiagnostic
           liftIO $ System.exitFailure
         Right ast -> do
-          debugM "Selector" ast
           case typecheckSelector ast of
             Left errReport -> failWithReport errReport
             Right () -> do
-              pure $ compileSelector cmdF ast
+              pure $ compileSelector absurdF cmdF ast
+
+    getExprFocus :: (IsCmd cmd) => Text -> CommandF cmd -> Text -> CliM (Focus cmd Chunk Chunk)
+    getExprFocus srcName cmdF script = do
+      case parseExpr srcName script of
+        Left errDiagnostic -> do
+          style <- diagnoseStyle
+          Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style errDiagnostic
+          liftIO $ System.exitFailure
+        Right expr -> do
+          case typecheckExpr expr of
+            Left errReport -> failWithReport errReport
+            Right () -> do
+              pure $ compileExpr cmdF expr

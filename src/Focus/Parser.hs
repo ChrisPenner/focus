@@ -45,7 +45,7 @@ withPos p = do
   let pos = Diagnose.Position (M.unPos startLine, M.unPos startCol) (M.unPos (M.sourceLine end), M.unPos (M.sourceColumn end)) sourceName
   pure $ f pos
 
-parseSelector :: Text -> Text -> Either (Diagnostic Text) TaggedSelector
+parseSelector :: Text -> Text -> Either (Diagnostic Text) (Selector expr Pos)
 parseSelector srcName src = parseThing scriptP "Invalid selector" srcName src
 
 parseExpr :: Text -> Text -> Either (Diagnostic Text) TaggedExpr
@@ -63,10 +63,10 @@ parseThing parser err srcName src =
                 & \d -> Diagnose.addFile d strSourceName strSource
           )
 
-scriptP :: P TaggedSelector
+scriptP :: P (Selector expr Pos)
 scriptP = selectorsP
 
-selectorsP :: P TaggedSelector
+selectorsP :: P (Selector expr Pos)
 selectorsP = withPos do
   M.sepBy1 selectorP separatorP
     <&> \r pos -> Compose pos . NE.fromList $ r
@@ -87,7 +87,7 @@ strP =
   where
     escaped = M.char '\\' >> M.anySingle
 
-regexP :: P TaggedSelector
+regexP :: P (Selector expr Pos)
 regexP = do
   regexLiteralP <&> \(pos, re, bindings) -> Regex pos re bindings
 
@@ -108,16 +108,16 @@ regexLiteralP =
   where
     escaped = M.string "\\/" $> '/'
 
-reGroupsP :: P (D.Position -> TaggedSelector)
+reGroupsP :: P (D.Position -> (Selector expr Pos))
 reGroupsP = do
   regexLiteralP <&> \(_pos, re, bindings) -> \pos -> RegexGroups pos re bindings
 
-listOfP :: P TaggedSelector
+listOfP :: P (Selector expr Pos)
 listOfP = withPos do
   M.between (lexeme $ M.char '[') (lexeme $ M.char ']') $ do
     flip ListOf <$> selectorsP
 
-shellP :: P TaggedSelector
+shellP :: P (Selector expr Pos)
 shellP = withPos do
   shellMode <-
     optional (M.char '-') >>= \case
@@ -146,7 +146,7 @@ strBindingP = M.try do
       (BindingName . Text.pack <$> lexeme (M.some M.alphaNumChar))
       <|> (M.string "." $> InputBinding)
 
-groupedP :: P TaggedSelector
+groupedP :: P (Selector expr Pos)
 groupedP = do
   shellP <|> listOfP <|> regexP <|> bracketedP selectorsP <|> bracketedP simpleSelectorP
 
@@ -156,10 +156,10 @@ bracketedP p = M.between (lexeme (M.char '(')) (lexeme (M.char ')')) p
 mayBracketedP :: P a -> P a
 mayBracketedP p = bracketedP p <|> p
 
-selectorP :: P TaggedSelector
+selectorP :: P (Selector expr Pos)
 selectorP = shellP <|> listOfP <|> regexP <|> groupedP <|> simpleSelectorP
 
-simpleSelectorP :: P TaggedSelector
+simpleSelectorP :: P (Selector expr Pos)
 simpleSelectorP = withPos do
   name <-
     lexeme

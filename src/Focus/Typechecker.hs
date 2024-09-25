@@ -1,7 +1,11 @@
-module Focus.Typechecker (typecheckSelector) where
+module Focus.Typechecker
+  ( typecheckSelector,
+    typecheckExpr,
+  )
+where
 
 import Control.Lens
-import Control.Monad.Except (ExceptT, runExceptT, withExceptT)
+import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT, withExceptT)
 import Control.Monad.State (MonadState (..), StateT, evalStateT, mapStateT)
 import Control.Monad.Trans (lift)
 import Control.Unification qualified as Unify
@@ -18,8 +22,9 @@ import Focus.Tagged (Tagged (..))
 import Focus.Typechecker.Types (renderType)
 import Focus.Typechecker.Types qualified as T
 import Focus.Types
-import Focus.Untyped (BindingName (..), BindingString (..))
+import Focus.Untyped (BindingName (..), BindingString (..), Expr (..), absurdF)
 import Focus.Untyped qualified as UT
+import GHC.Stack (HasCallStack)
 
 unificationErrorReport :: TypecheckFailure s -> D.Report Text
 unificationErrorReport = \case
@@ -43,6 +48,12 @@ unificationErrorReport = \case
             (rPos, D.Where $ "but this selector expects: " <> renderUTyp r)
           ]
           []
+  UndeclaredBinding pos name ->
+    Diagnose.Err
+      Nothing
+      "Unknown binding"
+      [(pos, D.This $ tShow name <> " is not in scope.")]
+      []
   where
     renderTyp :: Typ s -> Text
     renderTyp = \case
@@ -65,6 +76,7 @@ type UnifyME e s = StateT (UBindings s) (ExceptT e (Unify.STBinding s))
 data TypecheckFailure s
   = OccursFailure (UVar s) (Typ s)
   | MismatchFailure (ChunkTypeT Diagnose.Position (Typ s)) (ChunkTypeT Diagnose.Position (Typ s))
+  | UndeclaredBinding Diagnose.Position Text
 
 instance Unify.Fallible (ChunkTypeT D.Position) (UVar s) (TypecheckFailure s) where
   occursFailure = OccursFailure
@@ -98,73 +110,87 @@ getOrInitBinding name = do
       put $ M.insert name v bindings
       pure v
 
+expectBinding :: Diagnose.Position -> Text -> UnifyM s (Typ s)
+expectBinding pos name = do
+  bindings <- get
+  case M.lookup name bindings of
+    Just v -> pure v
+    Nothing -> throwError $ UndeclaredBinding pos name
+
 typecheckSelector :: UT.TaggedSelector -> Either TypeErrorReport ()
-typecheckSelector t =
-  void $ Unify.runSTBinding $ runExceptT $ flip evalStateT mempty $ runUnification t
+typecheckSelector = typecheckThing (unifySelector absurdF)
+
+typecheckExpr :: UT.TaggedExpr -> Either TypeErrorReport ()
+typecheckExpr = typecheckThing unifyExpr
+
+typecheckThing :: forall thing. (forall s. thing -> UnifyME (TypecheckFailure s) s (ChunkTypeT D.Position (Typ s))) -> thing -> Either TypeErrorReport ()
+typecheckThing typechecker t =
+  void $ Unify.runSTBinding $ runExceptT $ flip evalStateT mempty $ mapStateT (withExceptT unificationErrorReport) $ go t
   where
-    runUnification :: forall s. UT.TaggedSelector -> UnifyME TypeErrorReport s (Fix (ChunkTypeT D.Position))
-    runUnification taggedSelector = mapStateT (withExceptT unificationErrorReport) $ do
-      typ <- go taggedSelector
+    go :: thing -> StateT (UBindings s) (ExceptT (TypecheckFailure s) (Unify.STBinding s)) (Fix (ChunkTypeT D.Position))
+    go thing = do
+      typ <- typechecker thing
       trm <- liftUnify $ Unify.applyBindings (UTerm typ)
       case Unify.freeze trm of
         Nothing -> pure $ error "Freeze failed"
         Just r -> pure r
 
-    go :: UT.TaggedSelector -> UnifyM s (ChunkTypeT D.Position (Typ s))
-    go = \case
-      UT.Compose _pos (s NE.:| rest) -> do
-        s' <- go s
-        foldlM compose s' rest
-      UT.SplitFields pos _delim -> pure $ T.Arrow pos (T.textType pos) (T.textType pos)
-      UT.SplitLines pos -> do
-        let typ = T.Arrow pos (T.textType pos) (T.textType pos)
-        pure (typ)
-      UT.SplitWords pos -> do
-        let typ = T.Arrow pos (T.textType pos) (T.textType pos)
-        pure (typ)
-      UT.Regex pos _regex bindings -> do
-        declareBindings bindings
-        pure $ T.Arrow pos (T.textType pos) (T.textType pos)
-      UT.RegexMatches pos -> pure $ T.Arrow pos (T.regexMatchType pos) (T.textType pos)
-      UT.RegexGroups pos _pat bindings -> do
-        declareBindings bindings
-        pure $ T.Arrow pos (T.textType pos) (T.textType pos)
-      UT.ListOf pos inner -> do
-        (innerTyp) <- go inner
-        case innerTyp of
-          T.Arrow _ inp out -> do
-            pure $ T.Arrow pos inp (T.listType pos out)
-          _ -> error "ListOf: Expected Arrow"
-      UT.Filter _pos inner -> go inner
-      UT.Not _pos inner -> go inner
-      UT.Splat pos -> do
-        inp <- freshVar
-        pure $ T.Arrow pos (T.listType pos inp) inp
-      UT.Shell pos script shellMode -> do
-        inp <- case shellMode of
-          Normal -> pure $ T.textType pos
-          NullStdin -> freshVar
-        unifyBindingString inp script
-        pure $ T.Arrow pos inp (T.textType pos)
-      UT.At pos _n -> do
-        inp <- freshVar
-        pure $ T.Arrow pos (T.listType pos inp) inp
-      UT.Take _pos _n inner -> do go inner
-      UT.TakeEnd _pos _n inner -> do go inner
-      UT.Drop _pos _n inner -> do go inner
-      UT.DropEnd _pos _n inner -> do go inner
-      UT.Contains pos _txt -> do
-        pure $ T.Arrow pos (T.textType pos) (T.textType pos)
-
+unifySelector :: forall s expr. (expr D.Position -> UnifyM s (ChunkTypeT D.Position (Typ s))) -> UT.Selector expr D.Position -> UnifyM s (ChunkTypeT D.Position (Typ s))
+unifySelector goExpr = \case
+  UT.Compose _pos (s NE.:| rest) -> do
+    s' <- unifySelector goExpr s
+    foldlM compose s' rest
+  UT.SplitFields pos _delim -> pure $ T.Arrow pos (T.textType pos) (T.textType pos)
+  UT.SplitLines pos -> do
+    let typ = T.Arrow pos (T.textType pos) (T.textType pos)
+    pure (typ)
+  UT.SplitWords pos -> do
+    let typ = T.Arrow pos (T.textType pos) (T.textType pos)
+    pure (typ)
+  UT.Regex pos _regex bindings -> do
+    declareBindings bindings
+    pure $ T.Arrow pos (T.textType pos) (T.textType pos)
+  UT.RegexMatches pos -> pure $ T.Arrow pos (T.regexMatchType pos) (T.textType pos)
+  UT.RegexGroups pos _pat bindings -> do
+    declareBindings bindings
+    pure $ T.Arrow pos (T.textType pos) (T.textType pos)
+  UT.ListOf pos inner -> do
+    innerTyp <- unifySelector goExpr inner
+    case innerTyp of
+      T.Arrow _ inp out -> do
+        pure $ T.Arrow pos inp (T.listType pos out)
+      _ -> error "ListOf: Expected Arrow"
+  UT.Filter _pos inner -> unifySelector goExpr inner
+  UT.Not _pos inner -> unifySelector goExpr inner
+  UT.Splat pos -> do
+    inp <- freshVar
+    pure $ T.Arrow pos (T.listType pos inp) inp
+  UT.Shell pos script shellMode -> do
+    inp <- case shellMode of
+      Normal -> pure $ T.textType pos
+      NullStdin -> freshVar
+    unifyBindingString inp script
+    pure $ T.Arrow pos inp (T.textType pos)
+  UT.At pos _n -> do
+    inp <- freshVar
+    pure $ T.Arrow pos (T.listType pos inp) inp
+  UT.Take _pos _n inner -> do unifySelector goExpr inner
+  UT.TakeEnd _pos _n inner -> do unifySelector goExpr inner
+  UT.Drop _pos _n inner -> do unifySelector goExpr inner
+  UT.DropEnd _pos _n inner -> do unifySelector goExpr inner
+  UT.Contains pos _txt -> do
+    pure $ T.Arrow pos (T.textType pos) (T.textType pos)
+  UT.Eval _pos expr -> do
+    goExpr expr
+  where
     compose ::
-      forall s.
       (ChunkTypeT Diagnose.Position (Typ s)) ->
-      UT.TaggedSelector ->
+      UT.Selector expr Diagnose.Position ->
       UnifyM s (ChunkTypeT Diagnose.Position (Typ s))
     compose l rTagged = do
       case l of
         (T.Arrow lpos li lm) -> do
-          go rTagged >>= \case
+          unifySelector goExpr rTagged >>= \case
             (T.Arrow rpos rm ro) -> do
               _ <- liftUnify $ Unify.unify lm rm
               let typ = T.Arrow (lpos <> rpos) li ro
@@ -172,11 +198,40 @@ typecheckSelector t =
             _ -> error "Expected Arrow type in compose"
         _ -> error "Expected Arrow type in compose"
 
+unifyExpr :: UT.TaggedExpr -> UnifyME (TypecheckFailure s) s (ChunkTypeT D.Position (Typ s))
+unifyExpr = \case
+  Pipeline pos expr selector -> do
+    (inputTyp, midTypL) <- unifyExpr expr >>= expectArr
+    (midTypR, outTyp) <- unifySelector unifyExpr selector >>= expectArr
+    _ <- liftUnify $ Unify.unify midTypL midTypR
+    pure $ T.Arrow pos inputTyp outTyp
+  Binding pos InputBinding -> do
+    inputTyp <- freshVar
+    pure $ T.Arrow pos inputTyp inputTyp
+  Binding pos (BindingName name) -> do
+    v <- expectBinding pos name
+    -- any input type, output type matches the binding
+    inputTyp <- freshVar
+    pure $ T.Arrow pos inputTyp v
+  Str pos bindingStr -> do
+    inputTyp <- freshVar
+    unifyBindingString inputTyp bindingStr
+    pure $ T.Arrow pos inputTyp (T.textType pos)
+  Number pos _num -> do
+    inputTyp <- freshVar
+    pure $ T.Arrow pos inputTyp (T.numberType pos)
+
+expectArr :: (HasCallStack) => ChunkTypeT pos (Typ s) -> UnifyM s (Typ s, Typ s)
+expectArr typ = do
+  case typ of
+    (T.Arrow _ a b) -> pure (a, b)
+    _ -> error "Expected Arrow type"
+
 unifyBindingString :: Typ s -> BindingString -> UnifyM s ()
 unifyBindingString inputTyp (BindingString bindings) = do
   for_ bindings $ \case
     Left (BindingName name, pos) -> do
-      v <- getOrInitBinding name
+      v <- expectBinding pos name
       _ <- liftUnify $ Unify.unify v (T.textType pos)
       pure ()
     Left (InputBinding, pos) -> do
