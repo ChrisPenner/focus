@@ -142,10 +142,13 @@ type TaggedExpr = Expr Pos
 
 type TaggedAction = Selector Expr Pos
 
+type Action a = Selector Expr a
+
 data Expr a
   = Binding a BindingName
   | Str a BindingString
   | Number a (NumberT)
+  | StrConcat a (Action a)
   deriving stock (Show, Functor, Foldable, Traversable)
 
 data NumberT

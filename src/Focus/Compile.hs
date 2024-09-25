@@ -62,6 +62,15 @@ compileExpr cmdF = \case
           ViewF -> ViewFocus handler
           ModifyF -> ModifyFocus handler
   Number _pos num -> liftTrav $ \f _ -> f (NumberChunk num)
+  StrConcat _pos innerExpr -> do
+    let inner = compileAction cmdF innerExpr
+    let go :: ((Chunk -> m c) -> a -> m b) -> (Chunk -> m c) -> a -> m b
+        go vf f inp =
+          inp & vf \xs -> do
+            f . TextChunk $ Text.concat (textChunk <$> listChunk xs)
+    case cmdF of
+      ViewF -> ViewFocus $ \f inp -> go (getViewFocus inner) f inp
+      ModifyF -> ModifyFocus $ \f inp -> go (getModifyFocus inner) f inp
 
 compileSelectorG :: forall cmd expr. (IsCmd cmd) => (expr D.Position -> Focus cmd Chunk Chunk) -> CommandF cmd -> Selector expr D.Position -> Focus cmd Chunk Chunk
 compileSelectorG goExpr cmdF = \case

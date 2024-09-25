@@ -4,7 +4,7 @@ focus view 'splitOn "," | at 1' ''
 one,two,three
 ===OUTPUT===============================================================================
 [error]: Type error
-     ╭──▶ <selector>@1:1-1:13
+     ╭──▶ <action>@1:1-1:13
      │
    1 │ splitOn "," | at 1
      • ┬───────────  ┬───

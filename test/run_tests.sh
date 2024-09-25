@@ -111,6 +111,9 @@ echo "one,two,three" | run not_modify modify 'splitOn "," | filter (not (contain
 ## Binding usages
 echo "The password is swordfish" | run binding_usage modify '/The password is (?<password>\w+)/' '%{password}'
 
+## String Concatenation
+echo "one,two,three" | run string_concat_view view '[splitOn ","] | concat %{.}'
+
 
 # Template strings
 # run template_view view 'match @"_-_-_" -> [one, two, three] '

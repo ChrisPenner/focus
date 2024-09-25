@@ -1,6 +1,7 @@
 module Focus.Typechecker
   ( typecheckSelector,
     typecheckModify,
+    typecheckAction,
   )
 where
 
@@ -121,16 +122,19 @@ typecheckModify :: UT.TaggedSelector -> UT.Selector Expr D.Position -> Either Ty
 typecheckModify selector expr = do
   typecheckThing unifyModify (selector, expr)
 
+typecheckAction :: UT.TaggedAction -> Either TypeErrorReport ()
+typecheckAction = typecheckThing unifyAction
+
 unifyModify :: (UT.TaggedSelector, UT.Selector Expr D.Position) -> UnifyME (TypecheckFailure s) s (ChunkTypeT D.Position (Typ s))
 unifyModify (selector, expr) = do
-  (posSel, selectorIn, selectorOut) <- unifySelector absurdF selector >>= expectArr
-  (posExpr, exprIn, exprOut) <- unifySelector unifyExpr expr >>= expectArr
+  (posSel, selectorIn, selectorOut) <- unifySelector selector >>= expectArr
+  (posExpr, exprIn, exprOut) <- unifyAction expr >>= expectArr
   _ <- liftUnify $ Unify.unify selectorOut exprIn
   _ <- liftUnify $ Unify.unify selectorOut exprOut
   pure $ T.Arrow (posSel <> posExpr) selectorIn exprOut
 
 typecheckSelector :: UT.TaggedSelector -> Either TypeErrorReport ()
-typecheckSelector = typecheckThing (unifySelector absurdF)
+typecheckSelector = typecheckThing unifySelector
 
 typecheckThing :: forall thing. (forall s. thing -> UnifyME (TypecheckFailure s) s (ChunkTypeT D.Position (Typ s))) -> thing -> Either TypeErrorReport ()
 typecheckThing typechecker t =
@@ -144,10 +148,16 @@ typecheckThing typechecker t =
         Nothing -> pure $ error "Freeze failed"
         Just r -> pure r
 
-unifySelector :: forall s expr. (expr D.Position -> UnifyM s (ChunkTypeT D.Position (Typ s))) -> UT.Selector expr D.Position -> UnifyM s (ChunkTypeT D.Position (Typ s))
-unifySelector goExpr = \case
+unifySelector :: UT.TaggedSelector -> UnifyM s (ChunkTypeT Diagnose.Position (Typ s))
+unifySelector = unifySelectorG absurdF
+
+unifyAction :: UT.TaggedAction -> UnifyM s (ChunkTypeT Diagnose.Position (Typ s))
+unifyAction = unifySelectorG unifyExpr
+
+unifySelectorG :: forall s expr. (expr D.Position -> UnifyM s (ChunkTypeT D.Position (Typ s))) -> UT.Selector expr D.Position -> UnifyM s (ChunkTypeT D.Position (Typ s))
+unifySelectorG goExpr = \case
   UT.Compose _pos (s NE.:| rest) -> do
-    s' <- unifySelector goExpr s
+    s' <- unifySelectorG goExpr s
     foldlM compose s' rest
   UT.SplitFields pos _delim -> pure $ T.Arrow pos (T.textType pos) (T.textType pos)
   UT.SplitLines pos -> do
@@ -164,10 +174,10 @@ unifySelector goExpr = \case
     declareBindings bindings
     pure $ T.Arrow pos (T.textType pos) (T.textType pos)
   UT.ListOf pos inner -> do
-    (_pos, inp, out) <- unifySelector goExpr inner >>= expectArr
+    (_pos, inp, out) <- unifySelectorG goExpr inner >>= expectArr
     pure $ T.Arrow pos inp (T.listType pos out)
-  UT.Filter _pos inner -> unifySelector goExpr inner
-  UT.Not _pos inner -> unifySelector goExpr inner
+  UT.Filter _pos inner -> unifySelectorG goExpr inner
+  UT.Not _pos inner -> unifySelectorG goExpr inner
   UT.Splat pos -> do
     inp <- freshVar
     pure $ T.Arrow pos (T.listType pos inp) inp
@@ -180,10 +190,10 @@ unifySelector goExpr = \case
   UT.At pos _n -> do
     inp <- freshVar
     pure $ T.Arrow pos (T.listType pos inp) inp
-  UT.Take _pos _n inner -> do unifySelector goExpr inner
-  UT.TakeEnd _pos _n inner -> do unifySelector goExpr inner
-  UT.Drop _pos _n inner -> do unifySelector goExpr inner
-  UT.DropEnd _pos _n inner -> do unifySelector goExpr inner
+  UT.Take _pos _n inner -> do unifySelectorG goExpr inner
+  UT.TakeEnd _pos _n inner -> do unifySelectorG goExpr inner
+  UT.Drop _pos _n inner -> do unifySelectorG goExpr inner
+  UT.DropEnd _pos _n inner -> do unifySelectorG goExpr inner
   UT.Contains pos _txt -> do
     pure $ T.Arrow pos (T.textType pos) (T.textType pos)
   UT.Action _pos expr -> do
@@ -195,7 +205,7 @@ unifySelector goExpr = \case
       UnifyM s (ChunkTypeT Diagnose.Position (Typ s))
     compose l rTagged = do
       (lpos, li, lm) <- expectArr l
-      (rpos, rm, ro) <- unifySelector goExpr rTagged >>= expectArr
+      (rpos, rm, ro) <- unifySelectorG goExpr rTagged >>= expectArr
       _ <- liftUnify $ Unify.unify lm rm
       pure $ T.Arrow (lpos <> rpos) li ro
 
@@ -216,6 +226,10 @@ unifyExpr = \case
   Number pos _num -> do
     inputTyp <- freshVar
     pure $ T.Arrow pos inputTyp (T.numberType pos)
+  StrConcat pos innerExpr -> do
+    (_pos, inp, innerResult) <- unifyAction innerExpr >>= expectArr
+    _ <- liftUnify $ Unify.unify innerResult (T.listType pos (T.textType pos))
+    pure $ T.Arrow pos inp (T.textType pos)
 
 expectArr :: (HasCallStack) => ChunkTypeT pos (Typ s) -> UnifyM s (pos, Typ s, Typ s)
 expectArr typ = do

@@ -17,7 +17,7 @@ import Focus.Compile (compileAction, compileSelector)
 import Focus.Exec qualified as Exec
 import Focus.Parser (parseAction, parseSelector)
 import Focus.Prelude
-import Focus.Typechecker (typecheckModify, typecheckSelector)
+import Focus.Typechecker (typecheckAction, typecheckModify, typecheckSelector)
 import Focus.Types
 import Options.Applicative qualified as Opts
 import Prettyprinter.Render.Terminal (AnsiStyle)
@@ -52,8 +52,7 @@ run = do
   flip runReaderT opts do
     case command of
       View script inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
-        addSource "<selector>" script
-        focus <- getSelectorFocus "<selector>" ViewF script
+        focus <- getActionFocus ViewF script
         r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runView focus chunkSize inputHandle outputHandle
         handleError r
       Modify script m inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
@@ -61,8 +60,7 @@ run = do
         r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runModify focus action chunkSize inputHandle outputHandle
         handleError r
       Set script val inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
-        addSource "<selector>" script
-        focus <- getSelectorFocus "<selector>" ModifyF script
+        focus <- getSelectorFocus ModifyF script
         r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runSet focus chunkSize inputHandle outputHandle val
         handleError r
   where
@@ -136,19 +134,29 @@ run = do
             withOutputHandle (either (Just . fst) (const Nothing) input) \outputHandle ->
               action (either snd id input) outputHandle
 
-    getSelectorFocus :: (IsCmd cmd) => Text -> CommandF cmd -> Text -> CliM (Focus cmd Chunk Chunk)
-    getSelectorFocus srcName cmdF selectorTxt = do
+    getSelectorFocus :: (IsCmd cmd) => CommandF cmd -> Text -> CliM (Focus cmd Chunk Chunk)
+    getSelectorFocus cmdF selectorTxt = do
       addSource "<selector>" selectorTxt
-      case parseSelector srcName selectorTxt of
+      case parseSelector "<selector>" selectorTxt of
         Left errDiagnostic -> do
-          style <- diagnoseStyle
-          Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style errDiagnostic
-          liftIO $ System.exitFailure
+          failWithDiagnostic errDiagnostic
         Right ast -> do
           case typecheckSelector ast of
             Left errReport -> failWithReport errReport
             Right () -> do
               pure $ compileSelector cmdF ast
+
+    getActionFocus :: (IsCmd cmd) => CommandF cmd -> Text -> CliM (Focus cmd Chunk Chunk)
+    getActionFocus cmdF actionTxt = do
+      addSource "<action>" actionTxt
+      case parseAction "<action>" actionTxt of
+        Left errDiagnostic -> do
+          failWithDiagnostic errDiagnostic
+        Right ast -> do
+          case typecheckAction ast of
+            Left errReport -> failWithReport errReport
+            Right () -> do
+              pure $ compileAction cmdF ast
 
     getModifyFocus :: (IsCmd cmd) => CommandF cmd -> Text -> Text -> CliM (Focus cmd Chunk Chunk, Focus cmd Chunk Chunk)
     getModifyFocus cmdF selectorTxt actionTxt = do
@@ -156,15 +164,11 @@ run = do
       addSource "<action>" actionTxt
       case parseSelector "<selector>" selectorTxt of
         Left errDiagnostic -> do
-          style <- diagnoseStyle
-          Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style errDiagnostic
-          liftIO $ System.exitFailure
+          failWithDiagnostic errDiagnostic
         Right selectorAst -> do
           case parseAction "<action>" actionTxt of
             Left errDiagnostic -> do
-              style <- diagnoseStyle
-              Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style errDiagnostic
-              liftIO $ System.exitFailure
+              failWithDiagnostic errDiagnostic
             Right action -> do
               case typecheckModify selectorAst action of
                 Left errReport -> failWithReport errReport

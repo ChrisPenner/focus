@@ -1,3 +1,4 @@
+{-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE TupleSections #-}
 
 module Focus.Parser (parseSelector, parseAction) where
@@ -15,6 +16,7 @@ import Error.Diagnose (Diagnostic)
 import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Error.Diagnose.Compat.Megaparsec
+import Focus.Debug qualified as Debug
 import Focus.Prelude
 import Focus.Untyped
 import Text.Megaparsec qualified as M
@@ -45,7 +47,7 @@ withPos p = do
   let pos = Diagnose.Position (M.unPos startLine, M.unPos startCol) (M.unPos (M.sourceLine end), M.unPos (M.sourceColumn end)) sourceName
   pure $ f pos
 
-parseSelector :: Text -> Text -> Either (Diagnostic Text) (Selector expr Pos)
+parseSelector :: (forall x. (Show x) => Show (expr x)) => Text -> Text -> Either (Diagnostic Text) (Selector expr Pos)
 parseSelector srcName src = parseThing (scriptP noExprP) "Invalid selector" srcName src
   where
     noExprP = exprP *> fail "Expressions are not valid where a selector was expected."
@@ -53,17 +55,20 @@ parseSelector srcName src = parseThing (scriptP noExprP) "Invalid selector" srcN
 parseAction :: Text -> Text -> Either (Diagnostic Text) TaggedAction
 parseAction srcName src = parseThing exprP "Invalid expression" srcName src
 
-parseThing :: P a -> Text -> Text -> Text -> Either (Diagnostic Text) a
-parseThing parser err srcName src =
+parseThing :: (Show a) => P a -> Text -> Text -> Text -> Either (Diagnostic Text) a
+parseThing parser err srcName src = do
   let strSource = Text.unpack src
       strSourceName = Text.unpack srcName
-   in M.parse (M.space *> parser <* M.eof) strSourceName strSource
-        & first
-          ( \bundle ->
-              bundle
-                & errorDiagnosticFromBundle Nothing err Nothing
-                & \d -> Diagnose.addFile d strSourceName strSource
-          )
+  result <-
+    M.parse (M.space *> parser <* M.eof) strSourceName strSource
+      & first
+        ( \bundle ->
+            bundle
+              & errorDiagnosticFromBundle Nothing err Nothing
+              & \d -> Diagnose.addFile d strSourceName strSource
+        )
+  Debug.debugM srcName $ "Parsed: " <> show result
+  pure result
 
 scriptP :: (P (expr Pos)) -> P (Selector expr Pos)
 scriptP expr = selectorsP expr
@@ -125,17 +130,16 @@ shellP = withPos do
     optional (M.char '-') >>= \case
       Just _ -> pure NullStdin
       Nothing -> pure Normal
-  M.between (lexeme $ M.char '{') (lexeme $ M.char '}') $ do
-    script <- bindingStringP
-    pure $ \pos -> Shell pos script shellMode
+  script <- bindingStringP '{' '}'
+  pure $ \pos -> Shell pos script shellMode
 
-bindingStringP :: P BindingString
-bindingStringP = do
+bindingStringP :: Char -> Char -> P BindingString
+bindingStringP begin end = M.between (lexeme $ M.char begin) (lexeme $ M.char end) $ do
   BindingString <$> many do
     M.choice
       [ Left <$> withPos ((,) <$> bareBindingP),
         Right . Text.pack
-          <$> some (escaped <|> M.noneOf ("%}" :: String))
+          <$> some (escaped <|> M.noneOf (['%', '}', end] :: String))
       ]
   where
     -- Escape bindings
@@ -166,62 +170,76 @@ evalP expr = withPos do flip Action <$> expr
 
 simpleSelectorP :: P (expr Pos) -> P (Selector expr Pos)
 simpleSelectorP expr = withPos do
-  name <-
-    lexeme
-      ( M.choice
-          [ M.string "splitOn",
-            M.string "words",
-            M.string "lines",
-            M.string "at",
-            M.string "filter",
-            M.string "...",
-            M.string "groups",
-            M.string "takeEnd",
-            M.string "dropEnd",
-            M.string "take",
-            M.string "drop",
-            M.string "contains",
-            M.string "not"
-          ]
+  caseMatchP
+    [ ( "splitOn",
+        do
+          delim <- strP
+          pure $ flip SplitFields delim
+      ),
+      ( "words",
+        pure SplitWords
+      ),
+      ( "lines",
+        pure SplitLines
+      ),
+      ( "at",
+        do
+          n <- lexeme L.decimal
+          pure $ flip At n
+      ),
+      ( "groups",
+        do
+          reGroupsP
+      ),
+      ( "filter",
+        do
+          flip Filter <$> groupedP expr
+      ),
+      ( "...",
+        do
+          pure Splat
+      ),
+      ( "takeEnd",
+        do
+          n <- lexeme L.decimal
+          selector <- groupedP expr
+          pure $ \pos -> TakeEnd pos n selector
+      ),
+      ( "dropEnd",
+        do
+          n <- lexeme L.decimal
+          selector <- groupedP expr
+          pure $ \pos -> DropEnd pos n selector
+      ),
+      ( "take",
+        do
+          n <- lexeme L.decimal
+          selector <- groupedP expr
+          pure $ \pos -> Take pos n selector
+      ),
+      ( "drop",
+        do
+          n <- lexeme L.decimal
+          selector <- groupedP expr
+          pure $ \pos -> Drop pos n selector
+      ),
+      ( "contains",
+        do
+          str <- strP
+          pure $ \pos -> Contains pos str
+      ),
+      ( "not",
+        do
+          selector <- selectorP expr
+          pure $ \pos -> Not pos selector
       )
-  case name of
-    "splitOn" -> do
-      delim <- strP
-      pure $ flip SplitFields delim
-    "words" -> pure SplitWords
-    "lines" -> pure SplitLines
-    "at" -> do
-      n <- lexeme L.decimal
-      pure $ flip At n
-    "groups" -> do
-      reGroupsP
-    "filter" -> do
-      flip Filter <$> groupedP expr
-    "..." -> do
-      pure Splat
-    "take" -> do
-      n <- lexeme L.decimal
-      selector <- groupedP expr
-      pure $ \pos -> Take pos n selector
-    "drop" -> do
-      n <- lexeme L.decimal
-      selector <- groupedP expr
-      pure $ \pos -> Drop pos n selector
-    "takeEnd" -> do
-      n <- lexeme L.decimal
-      selector <- groupedP expr
-      pure $ \pos -> TakeEnd pos n selector
-    "dropEnd" -> do
-      n <- lexeme L.decimal
-      selector <- groupedP expr
-      pure $ \pos -> DropEnd pos n selector
-    "contains" -> do
-      str <- strP
-      pure $ \pos -> Contains pos str
-    "not" -> do
-      selector <- selectorP expr
-      pure $ \pos -> Not pos selector
-    _ -> error "impossible"
+    ]
+
+caseMatchP :: [(String, P a)] -> P a
+caseMatchP theCases =
+  do
+    theCases <&> \(name, p) -> lexeme (M.string name) *> p
+    & M.choice
 
 numberP :: P NumberT
 numberP = lexeme $ do
@@ -231,13 +249,29 @@ numberP = lexeme $ do
     ]
 
 exprP :: P (Selector Expr Pos)
-exprP = selectorP basicExprP
+exprP = selectorsP basicExprP
 
 basicExprP :: P TaggedExpr
-basicExprP = mayBracketedP $ withPos do
+basicExprP = mayBracketedP do
+  M.choice
+    [ exprLiteralP,
+      simpleExprP
+    ]
+
+simpleExprP :: P TaggedExpr
+simpleExprP = withPos $ do
+  caseMatchP $
+    [ ( "concat",
+        do
+          expr <- exprP
+          pure $ flip StrConcat expr
+      )
+    ]
+
+exprLiteralP :: P (Expr Pos)
+exprLiteralP = withPos do
   M.choice
     [ flip Number <$> numberP,
-      flip Binding
-        <$> bareBindingP,
-      flip Str <$> bindingStringP
+      flip Binding <$> bareBindingP,
+      flip Str <$> bindingStringP '"' '"'
     ]
