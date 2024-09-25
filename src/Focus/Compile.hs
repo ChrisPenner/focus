@@ -39,10 +39,27 @@ import Prelude hiding (reads)
 
 compileExpr :: forall cmd. (IsCmd cmd) => CommandF cmd -> TaggedExpr -> Focus cmd Chunk Chunk
 compileExpr cmdF = \case
-  Pipeline pos expr selector -> _
-  Binding pos bindingName -> _
-  Str pos bindingStr -> _
-  Number pos num -> _
+  Pipeline _pos expr selector -> do
+    let goExpr :: TaggedExpr -> Focus cmd Chunk Chunk
+        goExpr = compileExpr cmdF
+    compileExpr cmdF expr >.> compileSelector goExpr cmdF selector
+  Binding pos bindingName -> do
+    case cmdF of
+      ViewF -> ViewFocus \f inp -> do
+        binding <- resolveBinding pos inp bindingName
+        f binding
+      ModifyF -> ModifyFocus $ \f inp -> do
+        binding <- resolveBinding pos inp bindingName
+        f binding
+  Str _pos bindingStr ->
+    let handler :: forall m b. (Focusable m) => (Chunk -> m b) -> Chunk -> m b
+        handler f inp = do
+          txt <- resolveBindingString inp bindingStr
+          f (TextChunk txt)
+     in case cmdF of
+          ViewF -> ViewFocus handler
+          ModifyF -> ModifyFocus handler
+  Number _pos num -> liftTrav $ \f _ -> f (NumberChunk num)
 
 compileSelector :: forall cmd expr. (IsCmd cmd) => (expr D.Position -> Focus cmd Chunk Chunk) -> CommandF cmd -> Selector expr D.Position -> Focus cmd Chunk Chunk
 compileSelector goExpr cmdF = \case
@@ -169,7 +186,6 @@ compileSelector goExpr cmdF = \case
       forOf_ (RE.regexing pat) txt \match -> do
         let groups =
               match ^. RE.namedGroups
-                & Map.mapKeys BindingName
                 <&> TextChunk
         local (groups <>) $ go f match
 
@@ -179,17 +195,21 @@ compileSelector goExpr cmdF = \case
       TextChunk <$> forOf (RE.regexing pat) txt \match -> do
         let groups =
               match ^. RE.namedGroups
-                & Map.mapKeys BindingName
                 <&> TextChunk
         local (groups <>) $ forOf trav match (fmap textChunk . f . TextChunk)
 
 resolveBindingString :: (MonadReader Bindings m, MonadError SelectorError m) => Chunk -> BindingString -> m Text
 resolveBindingString input (BindingString xs) = do
-  bindings <- ask
   Text.concat <$> for xs \case
-    Left (name@(BindingName nameTxt), pos) -> do
-      case Map.lookup name bindings of
-        Just chunk -> pure $ textChunk chunk
-        Nothing -> throwError $ BindingError pos $ "Binding not in scope: " <> nameTxt
-    Left (InputBinding, _) -> pure $ textChunk input
+    Left (binding, pos) -> do
+      textChunk <$> resolveBinding pos input binding
     Right txt -> pure txt
+
+resolveBinding :: (MonadReader Bindings m, MonadError SelectorError m) => Pos -> Chunk -> BindingName -> m Chunk
+resolveBinding pos input = \case
+  BindingName name -> do
+    bindings <- ask
+    case Map.lookup name bindings of
+      Just chunk -> pure chunk
+      Nothing -> throwError $ BindingError pos $ "Binding not in scope: " <> name
+  InputBinding -> pure input

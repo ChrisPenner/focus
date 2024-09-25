@@ -64,7 +64,7 @@ renderBindingString (BindingString xs) =
       Right txt -> txt
     & mconcat
 
-type Bindings = Map BindingName Chunk
+type Bindings = Map Text Chunk
 
 type BindingDeclarations = Map Text (Pos, ChunkType)
 
@@ -120,7 +120,7 @@ instance Tagged (Selector expr a) a where
 data Chunk
   = TextChunk Text
   | ListChunk [Chunk]
-  | NumberChunk Double
+  | NumberChunk NumberT
   | RegexMatchChunk Re.Match
 
 instance Show Chunk where
