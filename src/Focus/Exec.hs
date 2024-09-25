@@ -47,10 +47,10 @@ runSet (ModifyFocus trav) chunkSize input output val = do
     Just . renderChunk <$> forOf trav (TextChunk chunk) (const (pure $ TextChunk val))
 
 runModify :: Focus ModifyT Chunk Chunk -> Focus ModifyT Chunk Chunk -> ChunkSize -> Handle -> Handle -> FocusM ()
-runModify (ModifyFocus trav) (ModifyFocus modifier) chunkSize input output = do
+runModify (ModifyFocus trav) (ModifyFocus action) chunkSize input output = do
   runGeneric chunkSize input output \chunk -> do
     Just . renderChunk <$> forOf trav (TextChunk chunk) \chunk' -> do
-      forOf modifier chunk' pure
+      forOf action chunk' pure
 
 renderChunk :: Chunk -> Text
 renderChunk = \case

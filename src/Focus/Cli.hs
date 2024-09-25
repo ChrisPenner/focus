@@ -15,7 +15,7 @@ import Data.Function
 import Data.Functor
 import Data.Text (Text)
 import Focus.Command (Command (..))
-import Options.Applicative hiding (command)
+import Options.Applicative hiding (action, command)
 import Options.Applicative qualified as Opt
 
 data InputLocation
@@ -97,13 +97,13 @@ viewP = do
 overP :: Parser Command
 overP = do
   script <- scriptP
-  modifier <-
+  action <-
     strArgument
-      ( metavar "MODIFIER"
-          <> help "Modifier to apply"
+      ( metavar "ACTION"
+          <> help "Action to apply to the focus"
       )
   inputFiles <- inputFilesP
-  pure $ Modify script modifier inputFiles
+  pure $ Modify script action inputFiles
 
 setP :: Parser Command
 setP = do

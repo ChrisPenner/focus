@@ -1,6 +1,6 @@
 {-# LANGUAGE TupleSections #-}
 
-module Focus.Parser (parseSelector, parseExpr) where
+module Focus.Parser (parseSelector, parseAction) where
 
 import Control.Monad
 import Data.Bifunctor (Bifunctor (..))
@@ -50,8 +50,8 @@ parseSelector srcName src = parseThing (scriptP noExprP) "Invalid selector" srcN
   where
     noExprP = exprP *> fail "Expressions are not valid where a selector was expected."
 
-parseExpr :: Text -> Text -> Either (Diagnostic Text) (Selector Expr Pos)
-parseExpr srcName src = parseThing exprP "Invalid expression" srcName src
+parseAction :: Text -> Text -> Either (Diagnostic Text) TaggedAction
+parseAction srcName src = parseThing exprP "Invalid expression" srcName src
 
 parseThing :: P a -> Text -> Text -> Text -> Either (Diagnostic Text) a
 parseThing parser err srcName src =
@@ -133,7 +133,7 @@ bindingStringP :: P BindingString
 bindingStringP = do
   BindingString <$> many do
     M.choice
-      [ Left <$> withPos ((,) <$> strBindingP),
+      [ Left <$> withPos ((,) <$> bareBindingP),
         Right . Text.pack
           <$> some (escaped <|> M.noneOf ("%}" :: String))
       ]
@@ -141,8 +141,8 @@ bindingStringP = do
     -- Escape bindings
     escaped = M.string "\\%" $> '%'
 
-strBindingP :: P BindingName
-strBindingP = M.try do
+bareBindingP :: P BindingName
+bareBindingP = M.try do
   M.between (lexeme (M.string "%{")) (M.char '}') $
     do
       (BindingName . Text.pack <$> lexeme (M.some M.alphaNumChar))
@@ -162,7 +162,7 @@ selectorP :: P (expr Pos) -> P (Selector expr Pos)
 selectorP expr = shellP <|> listOfP expr <|> regexP <|> groupedP expr <|> simpleSelectorP expr <|> evalP expr
 
 evalP :: P (expr Pos) -> P (Selector expr Pos)
-evalP expr = withPos do flip Eval <$> expr
+evalP expr = withPos do flip Action <$> expr
 
 simpleSelectorP :: P (expr Pos) -> P (Selector expr Pos)
 simpleSelectorP expr = withPos do
@@ -229,12 +229,6 @@ numberP = lexeme $ do
     [ fmap DoubleNumber . M.try $ L.signed (pure ()) L.float,
       fmap IntNumber . M.try $ L.signed (pure ()) L.decimal
     ]
-
-bareBindingP :: P BindingName
-bareBindingP =
-  lexeme do
-    (BindingName . Text.pack <$> lexeme (M.some M.alphaNumChar))
-    <|> (M.string "." $> InputBinding)
 
 exprP :: P (Selector Expr Pos)
 exprP = selectorP basicExprP

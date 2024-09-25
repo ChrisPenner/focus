@@ -109,7 +109,7 @@ echo "one,two,three" | run not_modify modify 'splitOn "," | filter (not (contain
 # Expressions
 
 ## Binding usages
-echo "The password is swordfish" | run binding_usage modify '/The password is (?<password>\w+)/' 'password'
+echo "The password is swordfish" | run binding_usage modify '/The password is (?<password>\w+)/' '%{password}'
 
 
 # Template strings

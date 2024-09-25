@@ -6,7 +6,7 @@
 
 module Focus.Compile
   ( compileSelector,
-    compileExpr,
+    compileAction,
     Focus (..),
     FocusM (..),
     textChunk,
@@ -37,6 +37,12 @@ import UnliftIO qualified
 import UnliftIO.Process qualified as UnliftIO
 import Prelude hiding (reads)
 
+compileSelector :: forall cmd. (IsCmd cmd) => CommandF cmd -> TaggedSelector -> Focus cmd Chunk Chunk
+compileSelector cmdF = compileSelectorG absurdF cmdF
+
+compileAction :: forall cmd. (IsCmd cmd) => CommandF cmd -> TaggedAction -> Focus cmd Chunk Chunk
+compileAction cmdF = compileSelectorG (compileExpr cmdF) cmdF
+
 compileExpr :: forall cmd. (IsCmd cmd) => CommandF cmd -> TaggedExpr -> Focus cmd Chunk Chunk
 compileExpr cmdF = \case
   Binding pos bindingName -> do
@@ -57,9 +63,9 @@ compileExpr cmdF = \case
           ModifyF -> ModifyFocus handler
   Number _pos num -> liftTrav $ \f _ -> f (NumberChunk num)
 
-compileSelector :: forall cmd expr. (IsCmd cmd) => (expr D.Position -> Focus cmd Chunk Chunk) -> CommandF cmd -> Selector expr D.Position -> Focus cmd Chunk Chunk
-compileSelector goExpr cmdF = \case
-  Compose _ xs -> foldr1 (>.>) (compileSelector goExpr cmdF <$> xs)
+compileSelectorG :: forall cmd expr. (IsCmd cmd) => (expr D.Position -> Focus cmd Chunk Chunk) -> CommandF cmd -> Selector expr D.Position -> Focus cmd Chunk Chunk
+compileSelectorG goExpr cmdF = \case
+  Compose _ xs -> foldr1 (>.>) (compileSelectorG goExpr cmdF <$> xs)
   SplitFields _ delim -> underText $ liftTrav (\f txt -> (Text.intercalate delim) <$> traverse f (Text.splitOn delim txt))
   SplitLines _ -> underText $ liftTrav (\f txt -> Text.unlines <$> traverse f (Text.lines txt))
   SplitWords _ -> underText $ liftTrav $ (\f txt -> Text.unwords <$> traverse f (Text.words txt))
@@ -74,10 +80,10 @@ compileSelector goExpr cmdF = \case
       ViewF -> viewRegex pat \f match -> do traverse_ (f . TextChunk) (match ^.. RE.groups . traversed)
       ModifyF -> do modifyRegex pat (RE.groups . traverse)
   ListOf _ selector -> do
-    listOfFocus (compileSelector goExpr cmdF selector) >.> liftTrav (from asListI)
+    listOfFocus (compileSelectorG goExpr cmdF selector) >.> liftTrav (from asListI)
   Filter _ selector -> do
     let inner :: Focus cmd Chunk Chunk
-        inner = compileSelector goExpr cmdF selector
+        inner = compileSelectorG goExpr cmdF selector
     case cmdF of
       ViewF -> do
         ViewFocus $ \f chunk -> do
@@ -90,7 +96,7 @@ compileSelector goExpr cmdF = \case
           False -> pure chunk
   Not _ selector -> do
     let inner :: Focus cmd Chunk Chunk
-        inner = compileSelector goExpr cmdF selector
+        inner = compileSelectorG goExpr cmdF selector
     case cmdF of
       ViewF -> do
         ViewFocus $ \f chunk -> do
@@ -142,13 +148,13 @@ compileSelector goExpr cmdF = \case
         & ix n %%~ f
         <&> ListChunk
   Take _ n selector ->
-    listOfFocus (compileSelector goExpr cmdF selector) >.> liftTrav (taking n traversed)
+    listOfFocus (compileSelectorG goExpr cmdF selector) >.> liftTrav (taking n traversed)
   TakeEnd _ n selector -> do
-    listOfFocus (compileSelector goExpr cmdF selector) >.> liftTrav (takingEnd n)
+    listOfFocus (compileSelectorG goExpr cmdF selector) >.> liftTrav (takingEnd n)
   Drop _ n selector -> do
-    listOfFocus (compileSelector goExpr cmdF selector) >.> liftTrav (dropping n traversed)
+    listOfFocus (compileSelectorG goExpr cmdF selector) >.> liftTrav (dropping n traversed)
   DropEnd _ n selector -> do
-    listOfFocus (compileSelector goExpr cmdF selector) >.> liftTrav (droppingEnd n)
+    listOfFocus (compileSelectorG goExpr cmdF selector) >.> liftTrav (droppingEnd n)
   Contains _ needle -> do
     liftTrav $ \f chunk ->
       do
@@ -159,7 +165,7 @@ compileSelector goExpr cmdF = \case
           Left txt -> pure (TextChunk txt)
           Right txt -> f (TextChunk txt)
         & fmap (TextChunk . Text.concat . fmap textChunk)
-  Eval _ expr -> goExpr expr
+  Action _ expr -> goExpr expr
   where
     hasMatches :: (Focusable m) => CommandF cmd -> Focus cmd i o -> i -> m Bool
     hasMatches cmd foc i = do

@@ -13,13 +13,12 @@ import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Focus.Cli (InPlace (..), Options (..), OutputLocation (..), UseColour (..), optionsP)
 import Focus.Command (Command (..), CommandF (..), IsCmd)
-import Focus.Compile (compileExpr, compileSelector)
+import Focus.Compile (compileAction, compileSelector)
 import Focus.Exec qualified as Exec
-import Focus.Parser (parseExpr, parseSelector)
+import Focus.Parser (parseAction, parseSelector)
 import Focus.Prelude
 import Focus.Typechecker (typecheckModify, typecheckSelector)
 import Focus.Types
-import Focus.Untyped (absurdF)
 import Options.Applicative qualified as Opts
 import Prettyprinter.Render.Terminal (AnsiStyle)
 import System.Exit qualified as System
@@ -58,10 +57,8 @@ run = do
         r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runView focus chunkSize inputHandle outputHandle
         handleError r
       Modify script m inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
-        addSource "<selector>" script
-        addSource "<expr>" m
-        (focus, modifier) <- getModifyFocus ModifyF script m
-        r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runModify focus modifier chunkSize inputHandle outputHandle
+        (focus, action) <- getModifyFocus ModifyF script m
+        r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runModify focus action chunkSize inputHandle outputHandle
         handleError r
       Set script val inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
         addSource "<selector>" script
@@ -140,8 +137,9 @@ run = do
               action (either snd id input) outputHandle
 
     getSelectorFocus :: (IsCmd cmd) => Text -> CommandF cmd -> Text -> CliM (Focus cmd Chunk Chunk)
-    getSelectorFocus srcName cmdF script = do
-      case parseSelector srcName script of
+    getSelectorFocus srcName cmdF selectorTxt = do
+      addSource "<selector>" selectorTxt
+      case parseSelector srcName selectorTxt of
         Left errDiagnostic -> do
           style <- diagnoseStyle
           Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style errDiagnostic
@@ -150,25 +148,27 @@ run = do
           case typecheckSelector ast of
             Left errReport -> failWithReport errReport
             Right () -> do
-              pure $ compileSelector absurdF cmdF ast
+              pure $ compileSelector cmdF ast
 
     getModifyFocus :: (IsCmd cmd) => CommandF cmd -> Text -> Text -> CliM (Focus cmd Chunk Chunk, Focus cmd Chunk Chunk)
-    getModifyFocus cmdF selector expr = do
-      case parseSelector "<selector>" selector of
+    getModifyFocus cmdF selectorTxt actionTxt = do
+      addSource "<selector>" selectorTxt
+      addSource "<action>" actionTxt
+      case parseSelector "<selector>" selectorTxt of
         Left errDiagnostic -> do
           style <- diagnoseStyle
           Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style errDiagnostic
           liftIO $ System.exitFailure
         Right selectorAst -> do
-          case parseExpr "<expr>" expr of
+          case parseAction "<action>" actionTxt of
             Left errDiagnostic -> do
               style <- diagnoseStyle
               Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style errDiagnostic
               liftIO $ System.exitFailure
-            Right exprAst -> do
-              case typecheckModify selectorAst exprAst of
+            Right action -> do
+              case typecheckModify selectorAst action of
                 Left errReport -> failWithReport errReport
                 Right () -> do
-                  let compiledSel = compileSelector absurdF cmdF selectorAst
-                  let compiledExpr = compileSelector (compileExpr cmdF) cmdF exprAst
-                  pure $ (compiledSel, compiledExpr)
+                  let compiledSel = compileSelector cmdF selectorAst
+                  let compiledAction = compileAction cmdF action
+                  pure $ (compiledSel, compiledAction)

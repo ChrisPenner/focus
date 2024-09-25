@@ -21,6 +21,7 @@ module Focus.Untyped
     _RegexMatchChunk,
     Expr (..),
     TaggedExpr,
+    TaggedAction,
     NumberT (..),
     VoidF,
     absurdF,
@@ -92,7 +93,7 @@ data Selector (expr :: Type -> Type) a
   | Drop a Int (Selector expr a)
   | DropEnd a Int (Selector expr a)
   | Contains a Text
-  | Eval a (expr a)
+  | Action a (expr a)
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Selector expr a) a where
@@ -115,7 +116,7 @@ instance Tagged (Selector expr a) a where
     Drop a _ _ -> a
     DropEnd a _ _ -> a
     Contains a _ -> a
-    Eval a _ -> a
+    Action a _ -> a
 
 data Chunk
   = TextChunk Text
@@ -138,6 +139,8 @@ data ChunkType
   deriving (Show, Eq)
 
 type TaggedExpr = Expr Pos
+
+type TaggedAction = Selector Expr Pos
 
 data Expr a
   = Binding a BindingName

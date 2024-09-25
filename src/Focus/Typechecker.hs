@@ -52,7 +52,7 @@ unificationErrorReport = \case
     Diagnose.Err
       Nothing
       "Unknown binding"
-      [(pos, D.This $ tShow name <> " is not in scope.")]
+      [(pos, D.This $ "Binding " <> tShow name <> " is not in scope.")]
       []
   where
     renderTyp :: Typ s -> Text
@@ -186,7 +186,7 @@ unifySelector goExpr = \case
   UT.DropEnd _pos _n inner -> do unifySelector goExpr inner
   UT.Contains pos _txt -> do
     pure $ T.Arrow pos (T.textType pos) (T.textType pos)
-  UT.Eval _pos expr -> do
+  UT.Action _pos expr -> do
     goExpr expr
   where
     compose ::
