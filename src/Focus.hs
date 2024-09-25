@@ -17,7 +17,7 @@ import Focus.Compile (compileExpr, compileSelector)
 import Focus.Exec qualified as Exec
 import Focus.Parser (parseExpr, parseSelector)
 import Focus.Prelude
-import Focus.Typechecker (typecheckExpr, typecheckSelector)
+import Focus.Typechecker (typecheckModify, typecheckSelector)
 import Focus.Types
 import Focus.Untyped (absurdF)
 import Options.Applicative qualified as Opts
@@ -59,9 +59,8 @@ run = do
         handleError r
       Modify script m inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
         addSource "<selector>" script
-        focus <- getSelectorFocus "<selector>" ModifyF script
         addSource "<expr>" m
-        modifier <- getExprFocus "<expr>" ModifyF m
+        (focus, modifier) <- getModifyFocus ModifyF script m
         r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runModify focus modifier chunkSize inputHandle outputHandle
         handleError r
       Set script val inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
@@ -153,15 +152,23 @@ run = do
             Right () -> do
               pure $ compileSelector absurdF cmdF ast
 
-    getExprFocus :: (IsCmd cmd) => Text -> CommandF cmd -> Text -> CliM (Focus cmd Chunk Chunk)
-    getExprFocus srcName cmdF script = do
-      case parseExpr srcName script of
+    getModifyFocus :: (IsCmd cmd) => CommandF cmd -> Text -> Text -> CliM (Focus cmd Chunk Chunk, Focus cmd Chunk Chunk)
+    getModifyFocus cmdF selector expr = do
+      case parseSelector "<selector>" selector of
         Left errDiagnostic -> do
           style <- diagnoseStyle
           Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style errDiagnostic
           liftIO $ System.exitFailure
-        Right expr -> do
-          case typecheckExpr expr of
-            Left errReport -> failWithReport errReport
-            Right () -> do
-              pure $ compileSelector (compileExpr cmdF) cmdF expr
+        Right selectorAst -> do
+          case parseExpr "<expr>" expr of
+            Left errDiagnostic -> do
+              style <- diagnoseStyle
+              Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style errDiagnostic
+              liftIO $ System.exitFailure
+            Right exprAst -> do
+              case typecheckModify selectorAst exprAst of
+                Left errReport -> failWithReport errReport
+                Right () -> do
+                  let compiledSel = compileSelector absurdF cmdF selectorAst
+                  let compiledExpr = compileSelector (compileExpr cmdF) cmdF exprAst
+                  pure $ (compiledSel, compiledExpr)

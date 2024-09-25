@@ -68,26 +68,26 @@ echo "one,two,three" | run basic_view view 'splitOn ","'
 # Basic typechecking
 echo "one,two,three" | run expected_list view 'splitOn "," | at 1'
 
-# Splat
+## Splat
 echo "one,two,three" | run splat_view view '[splitOn ","] | ...'
 
-# 'At'
+## 'At'
 echo "one,two,three" | run at_view view '[splitOn ","] | at 1'
 
 
-# Regex
+## Regex
 echo "one two 555-123-4567 three" | run regex_view view '/[\d-]+/'
 echo "one two 555-123-4567 three 999-876-5432" | run regex_modify modify '/[\d-]+/' '{rev}'
 echo "one-two-three" | run regex_modify modify '/(\w+)-\w+-(\w+)/' '{tr a-z A-Z}'
 
-# Regex Groups
+### Regex Groups
 echo "one two 555-123-4567 three" | run regex_groups_view view 'groups /(\d+)-(\d+)-(\d+)/'
 echo "one two 555-123-4567 three" | run regex_groups_modify modify 'groups /(\d+)-(\d+)-(\d+)/' '{rev}'
 
-# Filter
+## Filter
 echo "one,two,three" | run filter_view view 'splitOn "," | filter /e/'
 
-# Take/Drop
+## Take/Drop
 echo "one,two,three" | run take_view view 'take 2 (splitOn ",")'
 echo "one,two,three" | run take_modify modify 'take 2 (splitOn ",")' '{rev}'
 echo "one,two,three" | run drop_view view 'drop 1 (splitOn ",")'
@@ -98,13 +98,18 @@ echo "one,two,three" | run take_end_modify modify 'takeEnd 1 (splitOn ",")' '{re
 echo "one,two,three" | run drop_end_view view 'dropEnd 1 (splitOn ",")'
 echo "one,two,three" | run drop_end_modify modify 'dropEnd 1 (splitOn ",")' '{rev}'
 
-# Contains
+## Contains
 echo "one,two,three" | run contains_view view 'splitOn "," | filter (contains "two")'
 echo "one,two,three" | run contains_modify modify 'splitOn "," | filter (contains "two")' '{rev}'
 
-# Not
+## Not
 echo "one,two,three" | run not_view view 'splitOn "," | filter (not (contains "two"))'
 echo "one,two,three" | run not_modify modify 'splitOn "," | filter (not (contains "two"))' '{rev}'
+
+# Expressions
+
+## Binding usages
+echo "The password is swordfish" | run binding_usage modify '/The password is (?<password>\w+)/' 'password'
 
 
 # Template strings

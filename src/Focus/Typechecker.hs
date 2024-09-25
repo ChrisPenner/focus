@@ -1,6 +1,6 @@
 module Focus.Typechecker
   ( typecheckSelector,
-    typecheckExpr,
+    typecheckModify,
   )
 where
 
@@ -117,11 +117,20 @@ expectBinding pos name = do
     Just v -> pure v
     Nothing -> throwError $ UndeclaredBinding pos name
 
+typecheckModify :: UT.TaggedSelector -> UT.Selector Expr D.Position -> Either TypeErrorReport ()
+typecheckModify selector expr = do
+  typecheckThing unifyModify (selector, expr)
+
+unifyModify :: (UT.TaggedSelector, UT.Selector Expr D.Position) -> UnifyME (TypecheckFailure s) s (ChunkTypeT D.Position (Typ s))
+unifyModify (selector, expr) = do
+  (posSel, selectorIn, selectorOut) <- unifySelector absurdF selector >>= expectArr
+  (posExpr, exprIn, exprOut) <- unifySelector unifyExpr expr >>= expectArr
+  _ <- liftUnify $ Unify.unify selectorOut exprIn
+  _ <- liftUnify $ Unify.unify selectorOut exprOut
+  pure $ T.Arrow (posSel <> posExpr) selectorIn exprOut
+
 typecheckSelector :: UT.TaggedSelector -> Either TypeErrorReport ()
 typecheckSelector = typecheckThing (unifySelector absurdF)
-
-typecheckExpr :: UT.Selector Expr D.Position -> Either TypeErrorReport ()
-typecheckExpr = typecheckThing (unifySelector unifyExpr)
 
 typecheckThing :: forall thing. (forall s. thing -> UnifyME (TypecheckFailure s) s (ChunkTypeT D.Position (Typ s))) -> thing -> Either TypeErrorReport ()
 typecheckThing typechecker t =
