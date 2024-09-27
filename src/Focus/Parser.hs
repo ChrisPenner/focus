@@ -50,10 +50,10 @@ withPos p = do
 parseSelector :: (forall x. (Show x) => Show (expr x)) => Text -> Text -> Either (Diagnostic Text) (Selector expr Pos)
 parseSelector srcName src = parseThing (scriptP noExprP) "Invalid selector" srcName src
   where
-    noExprP = exprP *> fail "Expressions are not valid where a selector was expected."
+    noExprP = actionP *> fail "Expressions are not valid where a selector was expected."
 
 parseAction :: Text -> Text -> Either (Diagnostic Text) TaggedAction
-parseAction srcName src = parseThing exprP "Invalid expression" srcName src
+parseAction srcName src = parseThing actionP "Invalid expression" srcName src
 
 parseThing :: (Show a) => P a -> Text -> Text -> Text -> Either (Diagnostic Text) a
 parseThing parser err srcName src = do
@@ -248,8 +248,8 @@ numberP = lexeme $ do
       fmap IntNumber . M.try $ L.signed (pure ()) L.decimal
     ]
 
-exprP :: P (Selector Expr Pos)
-exprP = selectorsP basicExprP
+actionP :: P (Selector Expr Pos)
+actionP = selectorsP basicExprP
 
 basicExprP :: P TaggedExpr
 basicExprP = mayBracketedP do
@@ -263,8 +263,14 @@ simpleExprP = withPos $ do
   caseMatchP $
     [ ( "concat",
         do
-          expr <- exprP
+          expr <- actionP
           pure $ flip StrConcat expr
+      ),
+      ( "intersperse",
+        do
+          a <- lexeme actionP
+          rest <- some (lexeme actionP)
+          pure $ \pos -> Intersperse pos (a NE.:| rest)
       )
     ]
 

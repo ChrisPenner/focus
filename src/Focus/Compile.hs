@@ -71,6 +71,8 @@ compileExpr cmdF = \case
     case cmdF of
       ViewF -> ViewFocus $ \f inp -> go (getViewFocus inner) f inp
       ModifyF -> ModifyFocus $ \f inp -> go (getModifyFocus inner) f inp
+  Intersperse _pos _actions -> do
+    error "TODO Intersperse"
 
 compileSelectorG :: forall cmd expr. (IsCmd cmd) => (expr D.Position -> Focus cmd Chunk Chunk) -> CommandF cmd -> Selector expr D.Position -> Focus cmd Chunk Chunk
 compileSelectorG goExpr cmdF = \case

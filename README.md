@@ -171,6 +171,9 @@ before feeding the result back through the selector.
 
 ## TODO
 
+- [ ] ability to zip/cartesian product selectors (for paste-like things)
+- [ ] figure out how to typecheck JSON union types
+- [ ] allow failing exit code on view on non-matches
 - [x] ~Switch to input file arguments~
 - [x] ~In-place editing~
 - [ ] Make expression language and selectors more consistent and distinct

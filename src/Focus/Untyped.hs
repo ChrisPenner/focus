@@ -149,6 +149,7 @@ data Expr a
   | Str a BindingString
   | Number a (NumberT)
   | StrConcat a (Action a)
+  | Intersperse a (NonEmpty (Action a))
   deriving stock (Show, Functor, Foldable, Traversable)
 
 data NumberT
