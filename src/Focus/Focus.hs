@@ -77,7 +77,7 @@ underText = withinIso textI
 withinIso :: (IsCmd cmd) => Iso' s a -> Focus cmd a a -> Focus cmd s s
 withinIso i t = liftIso i >.> t >.> liftIso (from i)
 
-unsafeIso :: (Show s) => Prism' s a -> Iso' s a
+unsafeIso :: (HasCallStack, Show s) => Prism' s a -> Iso' s a
 unsafeIso p = iso (\actual -> fromJust' actual . preview p $ actual) (review p)
   where
     fromJust' actual = \case

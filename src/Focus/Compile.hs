@@ -40,39 +40,31 @@ import Prelude hiding (reads)
 compileSelector :: forall cmd. (IsCmd cmd) => CommandF cmd -> TaggedSelector -> Focus cmd Chunk Chunk
 compileSelector cmdF = compileSelectorG absurdF cmdF
 
-compileAction :: forall cmd. (IsCmd cmd) => CommandF cmd -> TaggedAction -> Focus cmd Chunk Chunk
-compileAction cmdF = compileSelectorG (compileExpr cmdF) cmdF
+compileAction :: TaggedAction -> Focus ViewT Chunk Chunk
+compileAction = compileSelectorG compileExpr ViewF
 
-compileExpr :: forall cmd. (IsCmd cmd) => CommandF cmd -> TaggedExpr -> Focus cmd Chunk Chunk
-compileExpr cmdF = \case
+compileExpr :: TaggedExpr -> Focus ViewT Chunk Chunk
+compileExpr = \case
   Binding pos bindingName -> do
-    case cmdF of
-      ViewF -> ViewFocus \f inp -> do
-        binding <- resolveBinding pos inp bindingName
-        f binding
-      ModifyF -> ModifyFocus $ \f inp -> do
-        binding <- resolveBinding pos inp bindingName
-        f binding
+    ViewFocus \f inp -> do
+      binding <- resolveBinding pos inp bindingName
+      f binding
   Str _pos bindingStr ->
     let handler :: forall m b. (Focusable m) => (Chunk -> m b) -> Chunk -> m b
         handler f inp = do
           txt <- resolveBindingString inp bindingStr
           f (TextChunk txt)
-     in case cmdF of
-          ViewF -> ViewFocus handler
-          ModifyF -> ModifyFocus handler
+     in ViewFocus handler
   Number _pos num -> liftTrav $ \f _ -> f (NumberChunk num)
   StrConcat _pos innerExpr -> do
-    let inner = compileAction cmdF innerExpr
+    let inner = compileAction innerExpr
     let go :: ((Chunk -> m c) -> a -> m b) -> (Chunk -> m c) -> a -> m b
         go vf f inp =
           inp & vf \xs -> do
             f . TextChunk $ Text.concat (textChunk <$> listChunk xs)
-    case cmdF of
-      ViewF -> ViewFocus $ \f inp -> go (getViewFocus inner) f inp
-      ModifyF -> ModifyFocus $ \f inp -> go (getModifyFocus inner) f inp
+    ViewFocus $ \f inp -> go (getViewFocus inner) f inp
   Intersperse _pos _actions -> do
-    error "TODO Intersperse"
+    error "Intersperse"
 
 compileSelectorG :: forall cmd expr. (IsCmd cmd) => (expr D.Position -> Focus cmd Chunk Chunk) -> CommandF cmd -> Selector expr D.Position -> Focus cmd Chunk Chunk
 compileSelectorG goExpr cmdF = \case

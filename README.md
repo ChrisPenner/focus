@@ -188,3 +188,4 @@ before feeding the result back through the selector.
 - [ ] Handle errors from shell commands better
 - [ ] shell 'if'
 - [ ] Fix annoying ansi codes coming from diagnose even on no-color mode.
+- [ ] Fix printing of "STVar" in type errors, e.g. `focus view '/one/ | ...'`

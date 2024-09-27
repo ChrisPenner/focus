@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 module Focus (run) where
 
 import Control.Applicative
@@ -12,7 +14,7 @@ import Data.Text.IO qualified as TextIO
 import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Focus.Cli (InPlace (..), Options (..), OutputLocation (..), UseColour (..), optionsP)
-import Focus.Command (Command (..), CommandF (..), IsCmd)
+import Focus.Command (Command (..), CommandF (..), CommandT (..), IsCmd)
 import Focus.Compile (compileAction, compileSelector)
 import Focus.Exec qualified as Exec
 import Focus.Parser (parseAction, parseSelector)
@@ -52,11 +54,11 @@ run = do
   flip runReaderT opts do
     case command of
       View script inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
-        focus <- getActionFocus ViewF script
+        focus <- getActionFocus script
         r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runView focus chunkSize inputHandle outputHandle
         handleError r
       Modify script m inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
-        (focus, action) <- getModifyFocus ModifyF script m
+        (focus, action) <- getModifyFocus script m
         r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runModify focus action chunkSize inputHandle outputHandle
         handleError r
       Set script val inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
@@ -146,8 +148,8 @@ run = do
             Right () -> do
               pure $ compileSelector cmdF ast
 
-    getActionFocus :: (IsCmd cmd) => CommandF cmd -> Text -> CliM (Focus cmd Chunk Chunk)
-    getActionFocus cmdF actionTxt = do
+    getActionFocus :: Text -> CliM (Focus ViewT Chunk Chunk)
+    getActionFocus actionTxt = do
       addSource "<action>" actionTxt
       case parseAction "<action>" actionTxt of
         Left errDiagnostic -> do
@@ -156,10 +158,10 @@ run = do
           case typecheckAction ast of
             Left errReport -> failWithReport errReport
             Right () -> do
-              pure $ compileAction cmdF ast
+              pure $ compileAction ast
 
-    getModifyFocus :: (IsCmd cmd) => CommandF cmd -> Text -> Text -> CliM (Focus cmd Chunk Chunk, Focus cmd Chunk Chunk)
-    getModifyFocus cmdF selectorTxt actionTxt = do
+    getModifyFocus :: Text -> Text -> CliM (Focus ModifyT Chunk Chunk, Focus ViewT Chunk Chunk)
+    getModifyFocus selectorTxt actionTxt = do
       addSource "<selector>" selectorTxt
       addSource "<action>" actionTxt
       case parseSelector "<selector>" selectorTxt of
@@ -173,6 +175,6 @@ run = do
               case typecheckModify selectorAst action of
                 Left errReport -> failWithReport errReport
                 Right () -> do
-                  let compiledSel = compileSelector cmdF selectorAst
-                  let compiledAction = compileAction cmdF action
+                  let compiledSel = compileSelector ModifyF selectorAst
+                  let compiledAction = compileAction action
                   pure $ (compiledSel, compiledAction)
