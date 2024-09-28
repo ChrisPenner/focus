@@ -18,12 +18,15 @@ module Focus.Types
     ChunkTypeT (..),
     TypeErrorReport,
     ReturnArity (..),
+    FocusEnv (..),
+    FocusOpts (..),
+    focusOpts,
+    focusBindings,
+    handleErr,
   )
 where
 
 import Control.Lens
-import Control.Monad.Error.Class (MonadError (..))
-import Control.Monad.Except (ExceptT)
 import Control.Monad.Fix (MonadFix (..))
 import Control.Monad.RWS.CPS (MonadReader (..))
 import Control.Monad.Reader (ReaderT)
@@ -42,14 +45,27 @@ import Prelude hiding (reads)
 data SelectorError
   = ShellError Text
   | BindingError Pos Text
+  | JsonParseError Pos Text {- < chunk -} Text {- < error -}
 
-newtype FocusM a = FocusM {runFocusM :: ExceptT SelectorError (ReaderT Bindings IO) a}
-  deriving newtype (Functor, Applicative, Monad, MonadIO, MonadError SelectorError, MonadFix, MonadReader Bindings)
+newtype FocusM a = FocusM {runFocusM :: ReaderT FocusEnv IO a}
+  deriving newtype (Functor, Applicative, Monad, MonadIO, MonadFix, MonadReader FocusEnv)
 
-type Focusable m = (MonadReader Bindings m, MonadIO m, MonadFix m, MonadError SelectorError m)
+data FocusOpts = FocusOpts
+  { _handleErr :: Chunk -> SelectorError -> IO Chunk
+  }
+
+data FocusEnv = FocusEnv
+  { _focusBindings :: Bindings,
+    _focusOpts :: FocusOpts
+  }
+
+makeLenses ''FocusEnv
+makeLenses ''FocusOpts
+
+type Focusable m = (MonadReader FocusEnv m, MonadIO m, MonadFix m)
 
 data Focus (cmd :: CommandT) i o where
-  ViewFocus :: (forall m r. (Monoid r) => (Focusable m) => (o -> m r) -> i -> m r) -> Focus 'ViewT i o
+  ViewFocus :: (forall m r. (Monoid r, Focusable m) => LensLike m i r o r) -> Focus 'ViewT i o
   ModifyFocus :: (forall m. (Focusable m) => LensLike' m i o) -> Focus 'ModifyT i o
 
 type UVar s = Unify.STVar s (ChunkTypeT D.Position)

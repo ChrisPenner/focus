@@ -5,9 +5,11 @@ module Focus.Focus
   ( getViewFocus,
     getModifyFocus,
     textChunk,
+    jsonChunk,
     listChunk,
     composeFocus,
     liftTrav,
+    liftSimple,
     liftIso,
     textI,
     asListI,
@@ -23,6 +25,7 @@ import Control.Lens
 import Control.Monad.Fix (MonadFix (..))
 import Control.Monad.State.Lazy qualified as Lazy
 import Control.Monad.Writer.CPS
+import Data.Aeson (Value)
 import Data.Monoid (Ap (..))
 import Data.Text (Text)
 import Data.Vector.Internal.Check (HasCallStack)
@@ -43,6 +46,11 @@ textChunk = \case
   TextChunk txt -> txt
   actual -> error $ "Expected TextChunk, got " <> show actual
 
+jsonChunk :: Chunk -> Value
+jsonChunk = \case
+  JsonChunk v -> v
+  actual -> error $ "Expected JsonChunk, got " <> show actual
+
 listChunk :: Chunk -> [Chunk]
 listChunk = \case
   ListChunk chs -> chs
@@ -59,6 +67,16 @@ liftTrav :: forall cmd i o. (IsCmd cmd) => Traversal' i o -> Focus cmd i o
 liftTrav trav = case getCmd @cmd of
   ViewF -> ViewFocus $ \handler chunk -> getAp $ foldMapOf trav (Ap . handler) chunk
   ModifyF -> ModifyFocus $ trav
+
+liftSimple :: forall cmd i o. (IsCmd cmd) => (forall m. (Focusable m) => i -> m o) -> (forall m. (Focusable m) => o -> m i) -> Focus cmd i o
+liftSimple forward backward = do
+  case getCmd @cmd of
+    ViewF -> ViewFocus \f s -> do
+      x <- forward s
+      f x
+    ModifyF -> ModifyFocus \f s -> do
+      x <- forward s
+      f x >>= backward
 
 liftIso :: forall cmd i o. (IsCmd cmd) => Iso' i o -> Focus cmd i o
 liftIso i = case getCmd @cmd of

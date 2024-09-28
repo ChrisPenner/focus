@@ -17,16 +17,18 @@ where
 
 import Control.Lens
 import Control.Lens.Regex.Text qualified as RE
-import Control.Monad.Error.Class (MonadError (..))
-import Control.Monad.RWS.CPS (MonadReader (..))
-import Control.Monad.State.Lazy
+import Control.Monad.Reader
 import Control.Monad.Trans.Maybe (MaybeT (..))
+import Data.Aeson qualified as Aeson
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text
 import Data.Text.IO qualified as Text
+import Data.Text.Lazy qualified as TL
+import Data.Text.Lazy.Encoding qualified as TL
 import Error.Diagnose qualified as D
 import Focus.Command (CommandF (..), CommandT (..), IsCmd)
 import Focus.Focus
@@ -127,8 +129,8 @@ compileSelectorG goExpr cmdF = \case
         & traversed %%~ f
         <&> ListChunk
   Shell _ shellScript shellMode -> do
-    let go :: forall x m. (Focusable m) => (Chunk -> m x) -> Chunk -> m x
-        go f chunk = do
+    let go :: forall m. (Focusable m) => (Chunk -> m Chunk)
+        go chunk = do
           shellTxt <- resolveBindingString chunk shellScript
           let proc = UnliftIO.shell (Text.unpack shellTxt)
           let proc' = proc {UnliftIO.std_in = UnliftIO.CreatePipe, UnliftIO.std_out = UnliftIO.CreatePipe, UnliftIO.std_err = UnliftIO.CreatePipe}
@@ -150,12 +152,10 @@ compileSelectorG goExpr cmdF = \case
                 pure $ Right out'
           case procResult of
             Left (code, errOut) -> do
-              throwError $ ShellError $ "Shell script failed with exit code " <> tShow code <> ": " <> renderBindingString shellScript <> "\n" <> errOut
+              mayErr chunk $ ShellError $ "Shell script failed with exit code " <> tShow code <> ": " <> renderBindingString shellScript <> "\n" <> errOut
             Right out -> do
-              f (TextChunk out)
-    case cmdF of
-      ViewF -> ViewFocus \f chunk -> go f chunk
-      ModifyF -> ModifyFocus \f chunk -> go f chunk
+              pure (TextChunk out)
+    liftSimple go pure
   At _ n -> do
     liftTrav $ \f chunk -> do
       listChunk chunk
@@ -180,6 +180,16 @@ compileSelectorG goExpr cmdF = \case
           Right txt -> f (TextChunk txt)
         & fmap (TextChunk . Text.concat . fmap textChunk)
   Action _ expr -> goExpr expr
+  ParseJSON pos -> do
+    let fwd :: (Focusable m) => Chunk -> m Chunk
+        fwd chunk =
+          let txt = textChunk chunk
+           in case Aeson.eitherDecodeStrict' (Text.encodeUtf8 txt) of
+                Left err -> mayErr chunk $ JsonParseError pos txt (Text.pack err)
+                Right val -> pure (JsonChunk val)
+        bwd :: (Focusable m) => Chunk -> m Chunk
+        bwd chunk = pure $ TextChunk . TL.toStrict . TL.decodeUtf8 $ Aeson.encode (jsonChunk chunk)
+    liftSimple fwd bwd
   where
     hasMatches :: (Focusable m) => CommandF cmd -> Focus cmd i o -> i -> m Bool
     hasMatches cmd foc i = do
@@ -203,7 +213,7 @@ compileSelectorG goExpr cmdF = \case
         let groups =
               match ^. RE.namedGroups
                 <&> TextChunk
-        local (groups <>) $ go f match
+        local (over focusBindings (groups <>)) $ go f match
 
     modifyRegex :: RE.Regex -> (Traversal' RE.Match Text) -> Focus 'ModifyT Chunk Chunk
     modifyRegex pat trav = ModifyFocus \f chunk -> do
@@ -212,20 +222,25 @@ compileSelectorG goExpr cmdF = \case
         let groups =
               match ^. RE.namedGroups
                 <&> TextChunk
-        local (groups <>) $ forOf trav match (fmap textChunk . f . TextChunk)
+        local (over focusBindings (groups <>)) $ forOf trav match (fmap textChunk . f . TextChunk)
 
-resolveBindingString :: (MonadReader Bindings m, MonadError SelectorError m) => Chunk -> BindingString -> m Text
+mayErr :: (Focusable m) => Chunk -> SelectorError -> m Chunk
+mayErr chunk err = do
+  handler <- view (focusOpts . handleErr)
+  liftIO $ handler chunk err
+
+resolveBindingString :: (Focusable m) => Chunk -> BindingString -> m Text
 resolveBindingString input (BindingString xs) = do
   Text.concat <$> for xs \case
     Left (binding, pos) -> do
       textChunk <$> resolveBinding pos input binding
     Right txt -> pure txt
 
-resolveBinding :: (MonadReader Bindings m, MonadError SelectorError m) => Pos -> Chunk -> BindingName -> m Chunk
+resolveBinding :: (Focusable m) => Pos -> Chunk -> BindingName -> m Chunk
 resolveBinding pos input = \case
   BindingName name -> do
-    bindings <- ask
+    bindings <- view focusBindings
     case Map.lookup name bindings of
       Just chunk -> pure chunk
-      Nothing -> throwError $ BindingError pos $ "Binding not in scope: " <> name
+      Nothing -> mayErr input $ BindingError pos $ "Binding not in scope: " <> name
   InputBinding -> pure input

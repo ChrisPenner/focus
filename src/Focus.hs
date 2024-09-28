@@ -3,11 +3,8 @@
 module Focus (run) where
 
 import Control.Applicative
-import Control.Monad.Except (runExceptT)
-import Control.Monad.Reader (ReaderT (..), asks)
+import Control.Monad.Reader (MonadReader, ReaderT (..), asks)
 import Control.Monad.State
-import Data.Map (Map)
-import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
@@ -31,12 +28,12 @@ import UnliftIO.IO qualified as UnliftIO
 import UnliftIO.Temporary qualified as UnliftIO
 
 data CliState = CliState
-  { sources :: Map Text Text
+  { diagnostic :: D.Diagnostic Text
   }
 
 addSource :: Text -> Text -> CliM ()
 addSource name src = do
-  modify \s -> s {sources = Map.insert name src (sources s)}
+  modify \s -> s {diagnostic = D.addFile (diagnostic s) (Text.unpack name) (Text.unpack src)}
 
 type CliM = StateT CliState (ReaderT Options IO)
 
@@ -55,49 +52,24 @@ run = do
     case command of
       View script inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
         focus <- getActionFocus script
-        r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runView focus chunkSize inputHandle outputHandle
-        handleError r
+        focusMToCliM $ Exec.runView focus chunkSize inputHandle outputHandle
       Modify script m inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
         (focus, action) <- getModifyFocus script m
-        r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runModify focus action chunkSize inputHandle outputHandle
-        handleError r
+        focusMToCliM $ Exec.runModify focus action chunkSize inputHandle outputHandle
       Set script val inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
         focus <- getSelectorFocus ModifyF script
-        r <- liftIO . flip runReaderT mempty . runExceptT . runFocusM $ Exec.runSet focus chunkSize inputHandle outputHandle val
-        handleError r
+        focusMToCliM $ Exec.runSet focus chunkSize inputHandle outputHandle val
   where
-    handleError :: Either SelectorError () -> CliM ()
-    handleError = \case
-      Left err -> case err of
-        ShellError msg -> do
-          liftIO $ TextIO.hPutStrLn UnliftIO.stderr msg
-          liftIO $ System.exitFailure
-        BindingError pos msg -> do
-          let report =
-                D.Err
-                  Nothing
-                  "Binding error"
-                  [ (pos, D.This $ msg)
-                  ]
-                  []
-          failWithReport report
-      Right () -> pure ()
-    diagnoseStyle :: CliM (Diagnose.Style AnsiStyle)
-    diagnoseStyle =
-      asks useColour <&> \case
-        Colour -> Diagnose.defaultStyle
-        NoColour -> Diagnose.unadornedStyle
     failWithDiagnostic :: Diagnose.Diagnostic Text -> CliM a
     failWithDiagnostic diagnostic = do
       style <- diagnoseStyle
-      Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style diagnostic
+      printDiagnostic style diagnostic
       liftIO $ System.exitFailure
 
     failWithReport :: Diagnose.Report Text -> CliM a
     failWithReport report = do
-      CliState srcs <- get
-      let diagnostic = Map.toList srcs & foldMap \(srcName, src) -> Diagnose.addFile mempty (Text.unpack srcName) (Text.unpack src)
-      failWithDiagnostic $ Diagnose.addReport diagnostic report
+      diag <- gets diagnostic
+      failWithDiagnostic $ Diagnose.addReport diag report
 
     failWith :: (MonadIO m) => Text -> m a
     failWith msg = do
@@ -178,3 +150,55 @@ run = do
                   let compiledSel = compileSelector ModifyF selectorAst
                   let compiledAction = compileAction action
                   pure $ (compiledSel, compiledAction)
+
+focusMToCliM :: FocusM a -> CliM a
+focusMToCliM m = do
+  env <- mkEnv
+  liftIO . flip runReaderT env . runFocusM $ m
+  where
+    mkEnv :: CliM FocusEnv
+    mkEnv = do
+      style <- diagnoseStyle
+      d <- gets diagnostic
+      pure $
+        FocusEnv
+          { _focusBindings = mempty,
+            _focusOpts = FocusOpts {_handleErr = handleError style d True}
+          }
+
+    handleError :: Diagnose.Style AnsiStyle -> D.Diagnostic Text -> Bool -> Chunk -> SelectorError -> IO Chunk
+    handleError style diag shouldFail chunk err = do
+      case err of
+        ShellError msg -> do
+          liftIO $ TextIO.hPutStrLn UnliftIO.stderr msg
+        BindingError pos msg -> do
+          let report =
+                D.Err
+                  Nothing
+                  "Binding error"
+                  [ (pos, D.This $ msg)
+                  ]
+                  []
+          printDiagnostic style $ D.addReport diag report
+        JsonParseError pos txt e -> do
+          let report =
+                D.Err
+                  Nothing
+                  "JSON parse error"
+                  [ (pos, D.This $ Text.unlines ["Encountered invalid JSON.", "Error: " <> e, "Value: " <> txt])
+                  ]
+                  []
+          printDiagnostic style $ D.addReport diag report
+      if shouldFail
+        then liftIO $ System.exitFailure
+        else pure chunk
+
+printDiagnostic :: (MonadIO m) => Diagnose.Style AnsiStyle -> D.Diagnostic Text -> m ()
+printDiagnostic style report = do
+  Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style report
+
+diagnoseStyle :: (MonadReader Options m) => m (Diagnose.Style AnsiStyle)
+diagnoseStyle =
+  asks useColour <&> \case
+    Colour -> Diagnose.defaultStyle
+    NoColour -> Diagnose.unadornedStyle

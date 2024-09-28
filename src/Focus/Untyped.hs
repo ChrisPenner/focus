@@ -25,15 +25,20 @@ module Focus.Untyped
     NumberT (..),
     VoidF,
     absurdF,
+    renderChunk,
   )
 where
 
 import Control.Lens
 import Control.Lens.Regex.Text qualified as Re
+import Data.Aeson (Value)
+import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy.Char8 qualified as BSC
 import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Error.Diagnose qualified as D
 import Focus.Tagged (Tagged (..))
 import Text.Regex.PCRE.Heavy (Regex)
@@ -94,6 +99,7 @@ data Selector (expr :: Type -> Type) a
   | DropEnd a Int (Selector expr a)
   | Contains a Text
   | Action a (expr a)
+  | ParseJSON a
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Selector expr a) a where
@@ -117,12 +123,14 @@ instance Tagged (Selector expr a) a where
     DropEnd a _ _ -> a
     Contains a _ -> a
     Action a _ -> a
+    ParseJSON a -> a
 
 data Chunk
   = TextChunk Text
   | ListChunk [Chunk]
   | NumberChunk NumberT
   | RegexMatchChunk Re.Match
+  | JsonChunk Value
 
 instance Show Chunk where
   show = \case
@@ -130,6 +138,15 @@ instance Show Chunk where
     ListChunk chs -> show chs
     NumberChunk n -> show n
     RegexMatchChunk m -> show $ m ^.. Re.matchAndGroups
+    JsonChunk v -> BSC.unpack $ Aeson.encode v
+
+renderChunk :: Chunk -> Text
+renderChunk = \case
+  TextChunk txt -> txt
+  ListChunk chs -> Text.pack . show $ renderChunk <$> chs
+  NumberChunk n -> Text.pack (show n)
+  RegexMatchChunk _m -> error "Can't render a regex match chunk"
+  JsonChunk v -> Text.pack $ BSC.unpack $ Aeson.encode v
 
 data ChunkType
   = TextType

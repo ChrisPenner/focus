@@ -6,13 +6,12 @@ import Control.Lens
 import Control.Monad.IO.Class (MonadIO (..))
 import Data.Monoid (First (..))
 import Data.Text (Text)
-import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
 import Focus.Cli (ChunkSize (..))
 import Focus.Command
 import Focus.Compile (Focus (..), FocusM)
 import Focus.Prelude
-import Focus.Typechecker.Types (Chunk (..))
+import Focus.Untyped
 import System.IO qualified as IO
 import UnliftIO (BufferMode (LineBuffering), Handle, hSetBuffering)
 
@@ -54,10 +53,3 @@ runModify (ModifyFocus trav) (ViewFocus action) chunkSize input output = do
       chunk' & action %%~ (pure . First . Just) >>= \case
         First (Just c) -> pure c
         First Nothing -> pure chunk'
-
-renderChunk :: Chunk -> Text
-renderChunk = \case
-  TextChunk txt -> txt
-  ListChunk chs -> Text.pack . show $ renderChunk <$> chs
-  NumberChunk n -> Text.pack (show n)
-  RegexMatchChunk _m -> error "Can't render a regex match chunk"
