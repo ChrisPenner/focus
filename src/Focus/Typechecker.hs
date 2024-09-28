@@ -163,9 +163,9 @@ unifyModify (selector, expr) = do
   (exprIn, exprOut, actionArity) <- unifyAction expr
   _ <- liftUnify $ Unify.unify selectorOut exprIn
   _ <- liftUnify $ Unify.unify selectorOut exprOut
-  case actionArity of
-    Exactly 1 -> pure ()
-    _ -> throwError $ ExpectedSingularArity (tag expr) actionArity
+  -- case actionArity of
+  --   Exactly 1 -> pure ()
+  --   _ -> throwError $ ExpectedSingularArity (tag expr) actionArity
   pure (selectorIn, exprOut, actionArity)
 
 typecheckSelector :: UT.TaggedSelector -> Either TypeErrorReport ()

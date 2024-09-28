@@ -9,7 +9,7 @@ one,two,three
    1 │ splitOn "," | at 1
      • ┬───────────  ┬───
      • ╰──────────────╸ this selector outputs: text
-     •               ╰╸ but this selector expects: [STVar -9223372036854775808]
+     •               ╰╸ but this selector expects: [a]
 ─────╯
 ===EXIT CODE===============================================================================
 0
