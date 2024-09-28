@@ -54,6 +54,12 @@ unificationErrorReport = \case
       "Unknown binding"
       [(pos, D.This $ "Binding " <> tShow name <> " is not in scope.")]
       []
+  ExpectedSingularArity pos arity ->
+    Diagnose.Err
+      Nothing
+      "Multiplicity error"
+      [(pos, D.This $ "Actions must result in exactly one result." <> tShow arity)]
+      []
   where
     renderTyp :: Typ s -> Text
     renderTyp = \case
@@ -77,6 +83,7 @@ data TypecheckFailure s
   = OccursFailure (UVar s) (Typ s)
   | MismatchFailure (ChunkTypeT Diagnose.Position (Typ s)) (ChunkTypeT Diagnose.Position (Typ s))
   | UndeclaredBinding Diagnose.Position Text
+  | ExpectedSingularArity Diagnose.Position ReturnArity
 
 instance Unify.Fallible (ChunkTypeT D.Position) (UVar s) (TypecheckFailure s) where
   occursFailure = OccursFailure
@@ -119,25 +126,35 @@ expectBinding pos name = do
 
 typecheckModify :: UT.TaggedSelector -> UT.Selector Expr D.Position -> Either TypeErrorReport ()
 typecheckModify selector expr = do
-  typecheckThing unifyModify (selector, expr)
+  typecheckThing $ do
+    (inp, _out, _arity) <- unifyModify (selector, expr)
+    _ <- liftUnify $ Unify.unify inp (T.textType (tag selector))
+    pure ()
 
 typecheckAction :: UT.TaggedAction -> Either TypeErrorReport ()
-typecheckAction = typecheckThing unifyAction
+typecheckAction action = typecheckThing $ do
+  void $ unifyAction action
 
-unifyModify :: (UT.TaggedSelector, UT.Selector Expr D.Position) -> UnifyME (TypecheckFailure s) s (Typ s, Typ s)
+unifyModify :: (UT.TaggedSelector, UT.Selector Expr D.Position) -> UnifyME (TypecheckFailure s) s (Typ s, Typ s, ReturnArity)
 unifyModify (selector, expr) = do
-  (selectorIn, selectorOut) <- unifySelector selector
-  (exprIn, exprOut) <- unifyAction expr
+  (selectorIn, selectorOut, _selArity) <- unifySelector selector
+  (exprIn, exprOut, actionArity) <- unifyAction expr
   _ <- liftUnify $ Unify.unify selectorOut exprIn
   _ <- liftUnify $ Unify.unify selectorOut exprOut
-  pure $ (selectorIn, exprOut)
+  case actionArity of
+    Exactly 1 -> pure ()
+    _ -> throwError $ ExpectedSingularArity (tag expr) actionArity
+  pure (selectorIn, exprOut, actionArity)
 
 typecheckSelector :: UT.TaggedSelector -> Either TypeErrorReport ()
-typecheckSelector = typecheckThing unifySelector
+typecheckSelector sel = typecheckThing do
+  (inp, _out, _arity) <- unifySelector sel
+  _ <- liftUnify $ Unify.unify inp (T.textType (tag sel))
+  pure ()
 
-typecheckThing :: forall thing. (forall s. thing -> UnifyME (TypecheckFailure s) s (Typ s, Typ s)) -> thing -> Either TypeErrorReport ()
-typecheckThing typechecker t =
-  void $ Unify.runSTBinding $ runExceptT $ flip evalStateT mempty $ mapStateT (withExceptT unificationErrorReport) $ void $ typechecker t
+typecheckThing :: (forall s. UnifyME (TypecheckFailure s) s ()) -> Either TypeErrorReport ()
+typecheckThing m = do
+  Unify.runSTBinding $ runExceptT $ flip evalStateT mempty $ mapStateT (withExceptT unificationErrorReport) $ void $ m
 
 -- where
 --   go :: thing -> StateT (UBindings s) (ExceptT (TypecheckFailure s) (Unify.STBinding s)) (Fix (ChunkTypeT D.Position))
@@ -148,88 +165,116 @@ typecheckThing typechecker t =
 --       Nothing -> pure $ error "Freeze failed"
 --       Just r -> pure r
 
-unifySelector :: UT.TaggedSelector -> UnifyM s (Typ s, Typ s)
+unifySelector :: UT.TaggedSelector -> UnifyM s (Typ s, Typ s, ReturnArity)
 unifySelector = unifySelectorG absurdF
 
-unifyAction :: UT.TaggedAction -> UnifyM s (Typ s, Typ s)
+unifyAction :: UT.TaggedAction -> UnifyM s (Typ s, Typ s, ReturnArity)
 unifyAction = unifySelectorG unifyExpr
 
-unifySelectorG :: forall s expr. (expr D.Position -> UnifyM s (Typ s, Typ s)) -> UT.Selector expr D.Position -> UnifyM s (Typ s, Typ s)
+unifySelectorG :: forall s expr. (expr D.Position -> UnifyM s (Typ s, Typ s, ReturnArity)) -> UT.Selector expr D.Position -> UnifyM s (Typ s, Typ s, ReturnArity)
 unifySelectorG goExpr = \case
   UT.Compose _pos (s NE.:| rest) -> do
     s' <- unifySelectorG goExpr s
     foldlM compose s' rest
-  UT.SplitFields pos _delim -> pure $ (T.textType pos, T.textType pos)
+  UT.SplitFields pos _delim -> pure $ (T.textType pos, T.textType pos, Any)
   UT.SplitLines pos -> do
-    pure (T.textType pos, T.textType pos)
+    pure (T.textType pos, T.textType pos, Any)
   UT.SplitWords pos -> do
-    pure (T.textType pos, T.textType pos)
+    pure (T.textType pos, T.textType pos, Any)
   UT.Regex pos _regex bindings -> do
     declareBindings bindings
-    pure $ (T.textType pos, T.textType pos)
-  UT.RegexMatches pos -> pure $ (T.regexMatchType pos, T.textType pos)
+    pure $ (T.textType pos, T.textType pos, Any)
+  UT.RegexMatches pos -> pure $ (T.regexMatchType pos, T.textType pos, Any)
   UT.RegexGroups pos _pat bindings -> do
     declareBindings bindings
-    pure (T.textType pos, T.textType pos)
+    pure (T.textType pos, T.textType pos, Any)
   UT.ListOf pos inner -> do
-    (inp, out) <- unifySelectorG goExpr inner
-    pure (inp, T.listType pos out)
-  UT.Filter _pos inner -> unifySelectorG goExpr inner
-  UT.Not _pos inner -> unifySelectorG goExpr inner
+    (inp, out, _arity) <- unifySelectorG goExpr inner
+    pure (inp, T.listType pos out, Exactly 1)
+  UT.Filter _pos _inner -> do
+    inp <- freshVar
+    out <- freshVar
+    pure (inp, out, Affine)
+  UT.Not _pos _inner -> do
+    inp <- freshVar
+    out <- freshVar
+    pure (inp, out, Affine)
   UT.Splat pos -> do
     inp <- freshVar
-    pure $ (T.listType pos inp, inp)
+    pure $ (T.listType pos inp, inp, Any)
   UT.Shell pos script shellMode -> do
     inp <- case shellMode of
       Normal -> pure $ T.textType pos
       NullStdin -> freshVar
     unifyBindingString inp script
-    pure $ (inp, T.textType pos)
+    pure $ (inp, T.textType pos, Affine)
   UT.At pos _n -> do
     inp <- freshVar
-    pure (T.listType pos inp, inp)
-  UT.Take _pos _n inner -> do unifySelectorG goExpr inner
-  UT.TakeEnd _pos _n inner -> do unifySelectorG goExpr inner
-  UT.Drop _pos _n inner -> do unifySelectorG goExpr inner
-  UT.DropEnd _pos _n inner -> do unifySelectorG goExpr inner
+    pure (T.listType pos inp, inp, Affine)
+  UT.Take _pos _n inner -> do
+    (inp, out, _arity) <- unifySelectorG goExpr inner
+    pure (inp, out, Any)
+  UT.TakeEnd _pos _n inner -> do
+    (inp, out, _arity) <- unifySelectorG goExpr inner
+    pure (inp, out, Any)
+  UT.Drop _pos _n inner -> do
+    (inp, out, _arity) <- unifySelectorG goExpr inner
+    pure (inp, out, Any)
+  UT.DropEnd _pos _n inner -> do
+    (inp, out, _arity) <- unifySelectorG goExpr inner
+    pure (inp, out, Any)
   UT.Contains pos _txt -> do
-    pure $ (T.textType pos, T.textType pos)
+    pure $ (T.textType pos, T.textType pos, Affine)
   UT.Action _pos expr -> do
     goExpr expr
   where
     compose ::
-      (Typ s, Typ s) ->
+      (Typ s, Typ s, ReturnArity) ->
       UT.Selector expr Diagnose.Position ->
-      UnifyM s (Typ s, Typ s)
-    compose (li, lm) rTagged = do
-      (rm, ro) <- unifySelectorG goExpr rTagged
+      UnifyM s (Typ s, Typ s, ReturnArity)
+    compose (li, lm, lArity) rTagged = do
+      (rm, ro, rArity) <- unifySelectorG goExpr rTagged
       _ <- liftUnify $ Unify.unify lm rm
-      pure (li, ro)
+      pure (li, ro, composeArity lArity rArity)
+    composeArity :: ReturnArity -> ReturnArity -> ReturnArity
+    composeArity = \cases
+      (Exactly 0) _ -> (Exactly 0)
+      _ (Exactly 0) -> (Exactly 0)
+      (Exactly 1) x -> x
+      x (Exactly 1) -> x
+      Any _ -> Any
+      _ Any -> Any
+      Affine Affine -> Affine
+      Affine Exactly {} -> Any
+      Exactly {} Affine -> Any
+      (Exactly n) (Exactly m) -> Exactly (n * m)
 
-unifyExpr :: UT.TaggedExpr -> UnifyME (TypecheckFailure s) s (Typ s, Typ s)
+unifyExpr :: UT.TaggedExpr -> UnifyME (TypecheckFailure s) s (Typ s, Typ s, ReturnArity)
 unifyExpr = \case
   Binding _pos InputBinding -> do
     inputTyp <- freshVar
-    pure (inputTyp, inputTyp)
+    pure (inputTyp, inputTyp, Exactly 1)
   Binding pos (BindingName name) -> do
     bindingTyp <- expectBinding pos name
     -- any input type, output type matches the binding
     inputTyp <- freshVar
-    pure (inputTyp, bindingTyp)
+    pure (inputTyp, bindingTyp, Exactly 1)
   Str pos bindingStr -> do
     inputTyp <- freshVar
     unifyBindingString inputTyp bindingStr
-    pure $ (inputTyp, (T.textType pos))
+    pure $ (inputTyp, (T.textType pos), Exactly 1)
   Number pos _num -> do
     inputTyp <- freshVar
-    pure $ (inputTyp, (T.numberType pos))
+    pure $ (inputTyp, (T.numberType pos), Exactly 1)
   StrConcat pos innerExpr -> do
-    (inp, innerResult) <- unifyAction innerExpr
+    (inp, innerResult, _innerArity) <- unifyAction innerExpr
     _ <- liftUnify $ Unify.unify innerResult (T.listType pos (T.textType pos))
-    pure $ (inp, (T.textType pos))
+    -- TODO: Should We require the inner to have exactly 1 return?
+    pure $ (inp, T.textType pos, Exactly 1)
   Intersperse _pos actions -> do
-    typs <- for actions unifyAction
-    liftUnify $ F1.foldrM1 (\(i1, o1) (i2, o2) -> (,) <$> Unify.unify i1 i2 <*> Unify.unify o1 o2) typs
+    typs <- for actions unifyAction <&> fmap \(i, o, _) -> (i, o)
+    (i, o) <- liftUnify $ F1.foldrM1 (\(i1, o1) (i2, o2) -> (,) <$> Unify.unify i1 i2 <*> Unify.unify o1 o2) typs
+    pure $ (i, o, Any)
 
 unifyBindingString :: Typ s -> BindingString -> UnifyM s ()
 unifyBindingString inputTyp (BindingString bindings) = do

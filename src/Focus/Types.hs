@@ -17,6 +17,7 @@ module Focus.Types
     ChunkType (..),
     ChunkTypeT (..),
     TypeErrorReport,
+    ReturnArity (..),
   )
 where
 
@@ -54,6 +55,9 @@ data Focus (cmd :: CommandT) i o where
 type UVar s = Unify.STVar s (ChunkTypeT D.Position)
 
 type Typ s = UTerm (ChunkTypeT D.Position) (UVar s)
+
+data ReturnArity = Affine | Exactly Int | Any
+  deriving stock (Show, Eq, Ord)
 
 data ChunkTypeT a r
   = Arrow a r r
