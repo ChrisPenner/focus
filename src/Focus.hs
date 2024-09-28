@@ -19,7 +19,7 @@ import Focus.Compile (compileAction, compileSelector)
 import Focus.Exec qualified as Exec
 import Focus.Parser (parseAction, parseSelector)
 import Focus.Prelude
-import Focus.Typechecker (typecheckAction, typecheckModify, typecheckSelector)
+import Focus.Typechecker (typecheckModify, typecheckSelector, typecheckView)
 import Focus.Types
 import Options.Applicative qualified as Opts
 import Prettyprinter.Render.Terminal (AnsiStyle)
@@ -155,7 +155,7 @@ run = do
         Left errDiagnostic -> do
           failWithDiagnostic errDiagnostic
         Right ast -> do
-          case typecheckAction ast of
+          case typecheckView ast of
             Left errReport -> failWithReport errReport
             Right () -> do
               pure $ compileAction ast

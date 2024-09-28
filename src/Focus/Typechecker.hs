@@ -1,7 +1,7 @@
 module Focus.Typechecker
   ( typecheckSelector,
     typecheckModify,
-    typecheckAction,
+    typecheckView,
   )
 where
 
@@ -16,6 +16,7 @@ import Data.Foldable1 qualified as F1
 import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as M
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Focus.Prelude
@@ -60,10 +61,21 @@ unificationErrorReport = \case
       "Multiplicity error"
       [(pos, D.This $ "Actions must result in exactly one result." <> tShow arity)]
       []
+  NonTextInput pos typ ->
+    Diagnose.Err
+      Nothing
+      "Type error"
+      [(pos, D.This $ "Selector must accept text input, but instead expects: " <> renderTyp typ)]
+      []
   where
+    varNames :: [Text]
+    varNames =
+      let letters = (Text.singleton <$> ['a' .. 'z'])
+       in letters <> zipWith (<>) (cycle letters) (Text.pack . show <$> [(0 :: Int) ..])
     renderTyp :: Typ s -> Text
     renderTyp = \case
-      UVar v -> tShow v
+      UVar v ->
+        varNames !! succ (maxBound + Unify.getVarID v)
       UTerm t -> renderUTyp t
     renderUTyp :: ChunkTypeT D.Position (Typ s) -> Text
     renderUTyp = \case
@@ -84,6 +96,7 @@ data TypecheckFailure s
   | MismatchFailure (ChunkTypeT Diagnose.Position (Typ s)) (ChunkTypeT Diagnose.Position (Typ s))
   | UndeclaredBinding Diagnose.Position Text
   | ExpectedSingularArity Diagnose.Position ReturnArity
+  | NonTextInput Diagnose.Position (Typ s)
 
 instance Unify.Fallible (ChunkTypeT D.Position) (UVar s) (TypecheckFailure s) where
   occursFailure = OccursFailure
@@ -128,12 +141,21 @@ typecheckModify :: UT.TaggedSelector -> UT.Selector Expr D.Position -> Either Ty
 typecheckModify selector expr = do
   typecheckThing $ do
     (inp, _out, _arity) <- unifyModify (selector, expr)
-    _ <- liftUnify $ Unify.unify inp (T.textType (tag selector))
+    expectTextInput inp (tag selector)
     pure ()
 
-typecheckAction :: UT.TaggedAction -> Either TypeErrorReport ()
-typecheckAction action = typecheckThing $ do
-  void $ unifyAction action
+typecheckView :: UT.TaggedAction -> Either TypeErrorReport ()
+typecheckView action = typecheckThing $ do
+  (inp, _out, _arity) <- unifyAction action
+  expectTextInput inp (tag action)
+
+expectTextInput :: Typ s -> Diagnose.Position -> UnifyM s ()
+expectTextInput inp pos =
+  void . liftUnify $ withExceptT rewriteErr $ Unify.unify inp (T.textType pos)
+  where
+    rewriteErr = \case
+      MismatchFailure a _ -> NonTextInput (tag a) (UTerm a)
+      x -> x
 
 unifyModify :: (UT.TaggedSelector, UT.Selector Expr D.Position) -> UnifyME (TypecheckFailure s) s (Typ s, Typ s, ReturnArity)
 unifyModify (selector, expr) = do
@@ -149,7 +171,7 @@ unifyModify (selector, expr) = do
 typecheckSelector :: UT.TaggedSelector -> Either TypeErrorReport ()
 typecheckSelector sel = typecheckThing do
   (inp, _out, _arity) <- unifySelector sel
-  _ <- liftUnify $ Unify.unify inp (T.textType (tag sel))
+  expectTextInput inp (tag sel)
   pure ()
 
 typecheckThing :: (forall s. UnifyME (TypecheckFailure s) s ()) -> Either TypeErrorReport ()
