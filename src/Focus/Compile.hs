@@ -80,7 +80,7 @@ compileSelectorG goExpr cmdF = \case
     liftTrav $ _RegexMatchChunk . RE.match . from textI
   RegexGroups _ pat _ -> do
     case cmdF of
-      ViewF -> viewRegex pat \f match -> do traverse_ (f . TextChunk) (match ^.. RE.groups . traversed)
+      ViewF -> viewRegex pat \f match -> do foldMapM (f . TextChunk) (match ^.. RE.groups . traversed)
       ModifyF -> do modifyRegex pat (RE.groups . traverse)
   ListOf _ selector -> do
     listOfFocus (compileSelectorG goExpr cmdF selector) >.> liftTrav (from asListI)
@@ -92,7 +92,7 @@ compileSelectorG goExpr cmdF = \case
         ViewFocus $ \f chunk -> do
           hasMatches cmdF inner chunk >>= \case
             True -> f chunk
-            False -> pure ()
+            False -> pure mempty
       ModifyF -> ModifyFocus $ \f chunk -> do
         hasMatches cmdF inner chunk >>= \case
           True -> f chunk
@@ -104,7 +104,7 @@ compileSelectorG goExpr cmdF = \case
       ViewF -> do
         ViewFocus $ \f chunk -> do
           hasMatches cmdF inner chunk >>= \case
-            True -> pure ()
+            True -> pure mempty
             False -> f chunk
       ModifyF -> ModifyFocus $ \f chunk -> do
         hasMatches cmdF inner chunk >>= \case
@@ -173,7 +173,7 @@ compileSelectorG goExpr cmdF = \case
     hasMatches :: (Focusable m) => CommandF cmd -> Focus cmd i o -> i -> m Bool
     hasMatches cmd foc i = do
       case cmd of
-        ViewF {} -> isNothing <$> runMaybeT (forOf (getViewFocus foc) i (\_ -> empty))
+        ViewF {} -> isNothing <$> runMaybeT (forOf (getViewFocus foc) i (\_ -> empty @_ @()))
         ModifyF {} -> isNothing <$> runMaybeT (forOf (getModifyFocus foc) i (\_ -> empty))
     takingEnd :: Int -> Traversal' [a] a
     takingEnd n f xs = do
@@ -185,10 +185,10 @@ compileSelectorG goExpr cmdF = \case
       let len = length xs
       let (before, after) = splitAt (len - n) xs
       (<> after) <$> traverse f before
-    viewRegex :: RE.Regex -> (forall m. (Focusable m) => (Chunk -> m ()) -> RE.Match -> m ()) -> Focus 'ViewT Chunk Chunk
+    viewRegex :: RE.Regex -> (forall m r. (Monoid r, Focusable m) => (Chunk -> m r) -> RE.Match -> m r) -> Focus 'ViewT Chunk Chunk
     viewRegex pat go = ViewFocus \f chunk -> do
       let txt = textChunk chunk
-      forOf_ (RE.regexing pat) txt \match -> do
+      txt & foldMapMOf (RE.regexing pat) \match -> do
         let groups =
               match ^. RE.namedGroups
                 <&> TextChunk

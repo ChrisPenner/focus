@@ -32,7 +32,7 @@ import Focus.Types
 import Focus.Untyped
 import Prelude hiding (reads)
 
-getViewFocus :: Focus 'ViewT i o -> (forall m. (Focusable m) => (o -> m ()) -> i -> m ())
+getViewFocus :: Focus 'ViewT i o -> (forall m r. (Focusable m, Monoid r) => (o -> m r) -> i -> m r)
 getViewFocus (ViewFocus f) = f
 
 getModifyFocus :: Focus 'ModifyT i o -> (forall m. (Focusable m) => LensLike' m i o)

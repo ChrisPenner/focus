@@ -48,7 +48,7 @@ newtype FocusM a = FocusM {runFocusM :: ExceptT SelectorError (ReaderT Bindings 
 type Focusable m = (MonadReader Bindings m, MonadIO m, MonadFix m, MonadError SelectorError m)
 
 data Focus (cmd :: CommandT) i o where
-  ViewFocus :: (forall m. (Focusable m) => (o -> m ()) -> i -> m ()) -> Focus 'ViewT i o
+  ViewFocus :: (forall m r. (Monoid r) => (Focusable m) => (o -> m r) -> i -> m r) -> Focus 'ViewT i o
   ModifyFocus :: (forall m. (Focusable m) => LensLike' m i o) -> Focus 'ModifyT i o
 
 type UVar s = Unify.STVar s (ChunkTypeT D.Position)

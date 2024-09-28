@@ -4,13 +4,14 @@ module Focus.Exec (runView, runSet, runModify) where
 
 import Control.Lens
 import Control.Monad.IO.Class (MonadIO (..))
-import Data.Foldable (for_)
+import Data.Monoid (First (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text
 import Focus.Cli (ChunkSize (..))
 import Focus.Command
 import Focus.Compile (Focus (..), FocusM)
+import Focus.Prelude
 import Focus.Typechecker.Types (Chunk (..))
 import System.IO qualified as IO
 import UnliftIO (BufferMode (LineBuffering), Handle, hSetBuffering)
@@ -47,10 +48,12 @@ runSet (ModifyFocus trav) chunkSize input output val = do
     Just . renderChunk <$> forOf trav (TextChunk chunk) (const (pure $ TextChunk val))
 
 runModify :: Focus ModifyT Chunk Chunk -> Focus ViewT Chunk Chunk -> ChunkSize -> Handle -> Handle -> FocusM ()
-runModify (ModifyFocus trav) (ModifyFocus action) chunkSize input output = do
+runModify (ModifyFocus trav) (ViewFocus action) chunkSize input output = do
   runGeneric chunkSize input output \chunk -> do
     Just . renderChunk <$> forOf trav (TextChunk chunk) \chunk' -> do
-      forOf action chunk' pure
+      chunk' & action %%~ (pure . First . Just) >>= \case
+        First (Just c) -> pure c
+        First Nothing -> pure chunk'
 
 renderChunk :: Chunk -> Text
 renderChunk = \case

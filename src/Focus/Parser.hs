@@ -6,7 +6,6 @@ module Focus.Parser (parseSelector, parseAction) where
 import Control.Monad
 import Data.Bifunctor (Bifunctor (..))
 import Data.Function
-import Data.Functor (($>))
 import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as M
 import Data.Text (Text)
