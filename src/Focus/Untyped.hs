@@ -153,6 +153,7 @@ data ChunkType
   | ListType ChunkType
   | NumberType
   | RegexMatchType
+  | JsonType
   deriving (Show, Eq)
 
 type TaggedExpr = Expr Pos

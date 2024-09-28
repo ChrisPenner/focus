@@ -84,6 +84,7 @@ unificationErrorReport = \case
       T.ListTypeT _ t -> "[" <> renderTyp t <> "]"
       T.NumberTypeT _ -> renderType T.NumberType
       T.RegexMatchTypeT _ -> renderType T.RegexMatchType
+      T.JsonTypeT _ -> renderType T.JsonType
 
 type UBindings s = M.Map Text (Typ s)
 
@@ -119,6 +120,7 @@ declareBindings bd = do
       T.ListType t -> T.listType pos (chunkTypeToChunkTypeT pos t)
       T.NumberType -> T.numberType pos
       T.RegexMatchType -> T.regexMatchType pos
+      T.JsonType -> T.jsonType pos
 
 getOrInitBinding :: Text -> UnifyM s (Typ s)
 getOrInitBinding name = do
@@ -249,6 +251,8 @@ unifySelectorG goExpr = \case
     pure $ (T.textType pos, T.textType pos, Affine)
   UT.Action _pos expr -> do
     goExpr expr
+  UT.ParseJSON pos -> do
+    pure $ (T.textType pos, T.textType pos, Exactly 1)
   where
     compose ::
       (Typ s, Typ s, ReturnArity) ->

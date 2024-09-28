@@ -231,6 +231,9 @@ simpleSelectorP expr = withPos do
         do
           selector <- selectorP expr
           pure $ \pos -> Not pos selector
+      ),
+      ( "json",
+        pure ParseJSON
       )
     ]
 

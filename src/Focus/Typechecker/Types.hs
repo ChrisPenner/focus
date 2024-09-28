@@ -13,6 +13,7 @@ module Focus.Typechecker.Types
     listType,
     numberType,
     regexMatchType,
+    jsonType,
   )
 where
 
@@ -36,9 +37,13 @@ numberType pos = UTerm $ NumberTypeT pos
 regexMatchType :: D.Position -> Typ v
 regexMatchType pos = UTerm $ RegexMatchTypeT pos
 
+jsonType :: D.Position -> Typ v
+jsonType pos = UTerm $ JsonTypeT pos
+
 renderType :: ChunkType -> Text
 renderType = \case
-  TextType -> "text"
+  TextType -> "Text"
   ListType t -> "[" <> renderType t <> "]"
-  NumberType -> "number"
-  RegexMatchType -> "regex-match"
+  NumberType -> "Number"
+  RegexMatchType -> "Regex-Match"
+  JsonType -> "Json"

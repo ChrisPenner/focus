@@ -8,7 +8,7 @@ one,two,three
      │
    1 │ splitOn "," | at 1
      • ┬───────────  ┬───
-     • ╰──────────────╸ this selector outputs: text
+     • ╰──────────────╸ this selector outputs: Text
      •               ╰╸ but this selector expects: [a]
 ─────╯
 ===EXIT CODE===============================================================================

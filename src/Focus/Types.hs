@@ -81,6 +81,7 @@ data ChunkTypeT a r
   | ListTypeT a r
   | NumberTypeT a
   | RegexMatchTypeT a
+  | JsonTypeT a
   deriving stock (Show, Eq, Functor, Foldable, Traversable)
 
 instance Unifiable (ChunkTypeT a) where
@@ -95,6 +96,7 @@ instance Unifiable (ChunkTypeT a) where
     NumberTypeT {} _ -> Nothing
     RegexMatchTypeT {} _ -> Nothing
     Arrow {} _ -> Nothing
+    JsonTypeT {} _ -> Nothing
 
 instance Tagged (ChunkTypeT a r) a where
   tag = \case
@@ -103,5 +105,6 @@ instance Tagged (ChunkTypeT a r) a where
     ListTypeT pos _ -> pos
     NumberTypeT pos -> pos
     RegexMatchTypeT pos -> pos
+    JsonTypeT pos -> pos
 
 type TypeErrorReport = D.Report Text

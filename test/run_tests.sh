@@ -117,6 +117,9 @@ echo "one,two,three" | run string_concat_view view '[splitOn ","] | concat %{.}'
 ## Intersperse
 echo "1 2 3 one two three" | run intersperse_view view 'intersperse /\d+/ /\w+/ (splitOn " ")'
 
+## JSON
+echo '{"one": 1, "two": 2, "three": 3}' | run json_view view 'json'
+
 # Template strings
 # run template_view view 'match @"_-_-_" -> [one, two, three] '
 # run template_view view 'groups @"_-_-_" -> [one, two, three] '
