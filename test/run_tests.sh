@@ -114,6 +114,9 @@ echo "The password is swordfish" | run binding_usage modify '/The password is (?
 ## String Concatenation
 echo "one,two,three" | run string_concat_view view '[splitOn ","] | concat %{.}'
 
+## Intersperse
+echo "1 2 3 one two three" | run intersperse_view view 'intersperse /\d+/ /\w+/ (splitOn " ")'
+
 # Template strings
 # run template_view view 'match @"_-_-_" -> [one, two, three] '
 # run template_view view 'groups @"_-_-_" -> [one, two, three] '

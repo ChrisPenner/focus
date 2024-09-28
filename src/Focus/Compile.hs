@@ -22,6 +22,7 @@ import Control.Monad.RWS.CPS (MonadReader (..))
 import Control.Monad.State.Lazy
 import Control.Monad.Trans.Maybe (MaybeT (..))
 import Data.List qualified as List
+import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -63,8 +64,18 @@ compileExpr = \case
           inp & vf \xs -> do
             f . TextChunk $ Text.concat (textChunk <$> listChunk xs)
     ViewFocus $ \f inp -> go (getViewFocus inner) f inp
-  Intersperse _pos _actions -> do
-    error "Intersperse"
+  Intersperse _pos actions -> do
+    let actionFocuses = (listOfFocus . compileAction <$> actions)
+    ViewFocus $ \f inp -> do
+      chunkResults <- for actionFocuses \af -> do
+        inp & getViewFocus af pure
+      let go = \case
+            [] -> pure mempty
+            ([] : rest) -> go rest
+            ((x : xs) : rest) -> do
+              r <- f x
+              (r <>) <$> go (rest ++ [xs])
+      go (NE.toList chunkResults)
 
 compileSelectorG :: forall cmd expr. (IsCmd cmd) => (expr D.Position -> Focus cmd Chunk Chunk) -> CommandF cmd -> Selector expr D.Position -> Focus cmd Chunk Chunk
 compileSelectorG goExpr cmdF = \case

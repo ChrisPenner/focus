@@ -171,6 +171,7 @@ before feeding the result back through the selector.
 
 ## TODO
 
+- [ ] Generate help and examples from source
 - [ ] ability to zip/cartesian product selectors (for paste-like things)
 - [ ] figure out how to typecheck JSON union types
 - [ ] allow failing exit code on view on non-matches
