@@ -321,6 +321,9 @@ unifyExpr = \case
     _ <- liftUnify $ Unify.unify inp inp'
     _ <- liftUnify $ Unify.unify out out'
     pure $ (inp, out', Any)
+  Count pos inner -> do
+    (inp, _out, _arity) <- unifyAction inner
+    pure $ (inp, T.numberType pos, Exactly 1)
 
 unifyBindingString :: Typ s -> BindingString -> UnifyM s ()
 unifyBindingString inputTyp (BindingString bindings) = do

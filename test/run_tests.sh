@@ -124,6 +124,9 @@ echo '{"one": 1, "two": 2, "three": 3}' | run json_view view 'json'
 ## Binding assignment
 echo 'one,two,three' | run binding_assignment_view view 'splitOn "," | -> x | concat ["*", %{x}, "*"]'
 
+## Count
+echo 'one,two,three' | run count_view view 'count (splitOn ",")'
+
 # Template strings
 # run template_view view 'match @"_-_-_" -> [one, two, three] '
 # run template_view view 'groups @"_-_-_" -> [one, two, three] '

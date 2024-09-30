@@ -297,10 +297,6 @@ simpleExprP = withPos $ do
           a <- lexeme actionP
           rest <- some (lexeme actionP)
           pure $ \pos -> Intersperse pos (a NE.:| rest)
-      ),
-      ( "count",
-        do
-          flip Count <$> selectorP basicExprP
       )
     ]
 

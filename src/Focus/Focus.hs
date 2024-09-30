@@ -19,6 +19,7 @@ module Focus.Focus
     unsafeIso,
     listOfFocus,
     (>.>),
+    focusTo,
   )
 where
 
@@ -143,3 +144,6 @@ data ListOfS a = ListOfS
   { reads :: [a],
     results :: [a]
   }
+
+focusTo :: (forall m. (Focusable m) => i -> m o) -> Focus ViewT i o
+focusTo f = ViewFocus $ \handler i -> f i >>= handler

@@ -148,7 +148,9 @@ renderChunk :: Chunk -> Text
 renderChunk = \case
   TextChunk txt -> txt
   ListChunk chs -> Text.pack . show $ renderChunk <$> chs
-  NumberChunk n -> Text.pack (show n)
+  NumberChunk n -> case n of
+    IntNumber i -> Text.pack $ show i
+    DoubleNumber d -> Text.pack $ show d
   RegexMatchChunk _m -> error "Can't render a regex match chunk"
   JsonChunk v -> Text.pack $ BSC.unpack $ Aeson.encode v
 
@@ -173,6 +175,7 @@ data Expr a
   | StrConcat a (Action a)
   | Intersperse a (NonEmpty (Action a))
   | Comma a (Selector Expr a) (Selector Expr a)
+  | Count a (Selector Expr a)
   deriving stock (Show, Functor, Foldable, Traversable)
 
 data NumberT

@@ -83,6 +83,9 @@ compileExpr = \case
     let r = compileSelectorG compileExpr ViewF b
     ViewFocus $ \f chunk -> do
       liftA2 (<>) (getViewFocus l f chunk) (getViewFocus r f chunk)
+  Count _ selector -> do
+    let inner = compileSelectorG compileExpr ViewF selector
+    listOfFocus inner >.> focusTo (pure . NumberChunk . IntNumber . length)
 
 compileSelectorG :: forall cmd expr. (IsCmd cmd) => (expr D.Position -> Focus cmd Chunk Chunk) -> CommandF cmd -> Selector expr D.Position -> Focus cmd Chunk Chunk
 compileSelectorG goExpr cmdF = \case
