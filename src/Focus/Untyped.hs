@@ -26,6 +26,8 @@ module Focus.Untyped
     VoidF,
     absurdF,
     renderChunk,
+    ExprF (..),
+    IsExpr (..),
   )
 where
 
@@ -170,6 +172,7 @@ data Expr a
   | Number a (NumberT)
   | StrConcat a (Action a)
   | Intersperse a (NonEmpty (Action a))
+  | Comma a (Selector Expr a) (Selector Expr a)
   deriving stock (Show, Functor, Foldable, Traversable)
 
 data NumberT
@@ -178,3 +181,16 @@ data NumberT
   deriving stock (Show, Eq)
 
 makePrisms ''Chunk
+
+data ExprF (expr :: Type -> Type) where
+  ExprF :: ExprF Expr
+  VoidF :: ExprF VoidF
+
+class IsExpr (expr :: Type -> Type) where
+  getExpr :: ExprF expr
+
+instance IsExpr Expr where
+  getExpr = ExprF
+
+instance IsExpr VoidF where
+  getExpr = VoidF

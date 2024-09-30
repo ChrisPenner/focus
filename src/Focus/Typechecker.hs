@@ -67,6 +67,12 @@ unificationErrorReport = \case
       "Type error"
       [(pos, D.This $ "Selector must accept text input, but instead expects: " <> renderTyp typ)]
       []
+  ExprInSelector pos ->
+    Diagnose.Err
+      Nothing
+      "Type error"
+      [(pos, D.This $ "Expressions are not valid where a selector was expected.")]
+      []
   where
     varNames :: [Text]
     varNames =
@@ -98,6 +104,7 @@ data TypecheckFailure s
   | UndeclaredBinding Diagnose.Position Text
   | ExpectedSingularArity Diagnose.Position ReturnArity
   | NonTextInput Diagnose.Position (Typ s)
+  | ExprInSelector Diagnose.Position
 
 instance Unify.Fallible (ChunkTypeT D.Position) (UVar s) (TypecheckFailure s) where
   occursFailure = OccursFailure
@@ -129,8 +136,8 @@ initBinding name = do
   put $ M.insert name typ bindings
   pure typ
 
-getBinding :: Text -> D.Position -> UnifyM s (Typ s)
-getBinding name pos = do
+_getBinding :: Text -> D.Position -> UnifyM s (Typ s)
+_getBinding name pos = do
   bindings <- get
   case M.lookup name bindings of
     Just v -> pure v
@@ -257,8 +264,8 @@ unifySelectorG goExpr = \case
     goExpr expr
   UT.ParseJSON pos -> do
     pure $ (T.textType pos, T.textType pos, Exactly 1)
-  UT.BindingAssignment pos name -> do
-    v <- getBinding name pos
+  UT.BindingAssignment _pos name -> do
+    v <- initBinding name
     pure $ (v, v, Exactly 1)
   where
     compose ::
@@ -308,6 +315,12 @@ unifyExpr = \case
     typs <- for actions unifyAction <&> fmap \(i, o, _) -> (i, o)
     (i, o) <- liftUnify $ F1.foldrM1 (\(i1, o1) (i2, o2) -> (,) <$> Unify.unify i1 i2 <*> Unify.unify o1 o2) typs
     pure $ (i, o, Any)
+  Comma _pos a b -> do
+    (inp, out, _arity) <- unifyAction a
+    (inp', out', _arity') <- unifyAction b
+    _ <- liftUnify $ Unify.unify inp inp'
+    _ <- liftUnify $ Unify.unify out out'
+    pure $ (inp, out', Any)
 
 unifyBindingString :: Typ s -> BindingString -> UnifyM s ()
 unifyBindingString inputTyp (BindingString bindings) = do

@@ -78,6 +78,11 @@ compileExpr = \case
               r <- f x
               (r <>) <$> go (rest ++ [xs])
       go (NE.toList chunkResults)
+  Comma _ a b -> do
+    let l = compileSelectorG compileExpr ViewF a
+    let r = compileSelectorG compileExpr ViewF b
+    ViewFocus $ \f chunk -> do
+      liftA2 (<>) (getViewFocus l f chunk) (getViewFocus r f chunk)
 
 compileSelectorG :: forall cmd expr. (IsCmd cmd) => (expr D.Position -> Focus cmd Chunk Chunk) -> CommandF cmd -> Selector expr D.Position -> Focus cmd Chunk Chunk
 compileSelectorG goExpr cmdF = \case

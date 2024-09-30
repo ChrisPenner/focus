@@ -26,15 +26,18 @@ import Text.Regex.PCRE.Light qualified as PCRE.Light
 
 data CustomError
   = BadRegex Text
+  | ActionInSelector
   deriving stock (Show, Eq, Ord)
 
 instance M.ShowErrorComponent CustomError where
   showErrorComponent = \case
     BadRegex s -> "Invalid Regex: " <> Text.unpack s
+    ActionInSelector -> "Expressions are not valid where a selector was expected."
 
-instance HasHints CustomError a where
+instance HasHints CustomError Text where
   hints e = case e of
     BadRegex _ -> []
+    ActionInSelector -> [D.Note "All components of a selector must be *reversible*"]
 
 type P = M.Parsec CustomError String
 
@@ -46,10 +49,10 @@ withPos p = do
   let pos = Diagnose.Position (M.unPos startLine, M.unPos startCol) (M.unPos (M.sourceLine end), M.unPos (M.sourceColumn end)) sourceName
   pure $ f pos
 
-parseSelector :: (forall x. (Show x) => Show (expr x)) => Text -> Text -> Either (Diagnostic Text) (Selector expr Pos)
+parseSelector :: (forall x. (Show x) => Show (expr x), IsExpr expr) => Text -> Text -> Either (Diagnostic Text) (Selector expr Pos)
 parseSelector srcName src = parseThing (scriptP noExprP) "Invalid selector" srcName src
   where
-    noExprP = actionP *> fail "Expressions are not valid where a selector was expected."
+    noExprP = basicExprP *> M.customFailure ActionInSelector
 
 parseAction :: Text -> Text -> Either (Diagnostic Text) TaggedAction
 parseAction srcName src = parseThing actionP "Invalid expression" srcName src
@@ -69,10 +72,10 @@ parseThing parser err srcName src = do
   Debug.debugM srcName $ "Parsed: " <> show result
   pure result
 
-scriptP :: (P (expr Pos)) -> P (Selector expr Pos)
+scriptP :: (IsExpr expr) => (P (expr Pos)) -> P (Selector expr Pos)
 scriptP expr = selectorsP expr
 
-selectorsP :: P (expr Pos) -> P (Selector expr Pos)
+selectorsP :: (IsExpr expr) => P (expr Pos) -> P (Selector expr Pos)
 selectorsP expr = withPos do
   M.sepBy1 (selectorP expr) separatorP
     <&> \r pos -> Compose pos . NE.fromList $ r
@@ -118,7 +121,7 @@ reGroupsP :: P (D.Position -> (Selector expr Pos))
 reGroupsP = do
   regexLiteralP <&> \(_pos, re, bindings) -> \pos -> RegexGroups pos re bindings
 
-listOfP :: P (expr Pos) -> P (Selector expr Pos)
+listOfP :: (IsExpr expr) => P (expr Pos) -> P (Selector expr Pos)
 listOfP expr = withPos do
   M.between (lexeme $ M.char '[') (lexeme $ M.char ']') $ do
     flip ListOf <$> selectorsP expr
@@ -126,7 +129,7 @@ listOfP expr = withPos do
 shellP :: P (Selector expr Pos)
 shellP = withPos do
   shellMode <-
-    optional (M.char '-') >>= \case
+    optional (M.try $ M.char '-' *> M.lookAhead (M.char '{')) >>= \case
       Just _ -> pure NullStdin
       Nothing -> pure Normal
   script <- bindingStringP '{' '}'
@@ -155,7 +158,7 @@ bindingName :: P Text
 bindingName = do
   Text.pack <$> lexeme (M.some M.alphaNumChar)
 
-groupedP :: P (expr Pos) -> P (Selector expr Pos)
+groupedP :: (IsExpr expr) => P (expr Pos) -> P (Selector expr Pos)
 groupedP expr = do
   shellP <|> listOfP expr <|> regexP <|> bracketedP (selectorsP expr) <|> bracketedP (simpleSelectorP expr)
 
@@ -165,13 +168,25 @@ bracketedP p = M.between (lexeme (M.char '(')) (lexeme (M.char ')')) p
 mayBracketedP :: P a -> P a
 mayBracketedP p = bracketedP p <|> p
 
-selectorP :: P (expr Pos) -> P (Selector expr Pos)
-selectorP expr = shellP <|> listOfP expr <|> regexP <|> groupedP expr <|> simpleSelectorP expr <|> evalP expr
+selectorP :: forall expr. (IsExpr expr) => P (expr Pos) -> P (Selector expr Pos)
+selectorP expr = withPos do
+  l <- sp
+  case (getExpr @expr) of
+    VoidF -> pure $ const l
+    ExprF -> do
+      sep <- optional (lexeme (M.char ','))
+      case sep of
+        Just _ -> do
+          r <- selectorP expr <|> sp
+          pure $ \pos -> Action pos (Comma pos l r)
+        Nothing -> pure $ const l
+  where
+    sp = shellP <|> listOfP expr <|> regexP <|> groupedP expr <|> simpleSelectorP expr <|> evalP expr
 
 evalP :: P (expr Pos) -> P (Selector expr Pos)
 evalP expr = withPos do flip Action <$> expr
 
-simpleSelectorP :: P (expr Pos) -> P (Selector expr Pos)
+simpleSelectorP :: (IsExpr expr) => P (expr Pos) -> P (Selector expr Pos)
 simpleSelectorP expr = withPos do
   caseMatchP
     [ ( "splitOn",
