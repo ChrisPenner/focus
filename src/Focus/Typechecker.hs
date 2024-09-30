@@ -109,7 +109,7 @@ liftUnify = lift
 declareBindings :: BindingDeclarations -> UnifyM s ()
 declareBindings bd = do
   ifor_ bd $ \name (pos, typ) -> do
-    v <- getOrInitBinding name
+    v <- initBinding name
     r <- liftUnify $ Unify.unify v (chunkTypeToChunkTypeT pos typ)
     bindings <- get
     put $ M.insert name r bindings
@@ -122,15 +122,19 @@ declareBindings bd = do
       T.RegexMatchType -> T.regexMatchType pos
       T.JsonType -> T.jsonType pos
 
-getOrInitBinding :: Text -> UnifyM s (Typ s)
-getOrInitBinding name = do
+initBinding :: Text -> UnifyM s (Typ s)
+initBinding name = do
+  bindings <- get
+  typ <- freshVar
+  put $ M.insert name typ bindings
+  pure typ
+
+getBinding :: Text -> D.Position -> UnifyM s (Typ s)
+getBinding name pos = do
   bindings <- get
   case M.lookup name bindings of
     Just v -> pure v
-    Nothing -> do
-      v <- lift . lift $ (UVar <$> Unify.freeVar)
-      put $ M.insert name v bindings
-      pure v
+    Nothing -> throwError $ UndeclaredBinding pos name
 
 expectBinding :: Diagnose.Position -> Text -> UnifyM s (Typ s)
 expectBinding pos name = do
@@ -253,6 +257,9 @@ unifySelectorG goExpr = \case
     goExpr expr
   UT.ParseJSON pos -> do
     pure $ (T.textType pos, T.textType pos, Exactly 1)
+  UT.BindingAssignment pos name -> do
+    v <- getBinding name pos
+    pure $ (v, v, Exactly 1)
   where
     compose ::
       (Typ s, Typ s, ReturnArity) ->

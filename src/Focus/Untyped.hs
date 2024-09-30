@@ -100,6 +100,7 @@ data Selector (expr :: Type -> Type) a
   | Contains a Text
   | Action a (expr a)
   | ParseJSON a
+  | BindingAssignment a Text
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Selector expr a) a where
@@ -124,6 +125,7 @@ instance Tagged (Selector expr a) a where
     Contains a _ -> a
     Action a _ -> a
     ParseJSON a -> a
+    BindingAssignment a _ -> a
 
 data Chunk
   = TextChunk Text

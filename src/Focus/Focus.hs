@@ -10,6 +10,7 @@ module Focus.Focus
     composeFocus,
     liftTrav,
     liftSimple,
+    liftSimpleWithBindings,
     liftIso,
     textI,
     asListI,
@@ -77,6 +78,14 @@ liftSimple forward backward = do
     ModifyF -> ModifyFocus \f s -> do
       x <- forward s
       f x >>= backward
+
+liftSimpleWithBindings :: forall cmd i o. (IsCmd cmd) => (forall r m. (Focusable m) => (o -> m r) -> i -> m r) -> (forall m. (Focusable m) => o -> m i) -> Focus cmd i o
+liftSimpleWithBindings forward backward = do
+  case getCmd @cmd of
+    ViewF -> ViewFocus \f s -> do
+      forward f s
+    ModifyF -> ModifyFocus \f s -> do
+      forward f s >>= backward
 
 liftIso :: forall cmd i o. (IsCmd cmd) => Iso' i o -> Focus cmd i o
 liftIso i = case getCmd @cmd of

@@ -180,6 +180,11 @@ compileSelectorG goExpr cmdF = \case
           Right txt -> f (TextChunk txt)
         & fmap (TextChunk . Text.concat . fmap textChunk)
   Action _ expr -> goExpr expr
+  BindingAssignment _pos name -> do
+    let go :: forall r m. (Focusable m) => (Chunk -> m r) -> Chunk -> m r
+        go f chunk = do
+          local (over focusBindings (Map.insert name chunk)) $ f chunk
+    liftSimpleWithBindings go pure
   ParseJSON pos -> do
     let fwd :: (Focusable m) => Chunk -> m Chunk
         fwd chunk =
@@ -196,16 +201,19 @@ compileSelectorG goExpr cmdF = \case
       case cmd of
         ViewF {} -> isNothing <$> runMaybeT (forOf (getViewFocus foc) i (\_ -> empty @_ @()))
         ModifyF {} -> isNothing <$> runMaybeT (forOf (getModifyFocus foc) i (\_ -> empty))
+
     takingEnd :: Int -> Traversal' [a] a
     takingEnd n f xs = do
       let len = length xs
       let (before, after) = splitAt (len - n) xs
       (before <>) <$> traverse f after
+
     droppingEnd :: Int -> Traversal' [a] a
     droppingEnd n f xs = do
       let len = length xs
       let (before, after) = splitAt (len - n) xs
       (<> after) <$> traverse f before
+
     viewRegex :: RE.Regex -> (forall m r. (Monoid r, Focusable m) => (Chunk -> m r) -> RE.Match -> m r) -> Focus 'ViewT Chunk Chunk
     viewRegex pat go = ViewFocus \f chunk -> do
       let txt = textChunk chunk

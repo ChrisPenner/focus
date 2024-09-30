@@ -151,6 +151,10 @@ bareBindingP = M.try do
       (BindingName . Text.pack <$> lexeme (M.some M.alphaNumChar))
       <|> (M.string "." $> InputBinding)
 
+bindingName :: P Text
+bindingName = do
+  Text.pack <$> lexeme (M.some M.alphaNumChar)
+
 groupedP :: P (expr Pos) -> P (Selector expr Pos)
 groupedP expr = do
   shellP <|> listOfP expr <|> regexP <|> bracketedP (selectorsP expr) <|> bracketedP (simpleSelectorP expr)
@@ -234,6 +238,11 @@ simpleSelectorP expr = withPos do
       ),
       ( "json",
         pure ParseJSON
+      ),
+      ( "->",
+        do
+          binding <- bindingName
+          pure $ \pos -> BindingAssignment pos binding
       )
     ]
 
