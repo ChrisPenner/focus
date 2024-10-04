@@ -16,6 +16,7 @@ module Focus.Types
     UVar,
     ChunkType (..),
     ChunkTypeT (..),
+    Castable (..),
     TypeErrorReport,
     ReturnArity (..),
     FocusEnv (..),
@@ -75,6 +76,11 @@ type Typ s = UTerm (ChunkTypeT D.Position) (UVar s)
 data ReturnArity = Affine | Exactly Int | Any
   deriving stock (Show, Eq, Ord)
 
+data Castable
+  = NoCast
+  | Cast
+  deriving stock (Show, Eq, Ord)
+
 data ChunkTypeT a r
   = Arrow a r r
   | TextTypeT a
@@ -82,15 +88,23 @@ data ChunkTypeT a r
   | NumberTypeT a
   | RegexMatchTypeT a
   | JsonTypeT a
+  | CastableT a r
   deriving stock (Show, Eq, Functor, Foldable, Traversable)
 
 instance Unifiable (ChunkTypeT a) where
   zipMatch = \cases
-    (Arrow pos x y) (Arrow _ x' y') -> Just (Arrow pos (Right (x, x')) (Right (y, y')))
-    (TextTypeT pos) TextTypeT {} -> Just (TextTypeT pos)
-    (ListTypeT pos x) (ListTypeT _ y) -> Just (ListTypeT pos $ Right (x, y))
+    -- TODO: this isn't quite right
+    (CastableT pos x) (CastableT _ y) -> Just (CastableT pos (Right (x, y)))
+    (CastableT pos _) (NumberTypeT {}) -> Just (NumberTypeT pos)
+    (TextTypeT pos) (CastableT _ _) -> Just (TextTypeT pos)
+    (CastableT pos _) (TextTypeT {}) -> Just (TextTypeT pos)
+    (NumberTypeT pos) (CastableT _ _) -> Just (NumberTypeT pos)
     (NumberTypeT pos) NumberTypeT {} -> Just $ NumberTypeT pos
+    (Arrow pos x y) (Arrow _ x' y') -> Just (Arrow pos (Right (x, x')) (Right (y, y')))
+    (TextTypeT pos) (TextTypeT _pos) -> Just (TextTypeT pos)
+    (ListTypeT pos x) (ListTypeT _ y) -> Just (ListTypeT pos $ Right (x, y))
     (RegexMatchTypeT pos) RegexMatchTypeT {} -> Just $ RegexMatchTypeT pos
+    CastableT {} _ -> Nothing
     TextTypeT {} _ -> Nothing
     ListTypeT {} _ -> Nothing
     NumberTypeT {} _ -> Nothing
@@ -106,5 +120,6 @@ instance Tagged (ChunkTypeT a r) a where
     NumberTypeT pos -> pos
     RegexMatchTypeT pos -> pos
     JsonTypeT pos -> pos
+    CastableT pos _ -> pos
 
 type TypeErrorReport = D.Report Text

@@ -65,6 +65,7 @@ dependencies:
 - diagnose
 - deriving-compat
 - prettyprinter-ansi-terminal
+- scientific
 - unification-fd
 - transformers
 

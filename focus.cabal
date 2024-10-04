@@ -88,6 +88,7 @@ library
     , pcre-light
     , prettyprinter-ansi-terminal
     , recursion-schemes
+    , scientific
     , some
     , text
     , transformers
@@ -147,6 +148,7 @@ executable focus
     , pcre-light
     , prettyprinter-ansi-terminal
     , recursion-schemes
+    , scientific
     , some
     , text
     , transformers

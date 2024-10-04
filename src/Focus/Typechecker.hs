@@ -85,6 +85,7 @@ unificationErrorReport = \case
       UTerm t -> renderUTyp t
     renderUTyp :: ChunkTypeT D.Position (Typ s) -> Text
     renderUTyp = \case
+      T.CastableT _ typ -> "!" <> renderTyp typ
       T.Arrow _ a b -> "(" <> renderTyp a <> " -> " <> renderTyp b <> ")"
       T.TextTypeT {} -> renderType T.TextType
       T.ListTypeT _ t -> "[" <> renderTyp t <> "]"
