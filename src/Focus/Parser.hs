@@ -149,7 +149,7 @@ bindingStringP begin end = M.between (lexeme $ M.char begin) (lexeme $ M.char en
 
 bareBindingP :: P BindingName
 bareBindingP = M.try do
-  M.between (lexeme (M.string "%{")) (M.char '}') $
+  M.between (lexeme (M.string "%{")) (lexeme (M.char '}')) $
     do
       (BindingName . Text.pack <$> lexeme (M.some M.alphaNumChar))
       <|> (M.string "." $> InputBinding)
@@ -160,7 +160,13 @@ bindingName = do
 
 groupedP :: (IsExpr expr) => P (expr Pos) -> P (Selector expr Pos)
 groupedP expr = do
-  shellP <|> listOfP expr <|> regexP <|> bracketedP (selectorsP expr) <|> bracketedP (simpleSelectorP expr)
+  castP expr <|> shellP <|> listOfP expr <|> regexP <|> bracketedP (selectorsP expr) <|> bracketedP (simpleSelectorP expr)
+
+castP :: (IsExpr expr) => (P (expr Pos)) -> P (Selector expr Pos)
+castP expr = withPos do
+  _ <- (lexeme (M.char '!'))
+  selector <- groupedP expr
+  pure $ \pos -> Compose pos (selector NE.:| [Cast pos])
 
 bracketedP :: P a -> P a
 bracketedP p = M.between (lexeme (M.char '(')) (lexeme (M.char ')')) p
@@ -174,7 +180,7 @@ selectorP expr = withPos do
   case (getExpr @expr) of
     VoidF -> pure $ const l
     ExprF -> do
-      builder <- optional (lexeme (M.char ',' $> Comma) <|> (M.char '+' $> Plus))
+      builder <- optional (lexeme ((M.char ',' $> Comma) <|> (M.char '+' $> Plus)))
       case builder of
         Just b -> do
           r <- selectorP expr <|> sp

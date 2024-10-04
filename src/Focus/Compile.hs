@@ -33,6 +33,7 @@ import Error.Diagnose qualified as D
 import Focus.Command (CommandF (..), CommandT (..), IsCmd)
 import Focus.Focus
 import Focus.Prelude
+import Focus.Tagged (Tagged (..))
 import Focus.Types
 import Focus.Untyped
 import System.Exit (ExitCode (..))
@@ -86,13 +87,21 @@ compileExpr = \case
   Count _ selector -> do
     let inner = compileSelectorG compileExpr ViewF selector
     listOfFocus inner >.> focusTo (pure . NumberChunk . IntNumber . length)
-  Plus _ a b -> do
-    let l = compileSelectorG compileExpr ViewF a
-    let r = compileSelectorG compileExpr ViewF b
+  Plus _pos ls rs -> do
+    let l = compileSelectorG compileExpr ViewF ls
+    let r = compileSelectorG compileExpr ViewF rs
     ViewFocus $ \f inp -> do
       inp & getViewFocus l \lchunk -> do
         inp & getViewFocus r \rchunk -> do
-          f . NumberChunk $ castNumber lchunk `addNumberT` castNumber rchunk
+          case (castNumber lchunk, castNumber rchunk) of
+            (Just ln, Just rn) -> do
+              f . NumberChunk $ ln `addNumberT` rn
+            (Nothing, _) -> do
+              mayErr $ CastError (tag ls) NumberType lchunk
+              pure mempty
+            (_, Nothing) -> do
+              mayErr $ CastError (tag rs) NumberType rchunk
+              pure mempty
     where
       addNumberT :: NumberT -> NumberT -> NumberT
       addNumberT (IntNumber x) (IntNumber y) = IntNumber (x + y)
@@ -173,7 +182,8 @@ compileSelectorG goExpr cmdF = \case
                 pure $ Right out'
           case procResult of
             Left (code, errOut) -> do
-              mayErr chunk $ ShellError $ "Shell script failed with exit code " <> tShow code <> ": " <> renderBindingString shellScript <> "\n" <> errOut
+              mayErr $ ShellError $ "Shell script failed with exit code " <> tShow code <> ": " <> renderBindingString shellScript <> "\n" <> errOut
+              pure chunk
             Right out -> do
               pure (TextChunk out)
     liftSimple go pure
@@ -211,11 +221,14 @@ compileSelectorG goExpr cmdF = \case
         fwd chunk =
           let txt = textChunk chunk
            in case Aeson.eitherDecodeStrict' (Text.encodeUtf8 txt) of
-                Left err -> mayErr chunk $ JsonParseError pos txt (Text.pack err)
+                Left err -> do
+                  mayErr $ JsonParseError pos txt (Text.pack err)
+                  pure chunk
                 Right val -> pure (JsonChunk val)
         bwd :: (Focusable m) => Chunk -> m Chunk
         bwd chunk = pure $ TextChunk . TL.toStrict . TL.decodeUtf8 $ Aeson.encode (jsonChunk chunk)
     liftSimple fwd bwd
+  Cast _pos -> focusId
   where
     hasMatches :: (Focusable m) => CommandF cmd -> Focus cmd i o -> i -> m Bool
     hasMatches cmd foc i = do
@@ -253,10 +266,10 @@ compileSelectorG goExpr cmdF = \case
                 <&> TextChunk
         local (over focusBindings (groups <>)) $ forOf trav match (fmap textChunk . f . TextChunk)
 
-mayErr :: (Focusable m) => Chunk -> SelectorError -> m Chunk
-mayErr chunk err = do
+mayErr :: (Focusable m) => SelectorError -> m ()
+mayErr err = do
   handler <- view (focusOpts . handleErr)
-  liftIO $ handler chunk err
+  liftIO (handler err)
 
 resolveBindingString :: (Focusable m) => Chunk -> BindingString -> m Text
 resolveBindingString input (BindingString xs) = do
@@ -271,5 +284,7 @@ resolveBinding pos input = \case
     bindings <- view focusBindings
     case Map.lookup name bindings of
       Just chunk -> pure chunk
-      Nothing -> mayErr input $ BindingError pos $ "Binding not in scope: " <> name
+      Nothing -> do
+        mayErr $ BindingError pos $ "Binding not in scope: " <> name
+        pure $ input
   InputBinding -> pure input

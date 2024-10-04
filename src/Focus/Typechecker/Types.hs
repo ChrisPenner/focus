@@ -14,6 +14,7 @@ module Focus.Typechecker.Types
     numberType,
     regexMatchType,
     jsonType,
+    castableType,
   )
 where
 
@@ -39,6 +40,9 @@ regexMatchType pos = UTerm $ RegexMatchTypeT pos
 
 jsonType :: D.Position -> Typ v
 jsonType pos = UTerm $ JsonTypeT pos
+
+castableType :: D.Position -> Typ v -> Typ v
+castableType pos t = UTerm $ CastableTypeT pos t
 
 renderType :: ChunkType -> Text
 renderType = \case

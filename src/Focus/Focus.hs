@@ -7,7 +7,6 @@ module Focus.Focus
     textChunk,
     jsonChunk,
     listChunk,
-    composeFocus,
     liftTrav,
     liftSimple,
     liftSimpleWithBindings,
@@ -19,10 +18,12 @@ module Focus.Focus
     unsafeIso,
     listOfFocus,
     (>.>),
+    focusId,
     focusTo,
   )
 where
 
+import Control.Category qualified as Cat
 import Control.Lens
 import Control.Monad.Fix (MonadFix (..))
 import Control.Monad.State.Lazy qualified as Lazy
@@ -36,6 +37,9 @@ import Focus.Prelude
 import Focus.Types
 import Focus.Untyped
 import Prelude hiding (reads)
+
+focusId :: (IsCmd cmd) => Focus cmd i i
+focusId = Cat.id
 
 getViewFocus :: Focus 'ViewT i o -> (forall m r. (Focusable m, Monoid r) => (o -> m r) -> i -> m r)
 getViewFocus (ViewFocus f) = f
@@ -57,13 +61,6 @@ listChunk :: Chunk -> [Chunk]
 listChunk = \case
   ListChunk chs -> chs
   actual -> error $ "Expected ListChunk, got " <> show actual
-
-composeFocus :: Focus cmd i mid -> Focus cmd mid o -> Focus cmd i o
-composeFocus (ViewFocus l) (ViewFocus r) = ViewFocus $ l . r
-composeFocus (ModifyFocus l) (ModifyFocus r) = ModifyFocus $ l . r
-
-(>.>) :: Focus cmd i mid -> Focus cmd mid o -> Focus cmd i o
-(>.>) = composeFocus
 
 liftTrav :: forall cmd i o. (IsCmd cmd) => Traversal' i o -> Focus cmd i o
 liftTrav trav = case getCmd @cmd of

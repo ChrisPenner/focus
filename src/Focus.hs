@@ -18,6 +18,7 @@ import Focus.Parser (parseAction, parseSelector)
 import Focus.Prelude
 import Focus.Typechecker (typecheckModify, typecheckSelector, typecheckView)
 import Focus.Types
+import Focus.Untyped (renderChunk)
 import Options.Applicative qualified as Opts
 import Prettyprinter.Render.Terminal (AnsiStyle)
 import System.Exit qualified as System
@@ -166,8 +167,8 @@ focusMToCliM m = do
             _focusOpts = FocusOpts {_handleErr = handleError style d True}
           }
 
-    handleError :: Diagnose.Style AnsiStyle -> D.Diagnostic Text -> Bool -> Chunk -> SelectorError -> IO Chunk
-    handleError style diag shouldFail chunk err = do
+    handleError :: Diagnose.Style AnsiStyle -> D.Diagnostic Text -> Bool -> SelectorError -> IO ()
+    handleError style diag shouldFail err = do
       case err of
         ShellError msg -> do
           liftIO $ TextIO.hPutStrLn UnliftIO.stderr msg
@@ -189,9 +190,18 @@ focusMToCliM m = do
                   ]
                   []
           printDiagnostic style $ D.addReport diag report
+        CastError pos ty chunk -> do
+          let report =
+                D.Err
+                  Nothing
+                  "Type cast error"
+                  [ (pos, D.This $ "Failed to cast value: " <> renderChunk chunk <> " to type: " <> Text.pack (show ty))
+                  ]
+                  []
+          printDiagnostic style $ D.addReport diag report
       if shouldFail
         then liftIO $ System.exitFailure
-        else pure chunk
+        else pure ()
 
 printDiagnostic :: (MonadIO m) => Diagnose.Style AnsiStyle -> D.Diagnostic Text -> m ()
 printDiagnostic style report = do

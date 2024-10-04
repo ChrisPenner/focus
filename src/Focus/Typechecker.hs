@@ -85,7 +85,7 @@ unificationErrorReport = \case
       UTerm t -> renderUTyp t
     renderUTyp :: ChunkTypeT D.Position (Typ s) -> Text
     renderUTyp = \case
-      T.CastableT _ typ -> "!" <> renderTyp typ
+      T.CastableTypeT _ typ -> "!" <> renderTyp typ
       T.Arrow _ a b -> "(" <> renderTyp a <> " -> " <> renderTyp b <> ")"
       T.TextTypeT {} -> renderType T.TextType
       T.ListTypeT _ t -> "[" <> renderTyp t <> "]"
@@ -264,10 +264,13 @@ unifySelectorG goExpr = \case
   UT.Action _pos expr -> do
     goExpr expr
   UT.ParseJSON pos -> do
-    pure $ (T.textType pos, T.textType pos, Exactly 1)
+    pure $ (T.textType pos, T.jsonType pos, Exactly 1)
   UT.BindingAssignment _pos name -> do
     v <- initBinding name
     pure $ (v, v, Exactly 1)
+  UT.Cast pos -> do
+    inp <- freshVar
+    pure $ (inp, T.castableType pos inp, Exactly 1)
   where
     compose ::
       (Typ s, Typ s, ReturnArity) ->
@@ -325,10 +328,10 @@ unifyExpr = \case
   Plus pos a b -> do
     (inp, out, arity) <- unifyAction a
     (inp', out', arity') <- unifyAction b
-    o <- liftUnify $ Unify.unify out (T.numberType pos)
-    o' <- liftUnify $ Unify.unify out' o
+    _ <- liftUnify $ Unify.unify out (T.numberType pos)
+    o <- liftUnify $ Unify.unify out' (T.numberType pos)
     i <- liftUnify $ Unify.unify inp inp'
-    pure $ (i, o', composeArity arity arity')
+    pure $ (i, o, composeArity arity arity')
 
 unifyBindingString :: Typ s -> BindingString -> UnifyM s ()
 unifyBindingString inputTyp (BindingString bindings) = do

@@ -26,7 +26,6 @@ module Focus.Untyped
     VoidF,
     absurdF,
     renderChunk,
-    castNumber,
     ExprF (..),
     IsExpr (..),
   )
@@ -40,12 +39,10 @@ import Data.ByteString.Lazy.Char8 qualified as BSC
 import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
-import Data.Scientific qualified as S
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Error.Diagnose qualified as D
 import Focus.Tagged (Tagged (..))
-import Text.Read (readMaybe)
 import Text.Regex.PCRE.Heavy (Regex)
 
 type Pos = D.Position
@@ -106,6 +103,7 @@ data Selector (expr :: Type -> Type) a
   | Action a (expr a)
   | ParseJSON a
   | BindingAssignment a Text
+  | Cast a
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Selector expr a) a where
@@ -131,6 +129,7 @@ instance Tagged (Selector expr a) a where
     Action a _ -> a
     ParseJSON a -> a
     BindingAssignment a _ -> a
+    Cast a -> a
 
 data Chunk
   = TextChunk Text
@@ -156,24 +155,6 @@ renderChunk = \case
     DoubleNumber d -> Text.pack $ show d
   RegexMatchChunk _m -> error "Can't render a regex match chunk"
   JsonChunk v -> Text.pack $ BSC.unpack $ Aeson.encode v
-
-castNumber :: Chunk -> NumberT
-castNumber = \case
-  TextChunk txt -> castText txt
-  JsonChunk (Aeson.String txt) -> castText txt
-  NumberChunk num -> num
-  JsonChunk (Aeson.Number scientific) -> case S.floatingOrInteger scientific of
-    Left double -> DoubleNumber double
-    Right int -> IntNumber int
-  chunk -> error $ Text.unpack $ "Unable to cast value: " <> renderChunk chunk <> " into a number."
-  where
-    castText :: Text -> NumberT
-    castText txt =
-      case readMaybe (Text.unpack txt) of
-        Just i -> IntNumber i
-        Nothing -> case readMaybe (Text.unpack txt) of
-          Just d -> DoubleNumber d
-          Nothing -> error $ Text.unpack $ "Unable to cast value: " <> txt <> " into a number."
 
 data ChunkType
   = TextType
