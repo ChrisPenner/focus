@@ -171,6 +171,9 @@ before feeding the result back through the selector.
 
 ## TODO
 
+- [ ] any/all
+- [ ] Math, boolean ops
+- [ ] Add 'index' selector
 - [ ] Generate help and examples from source
 - [ ] ability to zip/cartesian product selectors (for paste-like things)
 - [ ] figure out how to typecheck JSON union types
