@@ -276,18 +276,15 @@ unifySelectorG goExpr = \case
       (rm, ro, rArity) <- unifySelectorG goExpr rTagged
       _ <- liftUnify $ Unify.unify lm rm
       pure (li, ro, composeArity lArity rArity)
-    composeArity :: ReturnArity -> ReturnArity -> ReturnArity
-    composeArity = \cases
-      (Exactly 0) _ -> (Exactly 0)
-      _ (Exactly 0) -> (Exactly 0)
-      (Exactly 1) x -> x
-      x (Exactly 1) -> x
-      Any _ -> Any
-      _ Any -> Any
-      Affine Affine -> Affine
-      Affine Exactly {} -> Any
-      Exactly {} Affine -> Any
-      (Exactly n) (Exactly m) -> Exactly (n * m)
+
+composeArity :: ReturnArity -> ReturnArity -> ReturnArity
+composeArity = \cases
+  Any _ -> Any
+  _ Any -> Any
+  Affine Affine -> Affine
+  Affine Exactly {} -> Any
+  Exactly {} Affine -> Any
+  (Exactly n) (Exactly m) -> Exactly (n * m)
 
 unifyExpr :: UT.TaggedExpr -> UnifyME (TypecheckFailure s) s (Typ s, Typ s, ReturnArity)
 unifyExpr = \case
@@ -324,6 +321,13 @@ unifyExpr = \case
   Count pos inner -> do
     (inp, _out, _arity) <- unifyAction inner
     pure $ (inp, T.numberType pos, Exactly 1)
+  Plus pos a b -> do
+    (inp, out, arity) <- unifyAction a
+    (inp', out', arity') <- unifyAction b
+    o <- liftUnify $ Unify.unify out (T.numberType pos)
+    o' <- liftUnify $ Unify.unify out' o
+    i <- liftUnify $ Unify.unify inp inp'
+    pure $ (i, o', composeArity arity arity')
 
 unifyBindingString :: Typ s -> BindingString -> UnifyM s ()
 unifyBindingString inputTyp (BindingString bindings) = do

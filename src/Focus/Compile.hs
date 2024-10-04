@@ -86,6 +86,19 @@ compileExpr = \case
   Count _ selector -> do
     let inner = compileSelectorG compileExpr ViewF selector
     listOfFocus inner >.> focusTo (pure . NumberChunk . IntNumber . length)
+  Plus _ a b -> do
+    let l = compileSelectorG compileExpr ViewF a
+    let r = compileSelectorG compileExpr ViewF b
+    ViewFocus $ \f inp -> do
+      inp & getViewFocus l \lchunk -> do
+        inp & getViewFocus r \rchunk -> do
+          f . NumberChunk $ castNumber lchunk `addNumberT` castNumber rchunk
+    where
+      addNumberT :: NumberT -> NumberT -> NumberT
+      addNumberT (IntNumber x) (IntNumber y) = IntNumber (x + y)
+      addNumberT (DoubleNumber x) (DoubleNumber y) = DoubleNumber (x + y)
+      addNumberT (IntNumber x) (DoubleNumber y) = DoubleNumber (fromIntegral x + y)
+      addNumberT (DoubleNumber x) (IntNumber y) = DoubleNumber (x + fromIntegral y)
 
 compileSelectorG :: forall cmd expr. (IsCmd cmd) => (expr D.Position -> Focus cmd Chunk Chunk) -> CommandF cmd -> Selector expr D.Position -> Focus cmd Chunk Chunk
 compileSelectorG goExpr cmdF = \case

@@ -176,6 +176,7 @@ data Expr a
   | Intersperse a (NonEmpty (Action a))
   | Comma a (Selector Expr a) (Selector Expr a)
   | Count a (Selector Expr a)
+  | Plus a (Selector Expr a) (Selector Expr a)
   deriving stock (Show, Functor, Foldable, Traversable)
 
 data NumberT

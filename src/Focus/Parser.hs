@@ -174,11 +174,11 @@ selectorP expr = withPos do
   case (getExpr @expr) of
     VoidF -> pure $ const l
     ExprF -> do
-      sep <- optional (lexeme (M.char ','))
-      case sep of
-        Just _ -> do
+      builder <- optional (lexeme (M.char ',' $> Comma) <|> (M.char '+' $> Plus))
+      case builder of
+        Just b -> do
           r <- selectorP expr <|> sp
-          pure $ \pos -> Action pos (Comma pos l r)
+          pure $ \pos -> Action pos (b pos l r)
         Nothing -> pure $ const l
   where
     sp = shellP <|> listOfP expr <|> regexP <|> groupedP expr <|> simpleSelectorP expr <|> evalP expr
