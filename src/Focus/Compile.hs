@@ -87,7 +87,7 @@ compileExpr = \case
   Count _ selector -> do
     let inner = compileSelectorG compileExpr ViewF selector
     listOfFocus inner >.> focusTo (pure . NumberChunk . IntNumber . length)
-  Plus _pos ls rs -> do
+  MathBinOp pos operation ls rs -> do
     let l = compileSelectorG compileExpr ViewF ls
     let r = compileSelectorG compileExpr ViewF rs
     ViewFocus $ \f inp -> do
@@ -95,7 +95,11 @@ compileExpr = \case
         inp & getViewFocus r \rchunk -> do
           case (castNumber lchunk, castNumber rchunk) of
             (Just ln, Just rn) -> do
-              f . NumberChunk $ ln `addNumberT` rn
+              case runNumberOp operation ln rn of
+                Left err -> do
+                  mayErr $ MathError pos err
+                  pure mempty
+                Right nt -> f $ NumberChunk nt
             (Nothing, _) -> do
               mayErr $ CastError (tag ls) NumberType lchunk
               pure mempty
@@ -103,11 +107,28 @@ compileExpr = \case
               mayErr $ CastError (tag rs) NumberType rchunk
               pure mempty
     where
-      addNumberT :: NumberT -> NumberT -> NumberT
-      addNumberT (IntNumber x) (IntNumber y) = IntNumber (x + y)
-      addNumberT (DoubleNumber x) (DoubleNumber y) = DoubleNumber (x + y)
-      addNumberT (IntNumber x) (DoubleNumber y) = DoubleNumber (fromIntegral x + y)
-      addNumberT (DoubleNumber x) (IntNumber y) = DoubleNumber (x + fromIntegral y)
+      runNumberOp :: MathBinOp -> NumberT -> NumberT -> Either Text NumberT
+      runNumberOp = \cases
+        Plus (IntNumber x) (IntNumber y) -> Right $ IntNumber (x + y)
+        Plus x y -> Right $ DoubleNumber $ onDoubles (+) x y
+        Minus (IntNumber x) (IntNumber y) -> Right $ IntNumber (x - y)
+        Minus x y -> Right $ DoubleNumber $ onDoubles (-) x y
+        Multiply (IntNumber x) (IntNumber y) -> Right $ IntNumber (x * y)
+        Multiply x y -> Right $ DoubleNumber $ onDoubles (*) x y
+        Divide _ (IntNumber 0) -> Left "Division by zero"
+        Divide (IntNumber x) (IntNumber y) -> Right $ DoubleNumber (fromIntegral x / fromIntegral y)
+        Divide x y -> Right $ DoubleNumber $ onDoubles (/) x y
+        Modulo (IntNumber x) (IntNumber y) -> Right $ IntNumber (x `mod` y)
+        Modulo _x _y -> Left "Can't use modulo on floating point numbers"
+        Power (IntNumber x) (IntNumber y) -> Right $ IntNumber (x ^ y)
+        Power x y -> Right $ DoubleNumber $ onDoubles (**) x y
+
+      onDoubles :: (Double -> Double -> x) -> NumberT -> NumberT -> x
+      onDoubles f = \cases
+        (IntNumber i) (IntNumber j) -> f (fromIntegral i) (fromIntegral j)
+        (IntNumber i) (DoubleNumber j) -> f (fromIntegral i) j
+        (DoubleNumber i) (IntNumber j) -> f i (fromIntegral j)
+        (DoubleNumber i) (DoubleNumber j) -> f i j
 
 compileSelectorG :: forall cmd expr. (IsCmd cmd) => (expr D.Position -> Focus cmd Chunk Chunk) -> CommandF cmd -> Selector expr D.Position -> Focus cmd Chunk Chunk
 compileSelectorG goExpr cmdF = \case

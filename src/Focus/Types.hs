@@ -56,6 +56,7 @@ data SelectorError
   | BindingError Pos Text
   | JsonParseError Pos Text {- < chunk -} Text {- < error -}
   | CastError Pos ChunkType {- destination type -} Chunk {- source chunk -}
+  | MathError Pos Text
 
 newtype FocusM a = FocusM {runFocusM :: ReaderT FocusEnv IO a}
   deriving newtype (Functor, Applicative, Monad, MonadIO, MonadFix, MonadReader FocusEnv)

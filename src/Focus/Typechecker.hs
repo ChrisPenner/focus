@@ -197,15 +197,6 @@ typecheckThing :: (forall s. UnifyME (TypecheckFailure s) s ()) -> Either TypeEr
 typecheckThing m = do
   Unify.runSTBinding $ runExceptT $ flip evalStateT mempty $ mapStateT (withExceptT unificationErrorReport) $ void $ m
 
--- where
---   go :: thing -> StateT (UBindings s) (ExceptT (TypecheckFailure s) (Unify.STBinding s)) (Fix (ChunkTypeT D.Position))
---   go thing = do
---     typ <- typechecker thing
---     trm <- liftUnify $ Unify.applyBindings (UTerm typ)
---     case Unify.freeze trm of
---       Nothing -> pure $ error "Freeze failed"
---       Just r -> pure r
-
 unifySelector :: UT.TaggedSelector -> UnifyM s (Typ s, Typ s, ReturnArity)
 unifySelector = unifySelectorG absurdF
 
@@ -330,7 +321,7 @@ unifyExpr = \case
   Count pos inner -> do
     (inp, _out, _arity) <- unifyAction inner
     pure $ (inp, T.numberType pos, Exactly 1)
-  Plus pos a b -> do
+  MathBinOp pos _op a b -> do
     (inp, out, arity) <- unifyAction a
     (inp', out', arity') <- unifyAction b
     _ <- liftUnify $ Unify.unify out (T.numberType pos)

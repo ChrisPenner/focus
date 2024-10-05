@@ -199,6 +199,15 @@ focusMToCliM m = do
                   ]
                   []
           printDiagnostic style $ D.addReport diag report
+        MathError pos msg -> do
+          let report =
+                D.Err
+                  Nothing
+                  "Math error"
+                  [ (pos, D.This $ msg)
+                  ]
+                  []
+          printDiagnostic style $ D.addReport diag report
       if shouldFail
         then liftIO $ System.exitFailure
         else pure ()

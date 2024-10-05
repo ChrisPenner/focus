@@ -28,6 +28,7 @@ module Focus.Untyped
     renderChunk,
     ExprF (..),
     IsExpr (..),
+    MathBinOp (..),
   )
 where
 
@@ -170,6 +171,9 @@ type TaggedAction = Selector Expr Pos
 
 type Action a = Selector Expr a
 
+data MathBinOp = Plus | Minus | Multiply | Divide | Modulo | Power
+  deriving stock (Show, Eq, Ord)
+
 data Expr a
   = Binding a BindingName
   | Str a BindingString
@@ -178,7 +182,7 @@ data Expr a
   | Intersperse a (NonEmpty (Action a))
   | Comma a (Selector Expr a) (Selector Expr a)
   | Count a (Selector Expr a)
-  | Plus a (Selector Expr a) (Selector Expr a)
+  | MathBinOp a MathBinOp (Selector Expr a) (Selector Expr a)
   deriving stock (Show, Functor, Foldable, Traversable)
 
 data NumberT

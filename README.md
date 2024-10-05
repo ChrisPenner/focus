@@ -171,6 +171,7 @@ before feeding the result back through the selector.
 
 ## TODO
 
+- [ ] Fix parsing ambiguity of division and regex
 - [ ] any/all
 - [ ] Math, boolean ops
 - [ ] Add 'index' selector

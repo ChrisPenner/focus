@@ -130,8 +130,47 @@ echo 'one,two,three' | run binding_assignment_view view 'splitOn "," | -> x | co
 ## Count
 echo 'one,two,three' | run count_view view 'count (splitOn ",")'
 
-## Plus
+## Math
+
+### Int Math
+
+#### Plus
 echo '1,2,3' | run plus_view view '[ splitOn "," ] | !(at 0) + !(at 1)'
+
+#### Minus
+echo '10,8' | run minus_view view '[ splitOn "," ] | !(at 0) - !(at 1)'
+
+#### Times
+echo '10,8' | run times_view view '[ splitOn "," ] | !(at 0) * !(at 1)'
+
+#### Division
+echo '10,5' | run division_view view '[ splitOn "," ] | !(at 0) / !(at 1)'
+
+#### Modulus
+echo '10,3' | run modulus_view view '[ splitOn "," ] | !(at 0) % !(at 1)'
+
+#### Power
+echo '2,3' | run power_view view '[ splitOn "," ] | !(at 0) ^ !(at 1)'
+
+### Mixed Math
+
+#### Plus
+echo '1.5,2' | run plus_mixed_view view '[ splitOn "," ] | !(at 0) + !(at 1)'
+
+#### Minus
+echo '10,8.5' | run minus_mixed_view view '[ splitOn "," ] | !(at 0) - !(at 1)'
+
+#### Times
+echo '10,8.5' | run times_mixed_view view '[ splitOn "," ] | !(at 0) * !(at 1)'
+
+#### Division
+echo '10,2.5' | run division_mixed_view view '[ splitOn "," ] | !(at 0) / !(at 1)'
+
+#### Modulus
+echo '10,3.5' | run modulus_mixed_view view '[ splitOn "," ] | !(at 0) % !(at 1)'
+
+#### Power
+echo '2,3.5' | run power_mixed_view view '[ splitOn "," ] | !(at 0) ^ !(at 1)'
 
 # Extract test cases from the readme
 

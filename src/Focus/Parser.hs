@@ -180,13 +180,25 @@ selectorP expr = withPos do
   case (getExpr @expr) of
     VoidF -> pure $ const l
     ExprF -> do
-      builder <- optional (lexeme ((M.char ',' $> Comma) <|> (M.char '+' $> Plus)))
+      builder <- optional (lexeme ((M.char ',' $> Comma) <|> mathBinOp))
       case builder of
         Just b -> do
           r <- selectorP expr <|> sp
           pure $ \pos -> Action pos (b pos l r)
         Nothing -> pure $ const l
   where
+    mathBinOp :: P (Pos -> Selector Expr Pos -> Selector Expr Pos -> Expr Pos)
+    mathBinOp = do
+      op <-
+        M.choice
+          [ M.char '+' $> Plus,
+            M.char '-' $> Minus,
+            M.char '*' $> Multiply,
+            M.char '^' $> Power,
+            -- M.char '/' $> Divide,
+            M.char '%' $> Modulo
+          ]
+      pure (\pos -> MathBinOp pos op)
     sp = shellP <|> listOfP expr <|> regexP <|> groupedP expr <|> simpleSelectorP expr <|> evalP expr
 
 evalP :: P (expr Pos) -> P (Selector expr Pos)
