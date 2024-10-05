@@ -106,6 +106,13 @@ echo "one,two,three" | run contains_modify modify 'splitOn "," | filter (contain
 echo "one,two,three" | run not_view view 'splitOn "," | filter (not (contains "two"))'
 echo "one,two,three" | run not_modify modify 'splitOn "," | filter (not (contains "two"))' '{rev}'
 
+## JSON
+echo '{"one": 1, "two": 2, "three": 3}' | run json_view view 'json'
+
+## Casting
+echo '1,2,3' | run requires_cast view '[ splitOn "," ] | (at 0) + (at 1)'
+echo '1,2,3' | run successful_cast view '[ splitOn "," ] | (at 0) + (at 1)'
+
 # Expressions
 
 ## Binding usages
@@ -117,24 +124,14 @@ echo "one,two,three" | run string_concat_view view '[splitOn ","] | concat %{.}'
 ## Intersperse
 echo "1 2 3 one two three" | run intersperse_view view 'intersperse /\d+/ /\w+/ (splitOn " ")'
 
-## JSON
-echo '{"one": 1, "two": 2, "three": 3}' | run json_view view 'json'
-
-
 ## Binding assignment
 echo 'one,two,three' | run binding_assignment_view view 'splitOn "," | -> x | concat ["*", %{x}, "*"]'
 
 ## Count
 echo 'one,two,three' | run count_view view 'count (splitOn ",")'
 
-# Template strings
-# run template_view view 'match @"_-_-_" -> [one, two, three] '
-# run template_view view 'groups @"_-_-_" -> [one, two, three] '
-
-# Variable bindings
-# echo "one,two,three" | run variable_binding modify 'splitOn "," | ->x' '{~ x }'
-
-
+## Plus
+echo '1,2,3' | run plus_view view '[ splitOn "," ] | !(at 0) + !(at 1)'
 
 # Extract test cases from the readme
 
