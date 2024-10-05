@@ -40,6 +40,7 @@ import Control.Unification.STVar qualified as Unify
 import Control.Unification.Types (Unifiable (..))
 import Data.Aeson qualified as Aeson
 import Data.Scientific qualified as S
+import Data.Set.NonEmpty (NESet)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Error.Diagnose qualified as D
@@ -87,9 +88,9 @@ instance (IsCmd cmd) => Category (Focus cmd) where
 (>.>) :: (IsCmd cmd) => Focus cmd a b -> Focus cmd b c -> Focus cmd a c
 (>.>) = flip (Cat..)
 
-type UVar s = Unify.STVar s (ChunkTypeT D.Position)
+type UVar s = Unify.STVar s (ChunkTypeT (NESet D.Position))
 
-type Typ s = UTerm (ChunkTypeT D.Position) (UVar s)
+type Typ s = UTerm (ChunkTypeT (NESet D.Position)) (UVar s)
 
 data ReturnArity = Affine | Exactly Int | Any
   deriving stock (Show, Eq, Ord)
@@ -104,19 +105,19 @@ data ChunkTypeT a r
   | CastableTypeT a r
   deriving stock (Show, Eq, Functor, Foldable, Traversable)
 
-instance Unifiable (ChunkTypeT a) where
+instance (Semigroup a) => Unifiable (ChunkTypeT a) where
   zipMatch = \cases
     -- TODO: this isn't quite right
-    (CastableTypeT pos x) (CastableTypeT _ y) -> Just (CastableTypeT pos (Right (x, y)))
-    (CastableTypeT pos _) (NumberTypeT {}) -> Just (NumberTypeT pos)
-    (TextTypeT pos) (CastableTypeT _ _) -> Just (TextTypeT pos)
-    (CastableTypeT pos _) (TextTypeT {}) -> Just (TextTypeT pos)
-    (NumberTypeT pos) (CastableTypeT _ _) -> Just (NumberTypeT pos)
-    (NumberTypeT pos) NumberTypeT {} -> Just $ NumberTypeT pos
-    (Arrow pos x y) (Arrow _ x' y') -> Just (Arrow pos (Right (x, x')) (Right (y, y')))
-    (TextTypeT pos) (TextTypeT _pos) -> Just (TextTypeT pos)
-    (ListTypeT pos x) (ListTypeT _ y) -> Just (ListTypeT pos $ Right (x, y))
-    (RegexMatchTypeT pos) RegexMatchTypeT {} -> Just $ RegexMatchTypeT pos
+    (CastableTypeT posL x) (CastableTypeT posR y) -> Just (CastableTypeT (posL <> posR) (Right (x, y)))
+    (CastableTypeT posL _) (NumberTypeT posR) -> Just (NumberTypeT (posL <> posR))
+    (TextTypeT posL) (CastableTypeT posR _) -> Just (TextTypeT (posL <> posR))
+    (CastableTypeT posL _) (TextTypeT posR) -> Just (TextTypeT (posL <> posR))
+    (NumberTypeT posL) (CastableTypeT posR _) -> Just (NumberTypeT (posL <> posR))
+    (NumberTypeT posL) (NumberTypeT posR) -> Just $ NumberTypeT (posL <> posR)
+    (Arrow posL x y) (Arrow posR x' y') -> Just (Arrow (posL <> posR) (Right (x, x')) (Right (y, y')))
+    (TextTypeT posL) (TextTypeT posR) -> Just (TextTypeT (posL <> posR))
+    (ListTypeT posL x) (ListTypeT posR y) -> Just (ListTypeT (posL <> posR) $ Right (x, y))
+    (RegexMatchTypeT posL) (RegexMatchTypeT posR) -> Just $ RegexMatchTypeT (posL <> posR)
     CastableTypeT {} _ -> Nothing
     TextTypeT {} _ -> Nothing
     ListTypeT {} _ -> Nothing

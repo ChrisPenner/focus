@@ -57,6 +57,7 @@ dependencies:
 - optparse-applicative
 - megaparsec
 - lens-regex-pcre
+- nonempty-containers
 - pcre-heavy
 - pcre-light
 - recursion-schemes

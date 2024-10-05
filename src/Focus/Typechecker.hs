@@ -15,6 +15,7 @@ import Control.Unification.Types (UTerm (..))
 import Data.Foldable1 qualified as F1
 import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as M
+import Data.Set.NonEmpty (NESet)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Error.Diagnose qualified as D
@@ -35,8 +36,9 @@ unificationErrorReport = \case
         Diagnose.Err
           Nothing
           "Type error"
-          [ (tag trm', D.This $ "Cyclic type detected. Please report this issue." <> renderTyp trm)
-          ]
+          ( toList (tag trm') <&> \pos ->
+              (pos, D.This $ "Cyclic type detected. Please report this issue." <> renderTyp trm)
+          )
           []
       _ -> error "OccursFailure: Please report this issue."
   MismatchFailure l r ->
@@ -45,9 +47,9 @@ unificationErrorReport = \case
      in Diagnose.Err
           Nothing
           "Type error"
-          [ (lPos, D.This $ "this selector outputs: " <> renderUTyp l),
-            (rPos, D.Where $ "but this selector expects: " <> renderUTyp r)
-          ]
+          ( expandPositions D.This ("this selector outputs: " <> renderUTyp l) lPos
+              <> expandPositions D.This ("but this selector expects: " <> renderUTyp r) rPos
+          )
           []
   UndeclaredBinding pos name ->
     Diagnose.Err
@@ -65,13 +67,13 @@ unificationErrorReport = \case
     Diagnose.Err
       Nothing
       "Type error"
-      [(pos, D.This $ "Selector must accept text input, but instead expects: " <> renderTyp typ)]
+      (expandPositions D.This ("Selector must accept text input, but instead expects: " <> renderTyp typ) pos)
       []
   ExprInSelector pos ->
     Diagnose.Err
       Nothing
       "Type error"
-      [(pos, D.This $ "Expressions are not valid where a selector was expected.")]
+      (expandPositions D.This "Expressions are not valid where a selector was expected." pos)
       []
   where
     varNames :: [Text]
@@ -83,7 +85,7 @@ unificationErrorReport = \case
       UVar v ->
         varNames !! succ (maxBound + Unify.getVarID v)
       UTerm t -> renderUTyp t
-    renderUTyp :: ChunkTypeT D.Position (Typ s) -> Text
+    renderUTyp :: ChunkTypeT (NESet D.Position) (Typ s) -> Text
     renderUTyp = \case
       T.CastableTypeT _ typ -> "!" <> renderTyp typ
       T.Arrow _ a b -> "(" <> renderTyp a <> " -> " <> renderTyp b <> ")"
@@ -93,6 +95,9 @@ unificationErrorReport = \case
       T.RegexMatchTypeT _ -> renderType T.RegexMatchType
       T.JsonTypeT _ -> renderType T.JsonType
 
+expandPositions :: (Foldable f) => (Text -> Diagnose.Marker Text) -> Text -> f D.Position -> [(D.Position, D.Marker Text)]
+expandPositions marker msg xs = toList xs <&> \pos -> (pos, marker msg)
+
 type UBindings s = M.Map Text (Typ s)
 
 type UnifyM s = StateT (UBindings s) (ExceptT (TypecheckFailure s) (Unify.STBinding s))
@@ -101,13 +106,13 @@ type UnifyME e s = StateT (UBindings s) (ExceptT e (Unify.STBinding s))
 
 data TypecheckFailure s
   = OccursFailure (UVar s) (Typ s)
-  | MismatchFailure (ChunkTypeT Diagnose.Position (Typ s)) (ChunkTypeT Diagnose.Position (Typ s))
+  | MismatchFailure (ChunkTypeT (NESet Diagnose.Position) (Typ s)) (ChunkTypeT (NESet Diagnose.Position) (Typ s))
   | UndeclaredBinding Diagnose.Position Text
   | ExpectedSingularArity Diagnose.Position ReturnArity
-  | NonTextInput Diagnose.Position (Typ s)
-  | ExprInSelector Diagnose.Position
+  | NonTextInput (NESet Diagnose.Position) (Typ s)
+  | ExprInSelector (NESet Diagnose.Position)
 
-instance Unify.Fallible (ChunkTypeT D.Position) (UVar s) (TypecheckFailure s) where
+instance Unify.Fallible (ChunkTypeT (NESet D.Position)) (UVar s) (TypecheckFailure s) where
   occursFailure = OccursFailure
   mismatchFailure = MismatchFailure
 
