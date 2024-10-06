@@ -41,94 +41,103 @@ import UnliftIO qualified
 import UnliftIO.Process qualified as UnliftIO
 import Prelude hiding (reads)
 
-compileSelector :: forall cmd. (IsCmd cmd) => CommandF cmd -> TaggedSelector -> Focus cmd Chunk Chunk
-compileSelector cmdF = compileSelectorG absurdF cmdF
+compileSelector :: forall cmd. (IsCmd cmd) => CommandF cmd -> TaggedAction -> Focus cmd Chunk Chunk
+compileSelector cmdF = compileSelectorG (compileExpr cmdF) cmdF
 
 compileAction :: TaggedAction -> Focus ViewT Chunk Chunk
-compileAction = compileSelectorG compileExpr ViewF
+compileAction = compileSelectorG (compileExpr ViewF) ViewF
 
-compileExpr :: TaggedExpr -> Focus ViewT Chunk Chunk
-compileExpr = \case
-  Binding pos bindingName -> do
-    ViewFocus \f inp -> do
-      binding <- resolveBinding pos inp bindingName
-      f binding
-  Str _pos bindingStr ->
-    let handler :: forall m b. (Focusable m) => (Chunk -> m b) -> Chunk -> m b
-        handler f inp = do
-          txt <- resolveBindingString inp bindingStr
-          f (TextChunk txt)
-     in ViewFocus handler
-  Number _pos num -> liftTrav $ \f _ -> f (NumberChunk num)
-  StrConcat _pos innerExpr -> do
-    let inner = compileAction innerExpr
-    let go :: ((Chunk -> m c) -> a -> m b) -> (Chunk -> m c) -> a -> m b
-        go vf f inp =
-          inp & vf \xs -> do
-            f . TextChunk $ Text.concat (textChunk <$> listChunk xs)
-    ViewFocus $ \f inp -> go (getViewFocus inner) f inp
-  Intersperse _pos actions -> do
-    let actionFocuses = (listOfFocus . compileAction <$> actions)
-    ViewFocus $ \f inp -> do
-      chunkResults <- for actionFocuses \af -> do
-        inp & getViewFocus af pure
-      let go = \case
-            [] -> pure mempty
-            ([] : rest) -> go rest
-            ((x : xs) : rest) -> do
-              r <- f x
-              (r <>) <$> go (rest ++ [xs])
-      go (NE.toList chunkResults)
-  Comma _ a b -> do
-    let l = compileSelectorG compileExpr ViewF a
-    let r = compileSelectorG compileExpr ViewF b
-    ViewFocus $ \f chunk -> do
-      liftA2 (<>) (getViewFocus l f chunk) (getViewFocus r f chunk)
-  Count _ selector -> do
-    let inner = compileSelectorG compileExpr ViewF selector
-    listOfFocus inner >.> focusTo (pure . NumberChunk . IntNumber . length)
-  MathBinOp pos operation ls rs -> do
-    let l = compileSelectorG compileExpr ViewF ls
-    let r = compileSelectorG compileExpr ViewF rs
-    ViewFocus $ \f inp -> do
-      inp & getViewFocus l \lchunk -> do
-        inp & getViewFocus r \rchunk -> do
-          case (castNumber lchunk, castNumber rchunk) of
-            (Just ln, Just rn) -> do
-              case runNumberOp operation ln rn of
-                Left err -> do
-                  mayErr $ MathError pos err
-                  pure mempty
-                Right nt -> f $ NumberChunk nt
-            (Nothing, _) -> do
-              mayErr $ CastError (tag ls) NumberType lchunk
-              pure mempty
-            (_, Nothing) -> do
-              mayErr $ CastError (tag rs) NumberType rchunk
-              pure mempty
-    where
-      runNumberOp :: MathBinOp -> NumberT -> NumberT -> Either Text NumberT
-      runNumberOp = \cases
-        Plus (IntNumber x) (IntNumber y) -> Right $ IntNumber (x + y)
-        Plus x y -> Right $ DoubleNumber $ onDoubles (+) x y
-        Minus (IntNumber x) (IntNumber y) -> Right $ IntNumber (x - y)
-        Minus x y -> Right $ DoubleNumber $ onDoubles (-) x y
-        Multiply (IntNumber x) (IntNumber y) -> Right $ IntNumber (x * y)
-        Multiply x y -> Right $ DoubleNumber $ onDoubles (*) x y
-        Divide _ (IntNumber 0) -> Left "Division by zero"
-        Divide (IntNumber x) (IntNumber y) -> Right $ DoubleNumber (fromIntegral x / fromIntegral y)
-        Divide x y -> Right $ DoubleNumber $ onDoubles (/) x y
-        Modulo (IntNumber x) (IntNumber y) -> Right $ IntNumber (x `mod` y)
-        Modulo _x _y -> Left "Can't use modulo on floating point numbers"
-        Power (IntNumber x) (IntNumber y) -> Right $ IntNumber (x ^ y)
-        Power x y -> Right $ DoubleNumber $ onDoubles (**) x y
+compileExpr :: CommandF cmd -> TaggedExpr -> Focus cmd Chunk Chunk
+compileExpr cmd expr = case cmd of
+  ViewF -> viewFocus expr
+  ModifyF -> oneWay $ viewFocus expr
+  where
+    viewFocus =
+      \case
+        Binding pos bindingName -> do
+          ViewFocus \f inp -> do
+            binding <- resolveBinding pos inp bindingName
+            f binding
+        Str _pos bindingStr ->
+          let handler :: forall m b. (Focusable m) => (Chunk -> m b) -> Chunk -> m b
+              handler f inp = do
+                txt <- resolveBindingString inp bindingStr
+                f (TextChunk txt)
+           in ViewFocus handler
+        Number _pos num -> liftTrav $ \f _ -> f (NumberChunk num)
+        StrConcat _pos innerExpr -> do
+          let inner = compileAction innerExpr
+          let go :: ((Chunk -> m c) -> a -> m b) -> (Chunk -> m c) -> a -> m b
+              go vf f inp =
+                inp & vf \xs -> do
+                  f . TextChunk $ Text.concat (textChunk <$> listChunk xs)
+          ViewFocus $ \f inp -> go (getViewFocus inner) f inp
+        Intersperse _pos actions -> do
+          let actionFocuses = (listOfFocus . compileAction <$> actions)
+          ViewFocus $ \f inp -> do
+            chunkResults <- for actionFocuses \af -> do
+              inp & getViewFocus af pure
+            let go = \case
+                  [] -> pure mempty
+                  ([] : rest) -> go rest
+                  ((x : xs) : rest) -> do
+                    r <- f x
+                    (r <>) <$> go (rest ++ [xs])
+            go (NE.toList chunkResults)
+        Comma _ a b -> do
+          let l = compileSelectorG (compileExpr ViewF) ViewF a
+          let r = compileSelectorG (compileExpr ViewF) ViewF b
+          ViewFocus $ \f chunk -> do
+            liftA2 (<>) (getViewFocus l f chunk) (getViewFocus r f chunk)
+        Count _ selector -> do
+          let inner = compileSelectorG (compileExpr ViewF) ViewF selector
+          listOfFocus inner >.> focusTo (pure . NumberChunk . IntNumber . length)
+        MathBinOp pos operation ls rs -> do
+          let l = compileSelectorG (compileExpr ViewF) ViewF ls
+          let r = compileSelectorG (compileExpr ViewF) ViewF rs
+          ViewFocus $ \f inp -> do
+            inp & getViewFocus l \lchunk -> do
+              inp & getViewFocus r \rchunk -> do
+                case (castNumber lchunk, castNumber rchunk) of
+                  (Just ln, Just rn) -> do
+                    case runNumberOp operation ln rn of
+                      Left err -> do
+                        mayErr $ MathError pos err
+                        pure mempty
+                      Right nt -> f $ NumberChunk nt
+                  (Nothing, _) -> do
+                    mayErr $ CastError (tag ls) NumberType lchunk
+                    pure mempty
+                  (_, Nothing) -> do
+                    mayErr $ CastError (tag rs) NumberType rchunk
+                    pure mempty
+          where
+            runNumberOp :: MathBinOp -> NumberT -> NumberT -> Either Text NumberT
+            runNumberOp = \cases
+              Plus (IntNumber x) (IntNumber y) -> Right $ IntNumber (x + y)
+              Plus x y -> Right $ DoubleNumber $ onDoubles (+) x y
+              Minus (IntNumber x) (IntNumber y) -> Right $ IntNumber (x - y)
+              Minus x y -> Right $ DoubleNumber $ onDoubles (-) x y
+              Multiply (IntNumber x) (IntNumber y) -> Right $ IntNumber (x * y)
+              Multiply x y -> Right $ DoubleNumber $ onDoubles (*) x y
+              Divide _ (IntNumber 0) -> Left "Division by zero"
+              Divide (IntNumber x) (IntNumber y) -> Right $ DoubleNumber (fromIntegral x / fromIntegral y)
+              Divide x y -> Right $ DoubleNumber $ onDoubles (/) x y
+              Modulo (IntNumber x) (IntNumber y) -> Right $ IntNumber (x `mod` y)
+              Modulo _x _y -> Left "Can't use modulo on floating point numbers"
+              Power (IntNumber x) (IntNumber y) -> Right $ IntNumber (x ^ y)
+              Power x y -> Right $ DoubleNumber $ onDoubles (**) x y
 
-      onDoubles :: (Double -> Double -> x) -> NumberT -> NumberT -> x
-      onDoubles f = \cases
-        (IntNumber i) (IntNumber j) -> f (fromIntegral i) (fromIntegral j)
-        (IntNumber i) (DoubleNumber j) -> f (fromIntegral i) j
-        (DoubleNumber i) (IntNumber j) -> f i (fromIntegral j)
-        (DoubleNumber i) (DoubleNumber j) -> f i j
+            onDoubles :: (Double -> Double -> x) -> NumberT -> NumberT -> x
+            onDoubles f = \cases
+              (IntNumber i) (IntNumber j) -> f (fromIntegral i) (fromIntegral j)
+              (IntNumber i) (DoubleNumber j) -> f (fromIntegral i) j
+              (DoubleNumber i) (IntNumber j) -> f i (fromIntegral j)
+              (DoubleNumber i) (DoubleNumber j) -> f i j
+
+oneWay :: Focus ViewT Chunk Chunk -> Focus ModifyT Chunk Chunk
+oneWay = \case
+  ViewFocus f -> ModifyFocus f
 
 compileSelectorG :: forall cmd expr. (IsCmd cmd) => (expr D.Position -> Focus cmd Chunk Chunk) -> CommandF cmd -> Selector expr D.Position -> Focus cmd Chunk Chunk
 compileSelectorG goExpr cmdF = \case
@@ -138,13 +147,13 @@ compileSelectorG goExpr cmdF = \case
   SplitWords _ -> underText $ liftTrav $ (\f txt -> Text.unwords <$> traverse f (Text.words txt))
   Regex _ pat _ -> do
     case cmdF of
-      ViewF -> viewRegex pat \f match -> do f (TextChunk $ match ^. RE.match)
+      ViewF -> do viewRegex pat RE.match
       ModifyF -> do modifyRegex pat RE.match
   RegexMatches _ ->
     liftTrav $ _RegexMatchChunk . RE.match . from textI
   RegexGroups _ pat _ -> do
     case cmdF of
-      ViewF -> viewRegex pat \f match -> do foldMapM (f . TextChunk) (match ^.. RE.groups . traversed)
+      ViewF -> do viewRegex pat (RE.groups . traverse)
       ModifyF -> do modifyRegex pat (RE.groups . traverse)
   ListOf _ selector -> do
     listOfFocus (compileSelectorG goExpr cmdF selector) >.> liftTrav (from asListI)
@@ -156,7 +165,7 @@ compileSelectorG goExpr cmdF = \case
         ViewFocus $ \f chunk -> do
           hasMatches cmdF inner chunk >>= \case
             True -> f chunk
-            False -> pure mempty
+            False -> pure chunk
       ModifyF -> ModifyFocus $ \f chunk -> do
         hasMatches cmdF inner chunk >>= \case
           True -> f chunk
@@ -168,7 +177,7 @@ compileSelectorG goExpr cmdF = \case
       ViewF -> do
         ViewFocus $ \f chunk -> do
           hasMatches cmdF inner chunk >>= \case
-            True -> pure mempty
+            True -> pure chunk
             False -> f chunk
       ModifyF -> ModifyFocus $ \f chunk -> do
         hasMatches cmdF inner chunk >>= \case
@@ -269,14 +278,14 @@ compileSelectorG goExpr cmdF = \case
       let (before, after) = splitAt (len - n) xs
       (<> after) <$> traverse f before
 
-    viewRegex :: RE.Regex -> (forall m r. (Monoid r, Focusable m) => (Chunk -> m r) -> RE.Match -> m r) -> Focus 'ViewT Chunk Chunk
-    viewRegex pat go = ViewFocus \f chunk -> do
+    viewRegex :: RE.Regex -> (Traversal' RE.Match Text) -> Focus 'ViewT Chunk Chunk
+    viewRegex pat trav = ViewFocus \f chunk -> do
       let txt = textChunk chunk
-      txt & foldMapMOf (RE.regexing pat) \match -> do
+      TextChunk <$> forOf (RE.regexing pat) txt \match -> do
         let groups =
               match ^. RE.namedGroups
                 <&> TextChunk
-        local (over focusBindings (groups <>)) $ go f match
+        local (over focusBindings (groups <>)) $ forOf trav match (fmap textChunk . f . TextChunk)
 
     modifyRegex :: RE.Regex -> (Traversal' RE.Match Text) -> Focus 'ModifyT Chunk Chunk
     modifyRegex pat trav = ModifyFocus \f chunk -> do

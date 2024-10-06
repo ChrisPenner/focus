@@ -49,10 +49,8 @@ withPos p = do
   let pos = Diagnose.Position (M.unPos startLine, M.unPos startCol) (M.unPos (M.sourceLine end), M.unPos (M.sourceColumn end)) sourceName
   pure $ f pos
 
-parseSelector :: (forall x. (Show x) => Show (expr x), IsExpr expr) => Text -> Text -> Either (Diagnostic Text) (Selector expr Pos)
-parseSelector srcName src = parseThing (scriptP noExprP) "Invalid selector" srcName src
-  where
-    noExprP = basicExprP *> M.customFailure ActionInSelector
+parseSelector :: Text -> Text -> Either (Diagnostic Text) (Selector Expr Pos)
+parseSelector srcName src = parseThing actionP "Invalid selector" srcName src
 
 parseAction :: Text -> Text -> Either (Diagnostic Text) TaggedAction
 parseAction srcName src = parseThing actionP "Invalid expression" srcName src
@@ -72,8 +70,8 @@ parseThing parser err srcName src = do
   Debug.debugM srcName $ "Parsed: " <> show result
   pure result
 
-scriptP :: (IsExpr expr) => (P (expr Pos)) -> P (Selector expr Pos)
-scriptP expr = selectorsP expr
+actionP :: P (Selector Expr Pos)
+actionP = selectorsP basicExprP
 
 selectorsP :: (IsExpr expr) => P (expr Pos) -> P (Selector expr Pos)
 selectorsP expr = withPos do
@@ -291,9 +289,6 @@ numberP = lexeme $ do
     [ fmap DoubleNumber . M.try $ L.signed (pure ()) L.float,
       fmap IntNumber . M.try $ L.signed (pure ()) L.decimal
     ]
-
-actionP :: P (Selector Expr Pos)
-actionP = selectorsP basicExprP
 
 basicExprP :: P TaggedExpr
 basicExprP = mayBracketedP do

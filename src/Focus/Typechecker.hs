@@ -9,6 +9,7 @@ import Control.Lens
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT, withExceptT)
 import Control.Monad.State (MonadState (..), StateT, evalStateT, mapStateT)
 import Control.Monad.Trans (lift)
+import Control.Monad.Trans.Writer.CPS (WriterT, runWriterT, tell)
 import Control.Unification qualified as Unify
 import Control.Unification.STVar qualified as Unify
 import Control.Unification.Types (UTerm (..))
@@ -25,7 +26,7 @@ import Focus.Tagged (Tagged (..))
 import Focus.Typechecker.Types (renderType)
 import Focus.Typechecker.Types qualified as T
 import Focus.Types
-import Focus.Untyped (BindingName (..), BindingString (..), Expr (..), absurdF)
+import Focus.Untyped (BindingName (..), BindingString (..), Expr (..))
 import Focus.Untyped qualified as UT
 
 unificationErrorReport :: TypecheckFailure s -> D.Report Text
@@ -69,12 +70,6 @@ unificationErrorReport = \case
       "Type error"
       (expandPositions D.This ("Selector must accept text input, but instead expects: " <> renderTyp typ) pos)
       []
-  ExprInSelector pos ->
-    Diagnose.Err
-      Nothing
-      "Type error"
-      (expandPositions D.This "Expressions are not valid where a selector was expected." pos)
-      []
   where
     varNames :: [Text]
     varNames =
@@ -95,14 +90,30 @@ unificationErrorReport = \case
       T.RegexMatchTypeT _ -> renderType T.RegexMatchType
       T.JsonTypeT _ -> renderType T.JsonType
 
+warningReport :: Warning -> D.Report Text
+warningReport = \case
+  ExprInSelector pos ->
+    Diagnose.Warn
+      Nothing
+      "Expression found in selector"
+      [(pos, D.This "This expression isn't reversable.")]
+      [ D.Note "You can still run the selector, but any results will be passed through it unaltered."
+      ]
+
 expandPositions :: (Foldable f) => (Text -> Diagnose.Marker Text) -> Text -> f D.Position -> [(D.Position, D.Marker Text)]
 expandPositions marker msg xs = toList xs <&> \pos -> (pos, marker msg)
 
 type UBindings s = M.Map Text (Typ s)
 
-type UnifyM s = StateT (UBindings s) (ExceptT (TypecheckFailure s) (Unify.STBinding s))
+data Warning
+  = ExprInSelector Diagnose.Position
+  deriving stock (Show, Eq, Ord)
 
-type UnifyME e s = StateT (UBindings s) (ExceptT e (Unify.STBinding s))
+type Warnings = [Warning]
+
+type UnifyM s = UnifyME (TypecheckFailure s) s
+
+type UnifyME e s = WriterT Warnings (StateT (UBindings s) (ExceptT e (Unify.STBinding s)))
 
 data TypecheckFailure s
   = OccursFailure (UVar s) (Typ s)
@@ -110,14 +121,13 @@ data TypecheckFailure s
   | UndeclaredBinding Diagnose.Position Text
   | ExpectedSingularArity Diagnose.Position ReturnArity
   | NonTextInput (NESet Diagnose.Position) (Typ s)
-  | ExprInSelector (NESet Diagnose.Position)
 
 instance Unify.Fallible (ChunkTypeT (NESet D.Position)) (UVar s) (TypecheckFailure s) where
   occursFailure = OccursFailure
   mismatchFailure = MismatchFailure
 
 liftUnify :: (ExceptT (TypecheckFailure s) (Unify.STBinding s)) a -> UnifyM s a
-liftUnify = lift
+liftUnify = lift . lift
 
 declareBindings :: BindingDeclarations -> UnifyM s ()
 declareBindings bd = do
@@ -156,14 +166,14 @@ expectBinding pos name = do
     Just v -> pure v
     Nothing -> throwError $ UndeclaredBinding pos name
 
-typecheckModify :: UT.TaggedSelector -> UT.Selector Expr D.Position -> Either TypeErrorReport ()
+typecheckModify :: UT.TaggedAction -> UT.Selector Expr D.Position -> Either TypeErrorReport [WarningReport]
 typecheckModify selector expr = do
   typecheckThing $ do
     (inp, _out, _arity) <- unifyModify (selector, expr)
     expectTextInput inp (tag selector)
     pure ()
 
-typecheckView :: UT.TaggedAction -> Either TypeErrorReport ()
+typecheckView :: UT.TaggedAction -> Either TypeErrorReport [WarningReport]
 typecheckView action = typecheckThing $ do
   (inp, _out, _arity) <- unifyAction action
   expectTextInput inp (tag action)
@@ -176,7 +186,7 @@ expectTextInput inp pos =
       MismatchFailure a _ -> NonTextInput (tag a) (UTerm a)
       x -> x
 
-unifyModify :: (UT.TaggedSelector, UT.Selector Expr D.Position) -> UnifyME (TypecheckFailure s) s (Typ s, Typ s, ReturnArity)
+unifyModify :: (UT.TaggedAction, UT.Selector Expr D.Position) -> UnifyME (TypecheckFailure s) s (Typ s, Typ s, ReturnArity)
 unifyModify (selector, expr) = do
   (selectorIn, selectorOut, _selArity) <- unifySelector selector
   (exprIn, exprOut, actionArity) <- unifyAction expr
@@ -187,18 +197,24 @@ unifyModify (selector, expr) = do
   --   _ -> throwError $ ExpectedSingularArity (tag expr) actionArity
   pure (selectorIn, exprOut, actionArity)
 
-typecheckSelector :: UT.TaggedSelector -> Either TypeErrorReport ()
+typecheckSelector :: UT.TaggedAction -> Either TypeErrorReport [WarningReport]
 typecheckSelector sel = typecheckThing do
   (inp, _out, _arity) <- unifySelector sel
   expectTextInput inp (tag sel)
   pure ()
 
-typecheckThing :: (forall s. UnifyME (TypecheckFailure s) s ()) -> Either TypeErrorReport ()
+typecheckThing :: (forall s. UnifyME (TypecheckFailure s) s ()) -> Either TypeErrorReport [WarningReport]
 typecheckThing m = do
-  Unify.runSTBinding $ runExceptT $ flip evalStateT mempty $ mapStateT (withExceptT unificationErrorReport) $ void $ m
+  (_, warnings) <- Unify.runSTBinding $ runExceptT $ flip evalStateT mempty $ mapStateT (withExceptT unificationErrorReport) . runWriterT $ void $ m
+  pure $ warningReport <$> warnings
 
-unifySelector :: UT.TaggedSelector -> UnifyM s (Typ s, Typ s, ReturnArity)
-unifySelector = unifySelectorG absurdF
+unifySelector :: UT.TaggedAction -> UnifyM s (Typ s, Typ s, ReturnArity)
+unifySelector = unifySelectorG (exprWarning >=> unifyExpr)
+  where
+    exprWarning :: UT.TaggedExpr -> UnifyM s UT.TaggedExpr
+    exprWarning expr = do
+      tell $ [ExprInSelector (tag expr)]
+      pure expr
 
 unifyAction :: UT.TaggedAction -> UnifyM s (Typ s, Typ s, ReturnArity)
 unifyAction = unifySelectorG unifyExpr
@@ -342,4 +358,4 @@ unifyBindingString inputTyp (BindingString bindings) = do
     Right _ -> pure ()
 
 freshVar :: UnifyM s (Typ s)
-freshVar = (Unify.UVar <$> (lift . lift $ Unify.freeVar))
+freshVar = (Unify.UVar <$> (lift . lift . lift $ Unify.freeVar))

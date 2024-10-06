@@ -41,7 +41,7 @@ import Prelude hiding (reads)
 focusId :: (IsCmd cmd) => Focus cmd i i
 focusId = Cat.id
 
-getViewFocus :: Focus 'ViewT i o -> (forall m r. (Focusable m, Monoid r) => (o -> m r) -> i -> m r)
+getViewFocus :: Focus 'ViewT i o -> (forall m r. (Focusable m) => (o -> m r) -> i -> m r)
 getViewFocus (ViewFocus f) = f
 
 getModifyFocus :: Focus 'ModifyT i o -> (forall m. (Focusable m) => LensLike' m i o)
@@ -111,16 +111,6 @@ unsafeIso p = iso (\actual -> fromJust' actual . preview p $ actual) (review p)
 
 listOfFocus :: forall cmd i o. Focus cmd i o -> Focus cmd i [o]
 listOfFocus = \case
-  ViewFocus inner ->
-    ViewFocus $ \f chunk -> do
-      results <-
-        chunk
-          & inner
-            %%~ ( \chunk' -> do
-                    tell [chunk']
-                )
-          & execWriterT
-      f (results)
   ModifyFocus inner ->
     ModifyFocus $ \f chunk -> do
       let action :: (Focusable m) => Lazy.StateT (ListOfS o) m i
@@ -136,6 +126,9 @@ listOfFocus = \case
         f (reverse reads) >>= \case
           ~(chs) -> pure $ (r, chs)
       pure r
+
+modifyToView :: Focus ModifyT i Chunk -> Focus ViewT i Chunk
+modifyToView (ModifyFocus f) = ViewFocus f
 
 data ListOfS a = ListOfS
   { reads :: [a],

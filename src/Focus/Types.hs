@@ -17,6 +17,7 @@ module Focus.Types
     ChunkType (..),
     ChunkTypeT (..),
     TypeErrorReport,
+    WarningReport,
     ReturnArity (..),
     FocusEnv (..),
     FocusOpts (..),
@@ -76,7 +77,7 @@ makeLenses ''FocusOpts
 type Focusable m = (MonadReader FocusEnv m, MonadIO m, MonadFix m)
 
 data Focus (cmd :: CommandT) i o where
-  ViewFocus :: (forall m r. (Monoid r, Focusable m) => LensLike m i r o r) -> Focus 'ViewT i o
+  ViewFocus :: (forall m r. (Focusable m) => LensLike m i r o r) -> Focus 'ViewT i o
   ModifyFocus :: (forall m. (Focusable m) => LensLike' m i o) -> Focus 'ModifyT i o
 
 instance (IsCmd cmd) => Category (Focus cmd) where
@@ -138,6 +139,8 @@ instance Tagged (ChunkTypeT a r) a where
     CastableTypeT pos _ -> pos
 
 type TypeErrorReport = D.Report Text
+
+type WarningReport = D.Report Text
 
 castNumber :: Chunk -> Maybe NumberT
 castNumber inp = case inp of

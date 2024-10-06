@@ -8,6 +8,7 @@ module Focus.Cli
     UseColour (..),
     ChunkSize (..),
     InPlace (..),
+    ShowWarnings (..),
   )
 where
 
@@ -34,13 +35,16 @@ data UseColour = Colour | NoColour
 
 data InPlace = InPlace | NotInPlace
 
+data ShowWarnings = ShowWarnings | NoWarnings
+
 data Options
   = Options
   { output :: OutputLocation,
     inPlace :: InPlace,
     command :: Command,
     useColour :: UseColour,
-    chunkSize :: ChunkSize
+    chunkSize :: ChunkSize,
+    showWarnings :: ShowWarnings
   }
 
 optionsP :: Parser Options
@@ -77,13 +81,21 @@ optionsP = do
           <> short 'i'
           <> help "Modify each input file in place rather than writing to output"
       )
+  showWarnings <-
+    flag
+      ShowWarnings
+      NoWarnings
+      ( long "silent"
+          <> short 's'
+          <> help "Suppress warnings"
+      )
   command <-
     subparser
       ( Opt.command "view" (info viewP (progDesc "View the focus"))
           <> Opt.command "modify" (info overP (progDesc "Modify the focused field"))
           <> Opt.command "set" (info setP (progDesc "Set the focus"))
       )
-  pure Options {output, command, useColour, chunkSize, inPlace}
+  pure Options {output, command, useColour, chunkSize, inPlace, showWarnings}
 
 inputFilesP :: Parser [FilePath]
 inputFilesP = many $ strArgument (metavar "FILES..." <> help "Input files. If omitted, read from stdin")

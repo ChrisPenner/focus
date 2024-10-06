@@ -10,7 +10,7 @@ import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
 import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
-import Focus.Cli (InPlace (..), Options (..), OutputLocation (..), UseColour (..), optionsP)
+import Focus.Cli (InPlace (..), Options (..), OutputLocation (..), ShowWarnings (..), UseColour (..), optionsP)
 import Focus.Command (Command (..), CommandF (..), CommandT (..), IsCmd)
 import Focus.Compile (compileAction, compileSelector)
 import Focus.Exec qualified as Exec
@@ -118,7 +118,8 @@ run = do
         Right ast -> do
           case typecheckSelector ast of
             Left errReport -> failWithReport errReport
-            Right () -> do
+            Right warnings -> do
+              printWarnings warnings
               pure $ compileSelector cmdF ast
 
     getActionFocus :: Text -> CliM (Focus ViewT Chunk Chunk)
@@ -130,7 +131,8 @@ run = do
         Right ast -> do
           case typecheckView ast of
             Left errReport -> failWithReport errReport
-            Right () -> do
+            Right warnings -> do
+              printWarnings warnings
               pure $ compileAction ast
 
     getModifyFocus :: Text -> Text -> CliM (Focus ModifyT Chunk Chunk, Focus ViewT Chunk Chunk)
@@ -147,10 +149,24 @@ run = do
             Right action -> do
               case typecheckModify selectorAst action of
                 Left errReport -> failWithReport errReport
-                Right () -> do
+                Right warnings -> do
+                  printWarnings warnings
                   let compiledSel = compileSelector ModifyF selectorAst
                   let compiledAction = compileAction action
                   pure $ (compiledSel, compiledAction)
+
+printWarnings :: [WarningReport] -> CliM ()
+printWarnings reports = do
+  asks showWarnings >>= \case
+    ShowWarnings -> do
+      for_ reports printReport
+    NoWarnings -> pure ()
+
+printReport :: D.Report Text -> CliM ()
+printReport report = do
+  diag <- gets diagnostic
+  style <- diagnoseStyle
+  printDiagnostic style $ Diagnose.addReport diag report
 
 focusMToCliM :: FocusM a -> CliM a
 focusMToCliM m = do
@@ -213,8 +229,8 @@ focusMToCliM m = do
         else pure ()
 
 printDiagnostic :: (MonadIO m) => Diagnose.Style AnsiStyle -> D.Diagnostic Text -> m ()
-printDiagnostic style report = do
-  Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style report
+printDiagnostic style diag = do
+  Diagnose.printDiagnostic UnliftIO.stderr Diagnose.WithUnicode (Diagnose.TabSize 2) style diag
 
 diagnoseStyle :: (MonadReader Options m) => m (Diagnose.Style AnsiStyle)
 diagnoseStyle =

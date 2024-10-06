@@ -185,6 +185,17 @@ data Expr a
   | MathBinOp a MathBinOp (Selector Expr a) (Selector Expr a)
   deriving stock (Show, Functor, Foldable, Traversable)
 
+instance Tagged (Expr a) a where
+  tag = \case
+    Binding a _ -> a
+    Str a _ -> a
+    Number a _ -> a
+    StrConcat a _ -> a
+    Intersperse a _ -> a
+    Comma a _ _ -> a
+    Count a _ -> a
+    MathBinOp a _ _ _ -> a
+
 data NumberT
   = IntNumber Int
   | DoubleNumber Double
