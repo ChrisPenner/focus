@@ -182,15 +182,15 @@ before feeding the result back through the selector.
 - [x] ~Switch to input file arguments~
 - [x] ~In-place editing~
 - [ ] Make expression language and selectors more consistent and distinct
-- [x] Ability to 'NOT'/invert filters
+- [x] ~Ability to 'NOT'/invert filters~
 - [ ] Add more examples
 - [ ] Add more tests
 - [ ] README tests
 - [ ] Support JSON
-- [x] List splat
-- [x] Expression language
-- [x] Require reversible selectors
+- [x] ~List splat~
+- [x] ~Expression language~
+- [x] ~Require reversible selectors~
 - [ ] Handle errors from shell commands better
 - [ ] shell 'if'
 - [ ] Fix annoying ansi codes coming from diagnose even on no-color mode.
-- [ ] Fix printing of "STVar" in type errors, e.g. `focus view '/one/ | ...'`
+- [x] ~Fix printing of "STVar" in type errors, e.g. `focus view '/one/ | ...'`~
