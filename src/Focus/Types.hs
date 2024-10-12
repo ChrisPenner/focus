@@ -53,7 +53,7 @@ import Text.Read (readMaybe)
 import Prelude hiding (reads)
 
 data SelectorError
-  = ShellError Text
+  = ShellError Pos Text
   | BindingError Pos Text
   | JsonParseError Pos Text {- < chunk -} Text {- < error -}
   | CastError Pos ChunkType {- destination type -} Chunk {- source chunk -}

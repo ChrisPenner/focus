@@ -52,10 +52,10 @@ compileExpr =
         binding <- resolveBinding pos inp bindingName
         f binding
     Str _pos bindingStr ->
-      let handler :: forall m b. (Focusable m) => (Chunk -> m b) -> Chunk -> m b
+      let handler :: forall m r. (Focusable m, Monoid r) => (Chunk -> m r) -> Chunk -> m r
           handler f inp = do
-            txt <- resolveBindingString inp bindingStr
-            f (TextChunk txt)
+            compileTemplateString inp bindingStr \txt -> do
+              f txt
        in ViewFocus handler
     Number _pos num -> liftTrav $ \f _ -> f (NumberChunk num)
     StrConcat _pos innerExpr -> do
@@ -85,6 +85,33 @@ compileExpr =
     Count _ selector -> do
       let inner = compileSelectorG ViewF selector
       listOfFocus inner >.> focusTo (pure . NumberChunk . IntNumber . length)
+    Shell pos shellScript shellMode -> ViewFocus \f inp -> do
+      compileTemplateString inp shellScript \txt -> do
+        let shellTxt = textChunk txt
+        let proc = UnliftIO.shell (Text.unpack shellTxt)
+        let proc' = proc {UnliftIO.std_in = UnliftIO.CreatePipe, UnliftIO.std_out = UnliftIO.CreatePipe, UnliftIO.std_err = UnliftIO.CreatePipe}
+        procResult <- liftIO $ UnliftIO.withCreateProcess proc' \mstdin mstdout mstderr phandle -> do
+          let stdin = fromMaybe (error "missing stdin") mstdin
+          let stdout = fromMaybe (error "missing stdout") mstdout
+          let stderr = fromMaybe (error "missing stderr") mstderr
+          case shellMode of
+            Normal -> liftIO $ Text.hPutStrLn stdin (textChunk inp)
+            NullStdin -> pure ()
+          UnliftIO.hClose stdin
+          UnliftIO.waitForProcess phandle >>= \case
+            ExitFailure code -> do
+              errOut <- liftIO $ Text.hGetContents stderr
+              pure $ Left (code, errOut)
+            ExitSuccess -> do
+              out <- liftIO $ Text.hGetContents stdout
+              let out' = fromMaybe out $ Text.stripSuffix "\n" out
+              pure $ Right out'
+        case procResult of
+          Left (code, errOut) -> do
+            mayErr $ ShellError pos $ "Shell script failed with exit code " <> tShow code <> ": " <> "\n" <> errOut
+            pure mempty
+          Right out -> do
+            f (TextChunk out)
     MathBinOp pos operation ls rs -> do
       let l = compileSelectorG ViewF ls
       let r = compileSelectorG ViewF rs
@@ -127,6 +154,23 @@ compileExpr =
           (IntNumber i) (DoubleNumber j) -> f (fromIntegral i) j
           (DoubleNumber i) (IntNumber j) -> f i (fromIntegral j)
           (DoubleNumber i) (DoubleNumber j) -> f i j
+  where
+    compileTemplateString :: (Focusable m, Monoid r) => Chunk -> TemplateString Pos -> (Chunk -> m r) -> m r
+    compileTemplateString inp (TemplateString xs) f = compileTemplateStringHelper inp xs f
+    compileTemplateStringHelper :: (Focusable m, Monoid r) => Chunk -> [Either (Selector Pos) Text] -> (Chunk -> m r) -> m r
+    compileTemplateStringHelper inp xs f = case xs of
+      [] -> f (TextChunk "")
+      (Left sel : rest) -> do
+        case compileSelectorG ViewF sel of
+          ViewFocus vf -> do
+            inp
+              & vf
+                ( \t ->
+                    compileTemplateStringHelper inp rest \restT ->
+                      f (TextChunk $ textChunk t <> textChunk restT)
+                )
+      Right txt : rest -> do
+        compileTemplateStringHelper inp rest (\t -> f . TextChunk $ (txt <> textChunk t))
 
 compileSelectorG :: forall cmd. (IsCmd cmd) => CommandF cmd -> Selector D.Position -> Focus cmd Chunk Chunk
 compileSelectorG cmdF = \case
@@ -177,35 +221,6 @@ compileSelectorG cmdF = \case
       listChunk chunk
         & traversed %%~ f
         <&> ListChunk
-  Shell _ shellScript shellMode -> do
-    let go :: forall m. (Focusable m) => (Chunk -> m Chunk)
-        go chunk = do
-          shellTxt <- resolveBindingString chunk shellScript
-          let proc = UnliftIO.shell (Text.unpack shellTxt)
-          let proc' = proc {UnliftIO.std_in = UnliftIO.CreatePipe, UnliftIO.std_out = UnliftIO.CreatePipe, UnliftIO.std_err = UnliftIO.CreatePipe}
-          procResult <- liftIO $ UnliftIO.withCreateProcess proc' \mstdin mstdout mstderr phandle -> do
-            let stdin = fromMaybe (error "missing stdin") mstdin
-            let stdout = fromMaybe (error "missing stdout") mstdout
-            let stderr = fromMaybe (error "missing stderr") mstderr
-            case shellMode of
-              Normal -> liftIO $ Text.hPutStrLn stdin (textChunk chunk)
-              NullStdin -> pure ()
-            UnliftIO.hClose stdin
-            UnliftIO.waitForProcess phandle >>= \case
-              ExitFailure code -> do
-                errOut <- liftIO $ Text.hGetContents stderr
-                pure $ Left (code, errOut)
-              ExitSuccess -> do
-                out <- liftIO $ Text.hGetContents stdout
-                let out' = fromMaybe out $ Text.stripSuffix "\n" out
-                pure $ Right out'
-          case procResult of
-            Left (code, errOut) -> do
-              mayErr $ ShellError $ "Shell script failed with exit code " <> tShow code <> ": " <> renderBindingString shellScript <> "\n" <> errOut
-              pure chunk
-            Right out -> do
-              pure (TextChunk out)
-    liftSimple go pure
   At _ n -> do
     liftTrav $ \f chunk -> do
       listChunk chunk
@@ -307,12 +322,12 @@ mayErr err = do
   handler <- view (focusOpts . handleErr)
   liftIO (handler err)
 
-resolveBindingString :: (Focusable m) => Chunk -> BindingString -> m Text
-resolveBindingString input (BindingString xs) = do
-  Text.concat <$> for xs \case
-    Left (binding, pos) -> do
-      textChunk <$> resolveBinding pos input binding
-    Right txt -> pure txt
+-- resolveBindingString :: (Focusable m) => Chunk -> TemplateString expr pos -> m Text
+-- resolveBindingString input (TemplateString xs) = do
+--   Text.concat <$> for xs \case
+--     Left (binding, pos) -> do
+--       textChunk <$> resolveBinding pos input binding
+--     Right txt -> pure txt
 
 resolveBinding :: (Focusable m) => Pos -> Chunk -> BindingName -> m Chunk
 resolveBinding pos input = \case

@@ -8,8 +8,7 @@ module Focus.Untyped
     TaggedSelector,
     ShellMode (..),
     BindingName (..),
-    BindingString (..),
-    renderBindingString,
+    TemplateString (..),
     Bindings,
     BindingDeclarations,
     Chunk (..),
@@ -33,6 +32,7 @@ import Control.Lens
 import Control.Lens.Regex.Text qualified as Re
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
+import Data.Bitraversable
 import Data.ByteString.Lazy.Char8 qualified as BSC
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
@@ -57,17 +57,17 @@ data BindingName
   | InputBinding
   deriving stock (Show, Eq, Ord)
 
-newtype BindingString = BindingString [Either (BindingName, Pos) Text]
-  deriving stock (Show, Eq, Ord)
+newtype TemplateString a = TemplateString [Either (Selector a) Text]
+  deriving stock (Show)
 
-renderBindingString :: BindingString -> Text
-renderBindingString (BindingString xs) =
-  xs
-    <&> \case
-      Left (BindingName name, _pos) -> "%{" <> name <> "}"
-      Left (InputBinding, _pos) -> "%{.}"
-      Right txt -> txt
-    & mconcat
+instance Functor TemplateString where
+  fmap f (TemplateString ps) = TemplateString $ fmap (bimap (fmap f) id) ps
+
+instance Foldable TemplateString where
+  foldMap f (TemplateString ps) = foldMap (either (foldMap f) mempty) ps
+
+instance Traversable TemplateString where
+  traverse f (TemplateString ps) = TemplateString <$> traverse (bitraverse (traverse f) pure) ps
 
 type Bindings = Map Text Chunk
 
@@ -90,7 +90,6 @@ data Selector a
   | Filter a (Selector a)
   | Not a (Selector a)
   | Splat a
-  | Shell a BindingString ShellMode
   | At a Int
   | Take a Int (Selector a)
   | TakeEnd a Int (Selector a)
@@ -116,7 +115,6 @@ instance Tagged (Selector a) a where
     Filter a _ -> a
     Not a _ -> a
     Splat a -> a
-    Shell a _ _ -> a
     At a _ -> a
     Take a _ _ -> a
     TakeEnd a _ _ -> a
@@ -170,12 +168,13 @@ data MathBinOp = Plus | Minus | Multiply | Divide | Modulo | Power
 
 data Expr a
   = Binding a BindingName
-  | Str a BindingString
+  | Str a (TemplateString a)
   | Number a (NumberT)
   | StrConcat a (Action a)
   | Intersperse a (NonEmpty (Action a))
   | Comma a (Selector a) (Selector a)
   | Count a (Selector a)
+  | Shell a (TemplateString a) ShellMode
   | MathBinOp a MathBinOp (Selector a) (Selector a)
   deriving stock (Show, Functor, Foldable, Traversable)
 
@@ -189,6 +188,7 @@ instance Tagged (Expr a) a where
     Comma a _ _ -> a
     Count a _ -> a
     MathBinOp a _ _ _ -> a
+    Shell a _ _ -> a
 
 data NumberT
   = IntNumber Int

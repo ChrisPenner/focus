@@ -118,7 +118,7 @@ listOfP = withPos do
   M.between (lexeme $ M.char '[') (lexeme $ M.char ']') $ do
     flip ListOf <$> selectorsP
 
-shellP :: P (Selector Pos)
+shellP :: P (Expr Pos)
 shellP = withPos do
   shellMode <-
     optional (M.try $ M.char '-' *> M.lookAhead (M.char '{')) >>= \case
@@ -127,24 +127,27 @@ shellP = withPos do
   script <- bindingStringP '{' '}'
   pure $ \pos -> Shell pos script shellMode
 
-bindingStringP :: Char -> Char -> P BindingString
+shellActionP :: P (Selector Pos)
+shellActionP = withPos do
+  flip Action <$> shellP
+
+bindingStringP :: Char -> Char -> P (TemplateString D.Position)
 bindingStringP begin end = M.between (lexeme $ M.char begin) (lexeme $ M.char end) $ do
-  BindingString <$> many do
+  TemplateString <$> many do
     M.choice
-      [ Left <$> withPos ((,) <$> bareBindingP),
+      [ Left <$> selExprP,
         Right . Text.pack
           <$> some (escaped <|> M.noneOf (['%', '}', end] :: String))
       ]
   where
+    selExprP = M.try (M.char '%' *> M.between (lexeme (M.char '{')) (lexeme (M.char '}')) selectorsP)
     -- Escape bindings
     escaped = M.string "\\%" $> '%'
 
 bareBindingP :: P BindingName
-bareBindingP = M.try do
-  M.between (lexeme (M.string "%{")) (lexeme (M.char '}')) $
-    do
-      (BindingName . Text.pack <$> lexeme (M.some M.alphaNumChar))
-      <|> (M.string "." $> InputBinding)
+bareBindingP = do
+  _ <- M.char '%'
+  lexeme ((BindingName <$> bindingName) <|> (M.string "." $> InputBinding))
 
 bindingName :: P Text
 bindingName = do
@@ -152,7 +155,7 @@ bindingName = do
 
 groupedP :: P (Selector Pos)
 groupedP = do
-  castP <|> shellP <|> listOfP <|> regexP <|> bracketedP selectorsP <|> bracketedP simpleSelectorP
+  castP <|> shellActionP <|> listOfP <|> regexP <|> bracketedP selectorsP <|> bracketedP simpleSelectorP
 
 castP :: P (Selector Pos)
 castP = withPos do
@@ -188,7 +191,7 @@ selectorP = withPos do
             M.char '%' $> Modulo
           ]
       pure (\pos -> MathBinOp pos op)
-    sp = shellP <|> listOfP <|> regexP <|> groupedP <|> simpleSelectorP <|> evalP
+    sp = shellActionP <|> listOfP <|> regexP <|> groupedP <|> simpleSelectorP <|> evalP
 
 evalP :: P (Selector Pos)
 evalP = withPos do flip Action <$> basicExprP
@@ -284,7 +287,8 @@ numberP = lexeme $ do
 basicExprP :: P TaggedExpr
 basicExprP = mayBracketedP do
   M.choice
-    [ exprLiteralP,
+    [ shellP,
+      exprLiteralP,
       simpleExprP
     ]
 

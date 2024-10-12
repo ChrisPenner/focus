@@ -7,13 +7,16 @@ where
 
 import Control.Lens
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT, withExceptT)
+import Control.Monad.Reader (ReaderT (..), asks)
 import Control.Monad.State (MonadState (..), StateT, evalStateT, mapStateT)
 import Control.Monad.Trans (lift)
-import Control.Monad.Trans.Writer.CPS (WriterT, runWriterT, tell)
+import Control.Monad.Trans.Writer.CPS (WriterT, runWriterT)
+import Control.Monad.Writer (MonadWriter (..))
 import Control.Unification qualified as Unify
 import Control.Unification.STVar qualified as Unify
 import Control.Unification.Types (UTerm (..))
 import Data.Foldable1 qualified as F1
+import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as M
 import Data.Set.NonEmpty (NESet)
@@ -26,7 +29,7 @@ import Focus.Tagged (Tagged (..))
 import Focus.Typechecker.Types (renderType)
 import Focus.Typechecker.Types qualified as T
 import Focus.Types
-import Focus.Untyped (BindingName (..), BindingString (..), Expr (..))
+import Focus.Untyped (BindingName (..), Expr (..), TemplateString (..))
 import Focus.Untyped qualified as UT
 
 unificationErrorReport :: TypecheckFailure s -> D.Report Text
@@ -113,7 +116,10 @@ type Warnings = [Warning]
 
 type UnifyM s = UnifyME (TypecheckFailure s) s
 
-type UnifyME e s = WriterT Warnings (StateT (UBindings s) (ExceptT e (Unify.STBinding s)))
+data UnifyEnv = UnifyEnv {warnExpr :: Bool}
+  deriving stock (Show, Eq, Ord)
+
+type UnifyME e s = (ReaderT UnifyEnv (WriterT Warnings (StateT (UBindings s) (ExceptT e (Unify.STBinding s)))))
 
 data TypecheckFailure s
   = OccursFailure (UVar s) (Typ s)
@@ -127,7 +133,7 @@ instance Unify.Fallible (ChunkTypeT (NESet D.Position)) (UVar s) (TypecheckFailu
   mismatchFailure = MismatchFailure
 
 liftUnify :: (ExceptT (TypecheckFailure s) (Unify.STBinding s)) a -> UnifyM s a
-liftUnify = lift . lift
+liftUnify = lift . lift . lift
 
 declareBindings :: BindingDeclarations -> UnifyM s ()
 declareBindings bd = do
@@ -168,13 +174,13 @@ expectBinding pos name = do
 
 typecheckModify :: UT.TaggedSelector -> UT.Selector D.Position -> Either TypeErrorReport [WarningReport]
 typecheckModify selector expr = do
-  typecheckThing $ do
+  typecheckThing False $ do
     (inp, _out, _arity) <- unifyModify (selector, expr)
     expectTextInput inp (tag selector)
     pure ()
 
 typecheckView :: UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
-typecheckView action = typecheckThing $ do
+typecheckView action = typecheckThing False $ do
   (inp, _out, _arity) <- unifyAction action
   expectTextInput inp (tag action)
 
@@ -197,15 +203,15 @@ unifyModify (selector, expr) = do
   --   _ -> throwError $ ExpectedSingularArity (tag expr) actionArity
   pure (selectorIn, exprOut, actionArity)
 
-typecheckSelector :: UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
-typecheckSelector sel = typecheckThing do
+typecheckSelector :: Bool -> UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
+typecheckSelector warnOnExpr sel = typecheckThing warnOnExpr do
   (inp, _out, _arity) <- unifySelector sel
   expectTextInput inp (tag sel)
   pure ()
 
-typecheckThing :: (forall s. UnifyME (TypecheckFailure s) s ()) -> Either TypeErrorReport [WarningReport]
-typecheckThing m = do
-  (_, warnings) <- Unify.runSTBinding $ runExceptT $ flip evalStateT mempty $ mapStateT (withExceptT unificationErrorReport) . runWriterT $ void $ m
+typecheckThing :: Bool -> (forall s. UnifyME (TypecheckFailure s) s ()) -> Either TypeErrorReport [WarningReport]
+typecheckThing warnOnExpr m = do
+  (_, warnings) <- Unify.runSTBinding $ runExceptT $ flip evalStateT mempty $ mapStateT (withExceptT unificationErrorReport) . runWriterT . flip runReaderT (UnifyEnv warnOnExpr) $ void $ m
   pure $ warningReport <$> warnings
 
 unifySelector :: UT.TaggedSelector -> UnifyM s (Typ s, Typ s, ReturnArity)
@@ -250,12 +256,6 @@ unifySelectorG goExpr = \case
   UT.Splat pos -> do
     inp <- freshVar
     pure $ (T.listType pos inp, inp, Any)
-  UT.Shell pos script shellMode -> do
-    inp <- case shellMode of
-      Normal -> pure $ T.textType pos
-      NullStdin -> freshVar
-    unifyBindingString inp script
-    pure $ (inp, T.textType pos, Affine)
   UT.At pos _n -> do
     inp <- freshVar
     pure (T.listType pos inp, inp, Affine)
@@ -293,6 +293,9 @@ unifySelectorG goExpr = \case
       _ <- liftUnify $ Unify.unify lm rm
       pure (li, ro, composeArity lArity rArity)
 
+composeArities :: NonEmpty ReturnArity -> ReturnArity
+composeArities xs = F1.foldl1' composeArity xs
+
 composeArity :: ReturnArity -> ReturnArity -> ReturnArity
 composeArity = \cases
   Any _ -> Any
@@ -303,59 +306,73 @@ composeArity = \cases
   (Exactly n) (Exactly m) -> Exactly (n * m)
 
 unifyExpr :: UT.TaggedExpr -> UnifyME (TypecheckFailure s) s (Typ s, Typ s, ReturnArity)
-unifyExpr = \case
-  Binding _pos InputBinding -> do
-    inputTyp <- freshVar
-    pure (inputTyp, inputTyp, Exactly 1)
-  Binding pos (BindingName name) -> do
-    bindingTyp <- expectBinding pos name
-    -- any input type, output type matches the binding
-    inputTyp <- freshVar
-    pure (inputTyp, bindingTyp, Exactly 1)
-  Str pos bindingStr -> do
-    inputTyp <- freshVar
-    unifyBindingString inputTyp bindingStr
-    pure $ (inputTyp, (T.textType pos), Exactly 1)
-  Number pos _num -> do
-    inputTyp <- freshVar
-    pure $ (inputTyp, (T.numberType pos), Exactly 1)
-  StrConcat pos innerExpr -> do
-    (inp, innerResult, _innerArity) <- unifyAction innerExpr
-    _ <- liftUnify $ Unify.unify innerResult (T.listType pos (T.textType pos))
-    -- TODO: Should We require the inner to have exactly 1 return?
-    pure $ (inp, T.textType pos, Exactly 1)
-  Intersperse _pos actions -> do
-    typs <- for actions unifyAction <&> fmap \(i, o, _) -> (i, o)
-    (i, o) <- liftUnify $ F1.foldrM1 (\(i1, o1) (i2, o2) -> (,) <$> Unify.unify i1 i2 <*> Unify.unify o1 o2) typs
-    pure $ (i, o, Any)
-  Comma _pos a b -> do
-    (inp, out, _arity) <- unifyAction a
-    (inp', out', _arity') <- unifyAction b
-    _ <- liftUnify $ Unify.unify inp inp'
-    _ <- liftUnify $ Unify.unify out out'
-    pure $ (inp, out', Any)
-  Count pos inner -> do
-    (inp, _out, _arity) <- unifyAction inner
-    pure $ (inp, T.numberType pos, Exactly 1)
-  MathBinOp pos _op a b -> do
-    (inp, out, arity) <- unifyAction a
-    (inp', out', arity') <- unifyAction b
-    _ <- liftUnify $ Unify.unify out (T.numberType pos)
-    o <- liftUnify $ Unify.unify out' (T.numberType pos)
-    i <- liftUnify $ Unify.unify inp inp'
-    pure $ (i, o, composeArity arity arity')
+unifyExpr expr = do
+  exprWarning
+  case expr of
+    Binding _pos InputBinding -> do
+      inputTyp <- freshVar
+      pure (inputTyp, inputTyp, Exactly 1)
+    Binding pos (BindingName name) -> do
+      bindingTyp <- expectBinding pos name
+      -- any input type, output type matches the binding
+      inputTyp <- freshVar
+      pure (inputTyp, bindingTyp, Exactly 1)
+    Str pos bindingStr -> do
+      inputTyp <- freshVar
+      unifyTemplateString inputTyp pos bindingStr
+    Number pos _num -> do
+      inputTyp <- freshVar
+      pure $ (inputTyp, (T.numberType pos), Exactly 1)
+    StrConcat pos innerExpr -> do
+      (inp, innerResult, _innerArity) <- unifyAction innerExpr
+      _ <- liftUnify $ Unify.unify innerResult (T.listType pos (T.textType pos))
+      -- TODO: Should We require the inner to have exactly 1 return?
+      pure $ (inp, T.textType pos, Exactly 1)
+    Intersperse _pos actions -> do
+      typs <- for actions unifyAction <&> fmap \(i, o, _) -> (i, o)
+      (i, o) <- liftUnify $ F1.foldrM1 (\(i1, o1) (i2, o2) -> (,) <$> Unify.unify i1 i2 <*> Unify.unify o1 o2) typs
+      pure $ (i, o, Any)
+    Comma _pos a b -> do
+      (inp, out, _arity) <- unifyAction a
+      (inp', out', _arity') <- unifyAction b
+      _ <- liftUnify $ Unify.unify inp inp'
+      _ <- liftUnify $ Unify.unify out out'
+      pure $ (inp, out', Any)
+    Count pos inner -> do
+      (inp, _out, _arity) <- unifyAction inner
+      pure $ (inp, T.numberType pos, Exactly 1)
+    Shell pos script shellMode -> do
+      inp <- case shellMode of
+        Normal -> pure $ T.textType pos
+        NullStdin -> freshVar
+      (i, o, arity) <- unifyTemplateString inp pos script
+      pure (i, o, composeArity arity (Exactly 1))
+    MathBinOp pos _op a b -> do
+      (inp, out, arity) <- unifyAction a
+      (inp', out', arity') <- unifyAction b
+      _ <- liftUnify $ Unify.unify out (T.numberType pos)
+      o <- liftUnify $ Unify.unify out' (T.numberType pos)
+      i <- liftUnify $ Unify.unify inp inp'
+      pure $ (i, o, composeArity arity arity')
+  where
+    exprWarning :: UnifyM s ()
+    exprWarning = do
+      asks warnExpr >>= \case
+        True -> do
+          tell $ [ExprInSelector (tag expr)]
+        False -> do
+          pure ()
 
-unifyBindingString :: Typ s -> BindingString -> UnifyM s ()
-unifyBindingString inputTyp (BindingString bindings) = do
-  for_ bindings $ \case
-    Left (BindingName name, pos) -> do
-      v <- expectBinding pos name
-      _ <- liftUnify $ Unify.unify v (T.textType pos)
-      pure ()
-    Left (InputBinding, pos) -> do
-      _ <- liftUnify $ Unify.unify inputTyp (T.textType pos)
-      pure ()
-    Right _ -> pure ()
+unifyTemplateString :: Typ s -> Diagnose.Position -> TemplateString D.Position -> UnifyM s (Typ s, Typ s, ReturnArity)
+unifyTemplateString inputTyp pos (TemplateString bindings) = do
+  arities <- for bindings $ \case
+    Left sel -> do
+      (i, o, arity) <- unifySelectorG unifyExpr sel
+      _ <- liftUnify $ Unify.unify i inputTyp
+      _ <- liftUnify $ Unify.unify o (T.textType (tag sel))
+      pure arity
+    Right _ -> pure (Exactly 1)
+  pure (inputTyp, T.textType pos, composeArities (Exactly 1 NE.:| arities))
 
 freshVar :: UnifyM s (Typ s)
-freshVar = (Unify.UVar <$> (lift . lift . lift $ Unify.freeVar))
+freshVar = (Unify.UVar <$> (lift . lift . lift . lift $ Unify.freeVar))

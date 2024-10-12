@@ -116,7 +116,7 @@ run = do
         Left errDiagnostic -> do
           failWithDiagnostic errDiagnostic
         Right ast -> do
-          case typecheckSelector ast of
+          case typecheckSelector True ast of
             Left errReport -> failWithReport errReport
             Right warnings -> do
               printWarnings warnings
@@ -186,8 +186,15 @@ focusMToCliM m = do
     handleError :: Diagnose.Style AnsiStyle -> D.Diagnostic Text -> Bool -> SelectorError -> IO ()
     handleError style diag shouldFail err = do
       case err of
-        ShellError msg -> do
-          liftIO $ TextIO.hPutStrLn UnliftIO.stderr msg
+        ShellError pos msg -> do
+          let report =
+                D.Err
+                  Nothing
+                  "Shell error"
+                  [ (pos, D.This $ "stderr:\n" <> msg)
+                  ]
+                  []
+          printDiagnostic style $ D.addReport diag report
         BindingError pos msg -> do
           let report =
                 D.Err

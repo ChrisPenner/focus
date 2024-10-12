@@ -116,16 +116,16 @@ echo '1,2,3' | run successful_cast view '[ splitOn "," ] | (at 0) + (at 1)'
 # Expressions
 
 ## Binding usages
-echo "The password is swordfish" | run binding_usage modify '/The password is (?<password>\w+)/' '%{password}'
+echo "The password is swordfish" | run binding_usage modify '/The password is (?<password>\w+)/' '%password'
 
 ## String Concatenation
-echo "one,two,three" | run string_concat_view view '[splitOn ","] | concat %{.}'
+echo "one,two,three" | run string_concat_view view '[splitOn ","] | concat %.'
 
 ## Intersperse
 echo "1 2 3 one two three" | run intersperse_view view 'intersperse /\d+/ /\w+/ (splitOn " ")'
 
 ## Binding assignment
-echo 'one,two,three' | run binding_assignment_view view 'splitOn "," | -> x | concat ["*", %{x}, "*"]'
+echo 'one,two,three' | run binding_assignment_view view 'splitOn "," | -> x | concat ["*", %x, "*"]'
 
 ## Count
 echo 'one,two,three' | run count_view view 'count (splitOn ",")'
@@ -173,7 +173,7 @@ echo '10,3.5' | run modulus_mixed_view view '[ splitOn "," ] | !(at 0) % !(at 1)
 echo '2,3.5' | run power_mixed_view view '[ splitOn "," ] | !(at 0) ^ !(at 1)'
 
 ## Expressions in modify commands
-echo '1,2' | run expression_in_selector modify '[ splitOn "," ] | !(at 0) + !(at 1)' '%{.}'
+echo '1,2' | run expression_in_selector modify '[ splitOn "," ] | !(at 0) + !(at 1)' '%.'
 
 # Extract test cases from the readme
 
