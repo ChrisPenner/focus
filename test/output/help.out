@@ -1,5 +1,5 @@
-Usage: focus [-o|--output OUTPUT-FILE] [--no-color] [-f|--full] [-i|--in-place]
-             COMMAND
+Usage: focus [-o|--output OUTPUT-FILE] [--no-color] [-f|--full] [-i|--in-place] 
+             [-s|--silent] COMMAND
 
   Focus - cli utility for hacking and slashing data
 
@@ -11,6 +11,7 @@ Available options:
                            line-by-line
   -i,--in-place            Modify each input file in place rather than writing
                            to output
+  -s,--silent              Suppress warnings
   -h,--help                Show this help text
 
 Available commands:

@@ -172,6 +172,9 @@ echo '10,3.5' | run modulus_mixed_view view '[ splitOn "," ] | !(at 0) % !(at 1)
 #### Power
 echo '2,3.5' | run power_mixed_view view '[ splitOn "," ] | !(at 0) ^ !(at 1)'
 
+## Expressions in modify commands
+echo '1,2' | run expression_in_selector modify '[ splitOn "," ] | !(at 0) + !(at 1)' '%{.}'
+
 # Extract test cases from the readme
 
 # focus --full view '/```focus\n((.|\s)*?)\n```/ | drop 1 (dropEnd 1 lines) | filter (not (contains "Result")) | -{ echo %{.} }' README.md

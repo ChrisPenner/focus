@@ -1,0 +1,20 @@
+===COMMAND===============================================================================
+focus modify '[ splitOn "," ] | !(at 0) + !(at 1)' '%{.}'
+===INPUT===============================================================================
+1,2
+===OUTPUT===============================================================================
+[warning]: Expression found in selector
+     ╭──▶ <selector>@1:19-1:36
+     │
+   1 │ [ splitOn "," ] | !(at 0) + !(at 1)
+     •                   ┬────────────────
+     •                   ╰╸ This expression isn't reversable.
+     •
+     │ Note: You can still run the selector, but any results will be passed through it unaltered.
+─────╯
+focus: unsafeIso: Mismatch. Actual: IntNumber 3
+CallStack (from HasCallStack):
+  error, called at src/Focus/Focus.hs:110:18 in focus-0.1.0.0-HpTxeNsOTKt2pkAIeOntZK:Focus.Focus
+  unsafeIso, called at src/Focus/Focus.hs:97:11 in focus-0.1.0.0-HpTxeNsOTKt2pkAIeOntZK:Focus.Focus
+===EXIT CODE===============================================================================
+0
