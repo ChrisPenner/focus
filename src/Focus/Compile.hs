@@ -23,6 +23,7 @@ import Data.Aeson qualified as Aeson
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as Map
+import Data.Monoid (First (First, getFirst))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
@@ -137,7 +138,13 @@ compileExpr cmd expr = case cmd of
 
 oneWay :: Focus ViewT Chunk Chunk -> Focus ModifyT Chunk Chunk
 oneWay = \case
-  ViewFocus f -> ModifyFocus f
+  ViewFocus f -> ModifyFocus $ \g chunk -> do
+    r <-
+      chunk & f \foc -> do
+        fmap (First . Just) $ g foc
+    case getFirst r of
+      Nothing -> pure chunk
+      Just x -> pure x
 
 compileSelectorG :: forall cmd expr. (IsCmd cmd) => (expr D.Position -> Focus cmd Chunk Chunk) -> CommandF cmd -> Selector expr D.Position -> Focus cmd Chunk Chunk
 compileSelectorG goExpr cmdF = \case
@@ -165,7 +172,7 @@ compileSelectorG goExpr cmdF = \case
         ViewFocus $ \f chunk -> do
           hasMatches cmdF inner chunk >>= \case
             True -> f chunk
-            False -> pure chunk
+            False -> pure mempty
       ModifyF -> ModifyFocus $ \f chunk -> do
         hasMatches cmdF inner chunk >>= \case
           True -> f chunk
@@ -177,7 +184,7 @@ compileSelectorG goExpr cmdF = \case
       ViewF -> do
         ViewFocus $ \f chunk -> do
           hasMatches cmdF inner chunk >>= \case
-            True -> pure chunk
+            True -> pure mempty
             False -> f chunk
       ModifyF -> ModifyFocus $ \f chunk -> do
         hasMatches cmdF inner chunk >>= \case
@@ -281,11 +288,11 @@ compileSelectorG goExpr cmdF = \case
     viewRegex :: RE.Regex -> (Traversal' RE.Match Text) -> Focus 'ViewT Chunk Chunk
     viewRegex pat trav = ViewFocus \f chunk -> do
       let txt = textChunk chunk
-      TextChunk <$> forOf (RE.regexing pat) txt \match -> do
+      txt & foldMapMOf (RE.regexing pat) \match -> do
         let groups =
               match ^. RE.namedGroups
                 <&> TextChunk
-        local (over focusBindings (groups <>)) $ forOf trav match (fmap textChunk . f . TextChunk)
+        local (over focusBindings (groups <>)) $ foldMapMOf trav (f . TextChunk) match
 
     modifyRegex :: RE.Regex -> (Traversal' RE.Match Text) -> Focus 'ModifyT Chunk Chunk
     modifyRegex pat trav = ModifyFocus \f chunk -> do
