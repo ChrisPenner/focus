@@ -166,14 +166,14 @@ expectBinding pos name = do
     Just v -> pure v
     Nothing -> throwError $ UndeclaredBinding pos name
 
-typecheckModify :: UT.TaggedAction -> UT.Selector Expr D.Position -> Either TypeErrorReport [WarningReport]
+typecheckModify :: UT.TaggedSelector -> UT.Selector D.Position -> Either TypeErrorReport [WarningReport]
 typecheckModify selector expr = do
   typecheckThing $ do
     (inp, _out, _arity) <- unifyModify (selector, expr)
     expectTextInput inp (tag selector)
     pure ()
 
-typecheckView :: UT.TaggedAction -> Either TypeErrorReport [WarningReport]
+typecheckView :: UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
 typecheckView action = typecheckThing $ do
   (inp, _out, _arity) <- unifyAction action
   expectTextInput inp (tag action)
@@ -186,7 +186,7 @@ expectTextInput inp pos =
       MismatchFailure a _ -> NonTextInput (tag a) (UTerm a)
       x -> x
 
-unifyModify :: (UT.TaggedAction, UT.Selector Expr D.Position) -> UnifyME (TypecheckFailure s) s (Typ s, Typ s, ReturnArity)
+unifyModify :: (UT.TaggedSelector, UT.Selector D.Position) -> UnifyME (TypecheckFailure s) s (Typ s, Typ s, ReturnArity)
 unifyModify (selector, expr) = do
   (selectorIn, selectorOut, _selArity) <- unifySelector selector
   (exprIn, exprOut, actionArity) <- unifyAction expr
@@ -197,7 +197,7 @@ unifyModify (selector, expr) = do
   --   _ -> throwError $ ExpectedSingularArity (tag expr) actionArity
   pure (selectorIn, exprOut, actionArity)
 
-typecheckSelector :: UT.TaggedAction -> Either TypeErrorReport [WarningReport]
+typecheckSelector :: UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
 typecheckSelector sel = typecheckThing do
   (inp, _out, _arity) <- unifySelector sel
   expectTextInput inp (tag sel)
@@ -208,7 +208,7 @@ typecheckThing m = do
   (_, warnings) <- Unify.runSTBinding $ runExceptT $ flip evalStateT mempty $ mapStateT (withExceptT unificationErrorReport) . runWriterT $ void $ m
   pure $ warningReport <$> warnings
 
-unifySelector :: UT.TaggedAction -> UnifyM s (Typ s, Typ s, ReturnArity)
+unifySelector :: UT.TaggedSelector -> UnifyM s (Typ s, Typ s, ReturnArity)
 unifySelector = unifySelectorG (exprWarning >=> unifyExpr)
   where
     exprWarning :: UT.TaggedExpr -> UnifyM s UT.TaggedExpr
@@ -216,10 +216,10 @@ unifySelector = unifySelectorG (exprWarning >=> unifyExpr)
       tell $ [ExprInSelector (tag expr)]
       pure expr
 
-unifyAction :: UT.TaggedAction -> UnifyM s (Typ s, Typ s, ReturnArity)
+unifyAction :: UT.TaggedSelector -> UnifyM s (Typ s, Typ s, ReturnArity)
 unifyAction = unifySelectorG unifyExpr
 
-unifySelectorG :: forall s expr. (expr D.Position -> UnifyM s (Typ s, Typ s, ReturnArity)) -> UT.Selector expr D.Position -> UnifyM s (Typ s, Typ s, ReturnArity)
+unifySelectorG :: forall s. (Expr D.Position -> UnifyM s (Typ s, Typ s, ReturnArity)) -> UT.Selector D.Position -> UnifyM s (Typ s, Typ s, ReturnArity)
 unifySelectorG goExpr = \case
   UT.Compose _pos (s NE.:| rest) -> do
     s' <- unifySelectorG goExpr s
@@ -286,7 +286,7 @@ unifySelectorG goExpr = \case
   where
     compose ::
       (Typ s, Typ s, ReturnArity) ->
-      UT.Selector expr Diagnose.Position ->
+      UT.Selector Diagnose.Position ->
       UnifyM s (Typ s, Typ s, ReturnArity)
     compose (li, lm, lArity) rTagged = do
       (rm, ro, rArity) <- unifySelectorG goExpr rTagged

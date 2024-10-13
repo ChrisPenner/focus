@@ -21,13 +21,10 @@ module Focus.Untyped
     _RegexMatchChunk,
     Expr (..),
     TaggedExpr,
-    TaggedAction,
     NumberT (..),
     VoidF,
     absurdF,
     renderChunk,
-    ExprF (..),
-    IsExpr (..),
     MathBinOp (..),
   )
 where
@@ -37,7 +34,6 @@ import Control.Lens.Regex.Text qualified as Re
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy.Char8 qualified as BSC
-import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import Data.Text (Text)
@@ -54,7 +50,7 @@ data VoidF a
 absurdF :: VoidF a -> b
 absurdF = \case {}
 
-type TaggedSelector = Selector VoidF Pos
+type TaggedSelector = Selector Pos
 
 data BindingName
   = BindingName Text
@@ -82,32 +78,32 @@ data ShellMode
   | NullStdin
   deriving stock (Show)
 
-data Selector (expr :: Type -> Type) a
-  = Compose a (NonEmpty (Selector expr a))
+data Selector a
+  = Compose a (NonEmpty (Selector a))
   | SplitFields a Text {- delimeter -}
   | SplitLines a
   | SplitWords a
   | Regex a Regex BindingDeclarations
   | RegexMatches a
   | RegexGroups a Regex BindingDeclarations
-  | ListOf a (Selector expr a)
-  | Filter a (Selector expr a)
-  | Not a (Selector expr a)
+  | ListOf a (Selector a)
+  | Filter a (Selector a)
+  | Not a (Selector a)
   | Splat a
   | Shell a BindingString ShellMode
   | At a Int
-  | Take a Int (Selector expr a)
-  | TakeEnd a Int (Selector expr a)
-  | Drop a Int (Selector expr a)
-  | DropEnd a Int (Selector expr a)
+  | Take a Int (Selector a)
+  | TakeEnd a Int (Selector a)
+  | Drop a Int (Selector a)
+  | DropEnd a Int (Selector a)
   | Contains a Text
-  | Action a (expr a)
+  | Action a (Expr a)
   | ParseJSON a
   | BindingAssignment a Text
   | Cast a
   deriving stock (Show, Functor, Foldable, Traversable)
 
-instance Tagged (Selector expr a) a where
+instance Tagged (Selector a) a where
   tag = \case
     Compose a _ -> a
     SplitFields a _ -> a
@@ -167,9 +163,7 @@ data ChunkType
 
 type TaggedExpr = Expr Pos
 
-type TaggedAction = Selector Expr Pos
-
-type Action a = Selector Expr a
+type Action a = Selector a
 
 data MathBinOp = Plus | Minus | Multiply | Divide | Modulo | Power
   deriving stock (Show, Eq, Ord)
@@ -180,9 +174,9 @@ data Expr a
   | Number a (NumberT)
   | StrConcat a (Action a)
   | Intersperse a (NonEmpty (Action a))
-  | Comma a (Selector Expr a) (Selector Expr a)
-  | Count a (Selector Expr a)
-  | MathBinOp a MathBinOp (Selector Expr a) (Selector Expr a)
+  | Comma a (Selector a) (Selector a)
+  | Count a (Selector a)
+  | MathBinOp a MathBinOp (Selector a) (Selector a)
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Expr a) a where
@@ -202,16 +196,3 @@ data NumberT
   deriving stock (Show, Eq)
 
 makePrisms ''Chunk
-
-data ExprF (expr :: Type -> Type) where
-  ExprF :: ExprF Expr
-  VoidF :: ExprF VoidF
-
-class IsExpr (expr :: Type -> Type) where
-  getExpr :: ExprF expr
-
-instance IsExpr Expr where
-  getExpr = ExprF
-
-instance IsExpr VoidF where
-  getExpr = VoidF

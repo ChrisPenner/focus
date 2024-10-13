@@ -1,7 +1,7 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE TupleSections #-}
 
-module Focus.Parser (parseSelector, parseAction) where
+module Focus.Parser (parseSelector) where
 
 import Control.Monad
 import Data.Bifunctor (Bifunctor (..))
@@ -49,11 +49,8 @@ withPos p = do
   let pos = Diagnose.Position (M.unPos startLine, M.unPos startCol) (M.unPos (M.sourceLine end), M.unPos (M.sourceColumn end)) sourceName
   pure $ f pos
 
-parseSelector :: Text -> Text -> Either (Diagnostic Text) (Selector Expr Pos)
-parseSelector srcName src = parseThing actionP "Invalid selector" srcName src
-
-parseAction :: Text -> Text -> Either (Diagnostic Text) TaggedAction
-parseAction srcName src = parseThing actionP "Invalid expression" srcName src
+parseSelector :: Text -> Text -> Either (Diagnostic Text) (Selector Pos)
+parseSelector srcName src = parseThing selectorsP "Invalid selector" srcName src
 
 parseThing :: (Show a) => P a -> Text -> Text -> Text -> Either (Diagnostic Text) a
 parseThing parser err srcName src = do
@@ -70,12 +67,9 @@ parseThing parser err srcName src = do
   Debug.debugM srcName $ "Parsed: " <> show result
   pure result
 
-actionP :: P (Selector Expr Pos)
-actionP = selectorsP basicExprP
-
-selectorsP :: (IsExpr expr) => P (expr Pos) -> P (Selector expr Pos)
-selectorsP expr = withPos do
-  M.sepBy1 (selectorP expr) separatorP
+selectorsP :: P (Selector Pos)
+selectorsP = withPos do
+  M.sepBy1 selectorP separatorP
     <&> \r pos -> Compose pos . NE.fromList $ r
 
 lexeme :: P a -> P a
@@ -94,7 +88,7 @@ strP =
   where
     escaped = M.char '\\' >> M.anySingle
 
-regexP :: P (Selector expr Pos)
+regexP :: P (Selector Pos)
 regexP = do
   regexLiteralP <&> \(pos, re, bindings) -> Regex pos re bindings
 
@@ -115,16 +109,16 @@ regexLiteralP =
   where
     escaped = M.string "\\/" $> '/'
 
-reGroupsP :: P (D.Position -> (Selector expr Pos))
+reGroupsP :: P (D.Position -> (Selector Pos))
 reGroupsP = do
   regexLiteralP <&> \(_pos, re, bindings) -> \pos -> RegexGroups pos re bindings
 
-listOfP :: (IsExpr expr) => P (expr Pos) -> P (Selector expr Pos)
-listOfP expr = withPos do
+listOfP :: P (Selector Pos)
+listOfP = withPos do
   M.between (lexeme $ M.char '[') (lexeme $ M.char ']') $ do
-    flip ListOf <$> selectorsP expr
+    flip ListOf <$> selectorsP
 
-shellP :: P (Selector expr Pos)
+shellP :: P (Selector Pos)
 shellP = withPos do
   shellMode <-
     optional (M.try $ M.char '-' *> M.lookAhead (M.char '{')) >>= \case
@@ -156,14 +150,14 @@ bindingName :: P Text
 bindingName = do
   Text.pack <$> lexeme (M.some M.alphaNumChar)
 
-groupedP :: (IsExpr expr) => P (expr Pos) -> P (Selector expr Pos)
-groupedP expr = do
-  castP expr <|> shellP <|> listOfP expr <|> regexP <|> bracketedP (selectorsP expr) <|> bracketedP (simpleSelectorP expr)
+groupedP :: P (Selector Pos)
+groupedP = do
+  castP <|> shellP <|> listOfP <|> regexP <|> bracketedP selectorsP <|> bracketedP simpleSelectorP
 
-castP :: (IsExpr expr) => (P (expr Pos)) -> P (Selector expr Pos)
-castP expr = withPos do
+castP :: P (Selector Pos)
+castP = withPos do
   _ <- (lexeme (M.char '!'))
-  selector <- groupedP expr
+  selector <- groupedP
   pure $ \pos -> Compose pos (selector NE.:| [Cast pos])
 
 bracketedP :: P a -> P a
@@ -172,20 +166,17 @@ bracketedP p = M.between (lexeme (M.char '(')) (lexeme (M.char ')')) p
 mayBracketedP :: P a -> P a
 mayBracketedP p = bracketedP p <|> p
 
-selectorP :: forall expr. (IsExpr expr) => P (expr Pos) -> P (Selector expr Pos)
-selectorP expr = withPos do
+selectorP :: P (Selector Pos)
+selectorP = withPos do
   l <- sp
-  case (getExpr @expr) of
-    VoidF -> pure $ const l
-    ExprF -> do
-      builder <- optional (lexeme ((M.char ',' $> Comma) <|> mathBinOp))
-      case builder of
-        Just b -> do
-          r <- selectorP expr <|> sp
-          pure $ \pos -> Action pos (b pos l r)
-        Nothing -> pure $ const l
+  builder <- optional (lexeme ((M.char ',' $> Comma) <|> mathBinOp))
+  case builder of
+    Just b -> do
+      r <- selectorP <|> sp
+      pure $ \pos -> Action pos (b pos l r)
+    Nothing -> pure $ const l
   where
-    mathBinOp :: P (Pos -> Selector Expr Pos -> Selector Expr Pos -> Expr Pos)
+    mathBinOp :: P (Pos -> Selector Pos -> Selector Pos -> Expr Pos)
     mathBinOp = do
       op <-
         M.choice
@@ -197,13 +188,13 @@ selectorP expr = withPos do
             M.char '%' $> Modulo
           ]
       pure (\pos -> MathBinOp pos op)
-    sp = shellP <|> listOfP expr <|> regexP <|> groupedP expr <|> simpleSelectorP expr <|> evalP expr
+    sp = shellP <|> listOfP <|> regexP <|> groupedP <|> simpleSelectorP <|> evalP
 
-evalP :: P (expr Pos) -> P (Selector expr Pos)
-evalP expr = withPos do flip Action <$> expr
+evalP :: P (Selector Pos)
+evalP = withPos do flip Action <$> basicExprP
 
-simpleSelectorP :: (IsExpr expr) => P (expr Pos) -> P (Selector expr Pos)
-simpleSelectorP expr = withPos do
+simpleSelectorP :: P (Selector Pos)
+simpleSelectorP = withPos do
   caseMatchP
     [ ( "splitOn",
         do
@@ -227,7 +218,7 @@ simpleSelectorP expr = withPos do
       ),
       ( "filter",
         do
-          flip Filter <$> groupedP expr
+          flip Filter <$> groupedP
       ),
       ( "...",
         do
@@ -236,25 +227,25 @@ simpleSelectorP expr = withPos do
       ( "takeEnd",
         do
           n <- lexeme L.decimal
-          selector <- groupedP expr
+          selector <- groupedP
           pure $ \pos -> TakeEnd pos n selector
       ),
       ( "dropEnd",
         do
           n <- lexeme L.decimal
-          selector <- groupedP expr
+          selector <- groupedP
           pure $ \pos -> DropEnd pos n selector
       ),
       ( "take",
         do
           n <- lexeme L.decimal
-          selector <- groupedP expr
+          selector <- groupedP
           pure $ \pos -> Take pos n selector
       ),
       ( "drop",
         do
           n <- lexeme L.decimal
-          selector <- groupedP expr
+          selector <- groupedP
           pure $ \pos -> Drop pos n selector
       ),
       ( "contains",
@@ -264,7 +255,7 @@ simpleSelectorP expr = withPos do
       ),
       ( "not",
         do
-          selector <- selectorP expr
+          selector <- selectorP
           pure $ \pos -> Not pos selector
       ),
       ( "json",
@@ -302,18 +293,18 @@ simpleExprP = withPos $ do
   caseMatchP $
     [ ( "concat",
         do
-          expr <- actionP
+          expr <- selectorsP
           pure $ flip StrConcat expr
       ),
       ( "intersperse",
         do
-          a <- lexeme actionP
-          rest <- some (lexeme actionP)
+          a <- lexeme selectorsP
+          rest <- some (lexeme selectorsP)
           pure $ \pos -> Intersperse pos (a NE.:| rest)
       ),
       ( "count",
         do
-          flip Count <$> selectorP basicExprP
+          flip Count <$> selectorP
       )
     ]
 

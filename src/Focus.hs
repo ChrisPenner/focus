@@ -12,9 +12,9 @@ import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Focus.Cli (InPlace (..), Options (..), OutputLocation (..), ShowWarnings (..), UseColour (..), optionsP)
 import Focus.Command (Command (..), CommandF (..), CommandT (..), IsCmd)
-import Focus.Compile (compileAction, compileSelector)
+import Focus.Compile (compileSelector)
 import Focus.Exec qualified as Exec
-import Focus.Parser (parseAction, parseSelector)
+import Focus.Parser (parseSelector)
 import Focus.Prelude
 import Focus.Typechecker (typecheckModify, typecheckSelector, typecheckView)
 import Focus.Types
@@ -125,7 +125,7 @@ run = do
     getActionFocus :: Text -> CliM (Focus ViewT Chunk Chunk)
     getActionFocus actionTxt = do
       addSource "<action>" actionTxt
-      case parseAction "<action>" actionTxt of
+      case parseSelector "<action>" actionTxt of
         Left errDiagnostic -> do
           failWithDiagnostic errDiagnostic
         Right ast -> do
@@ -133,7 +133,7 @@ run = do
             Left errReport -> failWithReport errReport
             Right warnings -> do
               printWarnings warnings
-              pure $ compileAction ast
+              pure $ compileSelector ViewF ast
 
     getModifyFocus :: Text -> Text -> CliM (Focus ModifyT Chunk Chunk, Focus ViewT Chunk Chunk)
     getModifyFocus selectorTxt actionTxt = do
@@ -143,7 +143,7 @@ run = do
         Left errDiagnostic -> do
           failWithDiagnostic errDiagnostic
         Right selectorAst -> do
-          case parseAction "<action>" actionTxt of
+          case parseSelector "<action>" actionTxt of
             Left errDiagnostic -> do
               failWithDiagnostic errDiagnostic
             Right action -> do
@@ -152,7 +152,7 @@ run = do
                 Right warnings -> do
                   printWarnings warnings
                   let compiledSel = compileSelector ModifyF selectorAst
-                  let compiledAction = compileAction action
+                  let compiledAction = compileSelector ViewF action
                   pure $ (compiledSel, compiledAction)
 
 printWarnings :: [WarningReport] -> CliM ()
