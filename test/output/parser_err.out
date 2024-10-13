@@ -3,7 +3,7 @@ focus view 'splitOn ,' ''
 ===INPUT===============================================================================
 one,two,three
 ===OUTPUT===============================================================================
-[error]: Invalid expression
+[error]: Invalid selector
      ╭──▶ <action>@1:9-1:10
      │
    1 │ splitOn ,
