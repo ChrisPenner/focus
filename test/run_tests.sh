@@ -118,6 +118,9 @@ echo '1,2,3' | run successful_cast view '[ splitOn "," ] | (at 0) + (at 1)'
 ## Binding usages
 echo "The password is swordfish" | run binding_usage modify '/The password is (?<password>\w+)/' '%password'
 
+## Binding usages in template strings
+echo "The password is swordfish" | run binding_usage_in_template view '/The password is (?<password>\w+)/ | "password: %{ %password | {rev}}!"'
+
 ## String Concatenation
 echo "one,two,three" | run string_concat_view view '[splitOn ","] | concat %.'
 

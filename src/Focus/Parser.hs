@@ -124,15 +124,15 @@ shellP = withPos do
     optional (M.try $ M.char '-' *> M.lookAhead (M.char '{')) >>= \case
       Just _ -> pure NullStdin
       Nothing -> pure Normal
-  script <- bindingStringP '{' '}'
+  script <- templateStringP '{' '}'
   pure $ \pos -> Shell pos script shellMode
 
 shellActionP :: P (Selector Pos)
 shellActionP = withPos do
   flip Action <$> shellP
 
-bindingStringP :: Char -> Char -> P (TemplateString D.Position)
-bindingStringP begin end = M.between (lexeme $ M.char begin) (lexeme $ M.char end) $ do
+templateStringP :: Char -> Char -> P (TemplateString D.Position)
+templateStringP begin end = M.between (lexeme $ M.char begin) (lexeme $ M.char end) $ do
   TemplateString <$> many do
     M.choice
       [ Left <$> selExprP,
@@ -140,7 +140,9 @@ bindingStringP begin end = M.between (lexeme $ M.char begin) (lexeme $ M.char en
           <$> some (escaped <|> M.noneOf (['%', '}', end] :: String))
       ]
   where
-    selExprP = M.try (M.char '%' *> M.between (lexeme (M.char '{')) (lexeme (M.char '}')) selectorsP)
+    selExprP =
+      M.try (M.char '%' *> M.between (lexeme (M.char '{')) (lexeme (M.char '}')) selectorsP)
+        <|> (M.try $ withPos ((\b pos -> Action pos $ Binding pos b) <$> bareBindingP))
     -- Escape bindings
     escaped = M.string "\\%" $> '%'
 
@@ -317,5 +319,5 @@ exprLiteralP = withPos do
   M.choice
     [ flip Number <$> numberP,
       flip Binding <$> bareBindingP,
-      flip Str <$> bindingStringP '"' '"'
+      flip Str <$> templateStringP '"' '"'
     ]
