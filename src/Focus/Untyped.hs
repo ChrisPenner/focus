@@ -90,6 +90,7 @@ data ShellMode
 
 data Selector a
   = Compose a (NonEmpty (Selector a))
+  | Modify a (Selector a {- <- selector -}) (Selector a {- <- modifier -})
   | SplitFields a Text {- delimeter -}
   | SplitLines a
   | SplitWords a
@@ -115,6 +116,7 @@ data Selector a
 instance Tagged (Selector a) a where
   tag = \case
     Compose a _ -> a
+    Modify a _ _ -> a
     SplitFields a _ -> a
     SplitLines a -> a
     SplitWords a -> a

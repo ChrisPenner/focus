@@ -215,21 +215,22 @@ typecheckThing warnOnExpr m = do
   pure $ warningReport <$> warnings
 
 unifySelector :: UT.TaggedSelector -> UnifyM s (Typ s, Typ s, ReturnArity)
-unifySelector = unifySelectorG (exprWarning >=> unifyExpr)
-  where
-    exprWarning :: UT.TaggedExpr -> UnifyM s UT.TaggedExpr
-    exprWarning expr = do
-      tell $ [ExprInSelector (tag expr)]
-      pure expr
+unifySelector = unifySelectorG
 
 unifyAction :: UT.TaggedSelector -> UnifyM s (Typ s, Typ s, ReturnArity)
-unifyAction = unifySelectorG unifyExpr
+unifyAction = unifySelectorG
 
-unifySelectorG :: forall s. (Expr D.Position -> UnifyM s (Typ s, Typ s, ReturnArity)) -> UT.Selector D.Position -> UnifyM s (Typ s, Typ s, ReturnArity)
-unifySelectorG goExpr = \case
+unifySelectorG :: forall s. UT.Selector D.Position -> UnifyM s (Typ s, Typ s, ReturnArity)
+unifySelectorG = \case
   UT.Compose _pos (s NE.:| rest) -> do
-    s' <- unifySelectorG goExpr s
+    s' <- unifySelectorG s
     foldlM compose s' rest
+  UT.Modify _pos selector modifier -> do
+    -- TODO: add warning if modifier found in another modifier
+    (selInp, selOut, selArity) <- unifySelectorG selector
+    (modInp, _modOut, _modArity) <- unifySelectorG modifier
+    _ <- liftUnify $ Unify.unify selOut modInp
+    pure (selInp, selInp, selArity)
   UT.SplitFields pos _delim -> pure $ (T.textType pos, T.textType pos, Any)
   UT.SplitLines pos -> do
     pure (T.textType pos, T.textType pos, Any)
@@ -243,7 +244,7 @@ unifySelectorG goExpr = \case
     declareBindings bindings
     pure (T.textType pos, T.textType pos, Any)
   UT.ListOf pos inner -> do
-    (inp, out, _arity) <- unifySelectorG goExpr inner
+    (inp, out, _arity) <- unifySelectorG inner
     pure (inp, T.listType pos out, Exactly 1)
   UT.Filter _pos _inner -> do
     inp <- freshVar
@@ -260,21 +261,21 @@ unifySelectorG goExpr = \case
     inp <- freshVar
     pure (T.listType pos inp, inp, Affine)
   UT.Take _pos _n inner -> do
-    (inp, out, _arity) <- unifySelectorG goExpr inner
+    (inp, out, _arity) <- unifySelectorG inner
     pure (inp, out, Any)
   UT.TakeEnd _pos _n inner -> do
-    (inp, out, _arity) <- unifySelectorG goExpr inner
+    (inp, out, _arity) <- unifySelectorG inner
     pure (inp, out, Any)
   UT.Drop _pos _n inner -> do
-    (inp, out, _arity) <- unifySelectorG goExpr inner
+    (inp, out, _arity) <- unifySelectorG inner
     pure (inp, out, Any)
   UT.DropEnd _pos _n inner -> do
-    (inp, out, _arity) <- unifySelectorG goExpr inner
+    (inp, out, _arity) <- unifySelectorG inner
     pure (inp, out, Any)
   UT.Contains pos _txt -> do
     pure $ (T.textType pos, T.textType pos, Affine)
   UT.Action _pos expr -> do
-    goExpr expr
+    unifyExpr expr
   UT.ParseJSON pos -> do
     pure $ (T.textType pos, T.jsonType pos, Exactly 1)
   UT.BindingAssignment _pos name -> do
@@ -289,7 +290,7 @@ unifySelectorG goExpr = \case
       UT.Selector Diagnose.Position ->
       UnifyM s (Typ s, Typ s, ReturnArity)
     compose (li, lm, lArity) rTagged = do
-      (rm, ro, rArity) <- unifySelectorG goExpr rTagged
+      (rm, ro, rArity) <- unifySelectorG rTagged
       _ <- liftUnify $ Unify.unify lm rm
       pure (li, ro, composeArity lArity rArity)
 
@@ -367,7 +368,7 @@ unifyTemplateString :: Typ s -> Diagnose.Position -> TemplateString D.Position -
 unifyTemplateString inputTyp pos (TemplateString bindings) = do
   arities <- for bindings $ \case
     Left sel -> do
-      (i, o, arity) <- unifySelectorG unifyExpr sel
+      (i, o, arity) <- unifySelectorG sel
       _ <- liftUnify $ Unify.unify i inputTyp
       _ <- liftUnify $ Unify.unify o (T.textType (tag sel))
       pure arity

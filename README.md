@@ -96,7 +96,7 @@ Notice that this time we focus the match of the regex itself, rather than using 
 Since we're focusing on only the first character of each word, `tr` will now only capitalize our headings instead of uppercasing them.
 
 ```focus
-echo "$document" | focus modify '/\b\w/' '{ tr a-z A-Z }'
+echo "$document" | focus modify 'filter /^#/ | /\b\w/' '{ tr a-z A-Z }'
 # Hello World
 Here Is Our Markdown Document.
 

@@ -3,7 +3,6 @@
 
 module Focus.Parser (parseSelector) where
 
-import Control.Monad
 import Data.Bifunctor (Bifunctor (..))
 import Data.Function
 import Data.List.NonEmpty qualified as NE
@@ -67,17 +66,30 @@ parseThing parser err srcName src = do
   Debug.debugM srcName $ "Parsed: " <> show result
   pure result
 
+data Separator = Pipe | PipeModify
+
 selectorsP :: P (Selector Pos)
 selectorsP = withPos do
-  M.sepBy1 selectorP separatorP
-    <&> \r pos -> Compose pos . NE.fromList $ r
+  sel <- selectorP
+  sep <- optional separatorP
+  case sep of
+    Nothing -> pure $ const sel
+    Just PipeModify -> do
+      rest <- selectorsP
+      pure $ \pos -> Modify pos sel rest
+    Just Pipe -> do
+      rest <- selectorsP
+      pure $ \pos -> Compose pos (sel NE.:| [rest])
+  where
+    separatorP :: P Separator
+    separatorP = lexeme do
+      M.choice
+        [ M.string "|=" $> PipeModify,
+          M.string "|" $> Pipe
+        ]
 
 lexeme :: P a -> P a
 lexeme = L.lexeme M.space
-
-separatorP :: P ()
-separatorP = do
-  void $ lexeme (M.string "|")
 
 -- | Parse a string literal, handling escape sequences
 strP :: P Text

@@ -176,6 +176,17 @@ compileExpr =
 compileSelectorG :: forall cmd. (IsCmd cmd) => CommandF cmd -> Selector D.Position -> Focus cmd Chunk Chunk
 compileSelectorG cmdF = \case
   Compose _ xs -> foldr1 (>.>) (compileSelectorG cmdF <$> xs)
+  Modify _pos sel modifier ->
+    case cmdF of
+      ViewF -> do
+        let selF = compileSelectorG ModifyF sel
+        let modF = compileSelectorG ViewF modifier
+        ViewFocus $ \f inp -> do
+          r <-
+            inp & getModifyFocus selF \theFocus -> do
+              viewFirst modF theFocus
+          f r
+      ModifyF -> error "Can't use a |= inside of another assignment. This should have been caught during typechecking, please report this error to the developers."
   SplitFields _ delim -> underText $ liftTrav (\f txt -> (Text.intercalate delim) <$> traverse f (Text.splitOn delim txt))
   SplitLines _ -> underText $ liftTrav (\f txt -> Text.unlines <$> traverse f (Text.lines txt))
   SplitWords _ -> underText $ liftTrav $ (\f txt -> Text.unwords <$> traverse f (Text.words txt))
@@ -303,6 +314,14 @@ compileSelectorG cmdF = \case
                 <&> TextChunk
         Debug.debugM "Match Groups" groups
         local (over focusBindings (Map.union groups)) $ forOf trav match (fmap textChunk . f . TextChunk)
+
+-- | Get the first result of a view, or return the original input if no output is
+-- produced.
+viewFirst :: (Focusable m) => Focus 'ViewT i i -> i -> m i
+viewFirst (ViewFocus f) i = do
+  f (pure . First . Just) i >>= \case
+    First Nothing -> pure i
+    First (Just x) -> pure x
 
 -- | Expressions aren't reversible and are always ViewT, but it's still often useful to have
 -- them inside two-way selectors. It's the typechecker's job to ensure all expressions return
