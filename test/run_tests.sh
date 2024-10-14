@@ -188,3 +188,6 @@ echo '1,2' | run expression_in_selector modify '[ splitOn "," ] | !(at 0) + !(at
 # focus --full view '"```focus\n_\n```" | drop 1 (dropEnd 1 lines) | filter (not (contains "Result")) | . + "\nOutput: " -{ echo %{.} }' README.md
 
 # focus --full view '"```focus\n_\n```" | drop 1 (dropEnd 1 lines) | filter (not (contains "Result")) | . + "\nOutput: " -{ echo %{.} }' README.md
+#
+#
+# focus --full '/```focus\n(?<script>(.|\s)*?)\n```/ |= %script | drop 1 (dropEnd 1 lines) | filter (not (contains "Result")) | -{ echo %{.} }' README.md

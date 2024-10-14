@@ -1,6 +1,6 @@
 # focus - cli utility for hacking and slashing data
 
-**ALPHA**
+**ALPHA** - Very experimental and will change from day to day, don't expect anything to work, it's not stable.
 
 `focus` is a flexible tool which helps you to **select** data from stream of text,
 <!-- toc GFM -->
@@ -174,9 +174,9 @@ before feeding the result back through the selector.
 - [ ] Fix or warn on cases which trigger unsafePartsOf (e.g. changing number of elements in returned list)
 - [ ] Fix parsing ambiguity of division and regex
 - [ ] Fix casting, e.g. `echo 1,2 | focus modify '[ splitOn "," ] | !(at 0) + !(at 1)' '%{.}'`
-- [ ] Maybe remove distinction between selectors and actions, just have selectors, but allow wrapping in a "forward" or "backward" action.
+- [x] ~Maybe remove distinction between selectors and actions, just have selectors, but allow wrapping in a "forward" or "backward" action.~
 - [ ] any/all
-- [ ] Math, boolean ops
+- [x] ~Math, boolean ops~
 - [ ] Add 'index' selector
 - [ ] Generate help and examples from source
 - [ ] ability to zip/cartesian product selectors (for paste-like things)
@@ -184,7 +184,7 @@ before feeding the result back through the selector.
 - [ ] allow failing exit code on view on non-matches
 - [x] ~Switch to input file arguments~
 - [x] ~In-place editing~
-- [ ] Make expression language and selectors more consistent and distinct
+- [x] ~Make expression language and selectors more consistent and distinct~
 - [x] ~Ability to 'NOT'/invert filters~
 - [ ] Add more examples
 - [ ] Add more tests
