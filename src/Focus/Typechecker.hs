@@ -172,10 +172,10 @@ expectBinding pos name = do
     Just v -> pure v
     Nothing -> throwError $ UndeclaredBinding pos name
 
-typecheckModify :: UT.TaggedSelector -> UT.Selector D.Position -> Either TypeErrorReport [WarningReport]
-typecheckModify selector expr = do
+typecheckModify :: UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
+typecheckModify selector = do
   typecheckThing False $ do
-    (inp, _out, _arity) <- unifyModify (selector, expr)
+    (inp, _out, _arity) <- unifySelector selector
     expectTextInput inp (tag selector)
     pure ()
 
@@ -192,16 +192,16 @@ expectTextInput inp pos =
       MismatchFailure a _ -> NonTextInput (tag a) (UTerm a)
       x -> x
 
-unifyModify :: (UT.TaggedSelector, UT.Selector D.Position) -> UnifyME (TypecheckFailure s) s (Typ s, Typ s, ReturnArity)
-unifyModify (selector, expr) = do
-  (selectorIn, selectorOut, _selArity) <- unifySelector selector
-  (exprIn, exprOut, actionArity) <- unifyAction expr
-  _ <- liftUnify $ Unify.unify selectorOut exprIn
-  _ <- liftUnify $ Unify.unify selectorOut exprOut
-  -- case actionArity of
-  --   Exactly 1 -> pure ()
-  --   _ -> throwError $ ExpectedSingularArity (tag expr) actionArity
-  pure (selectorIn, exprOut, actionArity)
+-- unifyModify :: (UT.TaggedSelector, UT.Selector D.Position) -> UnifyME (TypecheckFailure s) s (Typ s, Typ s, ReturnArity)
+-- unifyModify (selector, expr) = do
+--   (selectorIn, selectorOut, _selArity) <- unifySelector selector
+--   (exprIn, exprOut, actionArity) <- unifyAction expr
+--   _ <- liftUnify $ Unify.unify selectorOut exprIn
+--   _ <- liftUnify $ Unify.unify selectorOut exprOut
+--   -- case actionArity of
+--   --   Exactly 1 -> pure ()
+--   --   _ -> throwError $ ExpectedSingularArity (tag expr) actionArity
+--   pure (selectorIn, exprOut, actionArity)
 
 typecheckSelector :: Bool -> UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
 typecheckSelector warnOnExpr sel = typecheckThing warnOnExpr do

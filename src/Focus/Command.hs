@@ -29,7 +29,5 @@ data CommandF (cmd :: CommandT) where
   ModifyF :: CommandF 'ModifyT
 
 data Command
-  = View Script [FilePath]
-  | Modify Script Text [FilePath]
-  | Set Script Text [FilePath]
+  = Modify Script [FilePath]
   deriving stock (Show)

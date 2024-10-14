@@ -11,12 +11,12 @@ import Data.Text.IO qualified as TextIO
 import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Focus.Cli (InPlace (..), Options (..), OutputLocation (..), ShowWarnings (..), UseColour (..), optionsP)
-import Focus.Command (Command (..), CommandF (..), CommandT (..), IsCmd)
+import Focus.Command (Command (..), CommandF (..), CommandT (..))
 import Focus.Compile (compileSelector)
 import Focus.Exec qualified as Exec
 import Focus.Parser (parseSelector)
 import Focus.Prelude
-import Focus.Typechecker (typecheckModify, typecheckSelector, typecheckView)
+import Focus.Typechecker (typecheckModify)
 import Focus.Types
 import Focus.Untyped (renderChunk)
 import Options.Applicative qualified as Opts
@@ -51,15 +51,9 @@ run = do
       )
   flip runReaderT opts do
     case command of
-      View script inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
-        focus <- getActionFocus script
+      Modify script inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
+        focus <- getModifyFocus script
         focusMToCliM $ Exec.runView focus chunkSize inputHandle outputHandle
-      Modify script m inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
-        (focus, action) <- getModifyFocus script m
-        focusMToCliM $ Exec.runModify focus action chunkSize inputHandle outputHandle
-      Set script val inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
-        focus <- getSelectorFocus ModifyF script
-        focusMToCliM $ Exec.runSet focus chunkSize inputHandle outputHandle val
   where
     failWithDiagnostic :: Diagnose.Diagnostic Text -> CliM a
     failWithDiagnostic diagnostic = do
@@ -80,7 +74,6 @@ run = do
     withHandles :: forall m. (MonadUnliftIO m) => Command -> InPlace -> [FilePath] -> OutputLocation -> (IO.Handle -> IO.Handle -> m ()) -> m ()
     withHandles cmd inPlace inputFiles output action = do
       case (cmd, inPlace, inputFiles) of
-        (View {}, InPlace, _) -> failWith "In-place mode not supported for view command."
         (_, InPlace, []) -> failWith "In-place mode specified, but no input files provided."
         _ -> do
           for_ inputFiles \inpFile -> do
@@ -109,51 +102,45 @@ run = do
             withOutputHandle (either (Just . fst) (const Nothing) input) \outputHandle ->
               action (either snd id input) outputHandle
 
-    getSelectorFocus :: (IsCmd cmd) => CommandF cmd -> Text -> CliM (Focus cmd Chunk Chunk)
-    getSelectorFocus cmdF selectorTxt = do
-      addSource "<selector>" selectorTxt
-      case parseSelector "<selector>" selectorTxt of
-        Left errDiagnostic -> do
-          failWithDiagnostic errDiagnostic
-        Right ast -> do
-          case typecheckSelector True ast of
-            Left errReport -> failWithReport errReport
-            Right warnings -> do
-              printWarnings warnings
-              pure $ compileSelector cmdF ast
+    -- getSelectorFocus :: (IsCmd cmd) => CommandF cmd -> Text -> CliM (Focus cmd Chunk Chunk)
+    -- getSelectorFocus cmdF selectorTxt = do
+    --   addSource "<selector>" selectorTxt
+    --   case parseSelector "<selector>" selectorTxt of
+    --     Left errDiagnostic -> do
+    --       failWithDiagnostic errDiagnostic
+    --     Right ast -> do
+    --       case typecheckSelector True ast of
+    --         Left errReport -> failWithReport errReport
+    --         Right warnings -> do
+    --           printWarnings warnings
+    --           pure $ compileSelector cmdF ast
 
-    getActionFocus :: Text -> CliM (Focus ViewT Chunk Chunk)
-    getActionFocus actionTxt = do
-      addSource "<action>" actionTxt
-      case parseSelector "<action>" actionTxt of
-        Left errDiagnostic -> do
-          failWithDiagnostic errDiagnostic
-        Right ast -> do
-          case typecheckView ast of
-            Left errReport -> failWithReport errReport
-            Right warnings -> do
-              printWarnings warnings
-              pure $ compileSelector ViewF ast
+    -- getActionFocus :: Text -> CliM (Focus ViewT Chunk Chunk)
+    -- getActionFocus actionTxt = do
+    --   addSource "<action>" actionTxt
+    --   case parseSelector "<action>" actionTxt of
+    --     Left errDiagnostic -> do
+    --       failWithDiagnostic errDiagnostic
+    --     Right ast -> do
+    --       case typecheckView ast of
+    --         Left errReport -> failWithReport errReport
+    --         Right warnings -> do
+    --           printWarnings warnings
+    --           pure $ compileSelector ViewF ast
 
-    getModifyFocus :: Text -> Text -> CliM (Focus ModifyT Chunk Chunk, Focus ViewT Chunk Chunk)
-    getModifyFocus selectorTxt actionTxt = do
+    getModifyFocus :: Text -> CliM (Focus ViewT Chunk Chunk)
+    getModifyFocus selectorTxt = do
       addSource "<selector>" selectorTxt
-      addSource "<action>" actionTxt
       case parseSelector "<selector>" selectorTxt of
         Left errDiagnostic -> do
           failWithDiagnostic errDiagnostic
         Right selectorAst -> do
-          case parseSelector "<action>" actionTxt of
-            Left errDiagnostic -> do
-              failWithDiagnostic errDiagnostic
-            Right action -> do
-              case typecheckModify selectorAst action of
-                Left errReport -> failWithReport errReport
-                Right warnings -> do
-                  printWarnings warnings
-                  let compiledSel = compileSelector ModifyF selectorAst
-                  let compiledAction = compileSelector ViewF action
-                  pure $ (compiledSel, compiledAction)
+          case typecheckModify selectorAst of
+            Left errReport -> failWithReport errReport
+            Right warnings -> do
+              printWarnings warnings
+              let compiledSel = compileSelector ViewF selectorAst
+              pure compiledSel
 
 printWarnings :: [WarningReport] -> CliM ()
 printWarnings reports = do

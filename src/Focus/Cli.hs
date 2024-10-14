@@ -17,7 +17,6 @@ import Data.Functor
 import Data.Text (Text)
 import Focus.Command (Command (..))
 import Options.Applicative hiding (action, command)
-import Options.Applicative qualified as Opt
 
 data InputLocation
   = StdIn
@@ -89,44 +88,17 @@ optionsP = do
           <> short 's'
           <> help "Suppress warnings"
       )
-  command <-
-    subparser
-      ( Opt.command "view" (info viewP (progDesc "View the focus"))
-          <> Opt.command "modify" (info overP (progDesc "Modify the focused field"))
-          <> Opt.command "set" (info setP (progDesc "Set the focus"))
-      )
+  command <- overP
   pure Options {output, command, useColour, chunkSize, inPlace, showWarnings}
 
 inputFilesP :: Parser [FilePath]
 inputFilesP = many $ strArgument (metavar "FILES..." <> help "Input files. If omitted, read from stdin")
 
-viewP :: Parser Command
-viewP = do
-  script <- scriptP
-  inputFiles <- inputFilesP
-  pure $ View script inputFiles
-
 overP :: Parser Command
 overP = do
   script <- scriptP
-  action <-
-    strArgument
-      ( metavar "ACTION"
-          <> help "Action to apply to the focus"
-      )
   inputFiles <- inputFilesP
-  pure $ Modify script action inputFiles
-
-setP :: Parser Command
-setP = do
-  script <- scriptP
-  val <-
-    strArgument
-      ( metavar "VALUE"
-          <> help "Value to set"
-      )
-  inputFiles <- inputFilesP
-  pure $ Set script val inputFiles
+  pure $ Modify script inputFiles
 
 scriptP :: Parser Text
 scriptP =
