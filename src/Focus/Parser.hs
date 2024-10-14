@@ -146,6 +146,34 @@ templateStringP begin end = M.between (lexeme $ M.char begin) (lexeme $ M.char e
     -- Escape bindings
     escaped = M.string "\\%" $> '%'
 
+patternStringP :: Char -> Char -> P (Selector Pos)
+patternStringP begin end = withPos $ M.between (lexeme $ M.char begin) (lexeme $ M.char end) $ do
+  patPieces <- many . withPos $ do
+    M.choice
+      [ flip PatternBinding <$> bareBindingNameP,
+        -- flip PatternSelector <$> selExprP,
+        flip PatternText . Text.pack
+          <$> some (escaped <|> M.noneOf (['%', end] :: String))
+      ]
+  let (bindingDecls, regexStr) =
+        patPieces & foldMap \case
+          PatternText _pos t -> (mempty, t)
+          PatternBinding pos t -> (M.singleton t (pos, TextType), "(?<" <> t <> ">.+)")
+  case Regex.compileM (Text.encodeUtf8 regexStr) [] of
+    Left err -> M.customFailure $ BadRegex (Text.pack err)
+    Right re -> pure $ \pos -> Regex pos re bindingDecls
+  where
+    -- selExprP =
+    --   M.try (M.char '%' *> M.between (lexeme (M.char '{')) (lexeme (M.char '}')) selectorsP)
+    --     <|> (M.try $ withPos ((\b pos -> Action pos $ Binding pos b) <$> bareBindingP))
+    -- Escape bindings
+    escaped = M.string "\\%" $> '%'
+
+    bareBindingNameP :: P Text
+    bareBindingNameP = do
+      _ <- M.char '%'
+      lexeme bindingName
+
 bareBindingP :: P BindingName
 bareBindingP = do
   _ <- M.char '%'
@@ -270,6 +298,10 @@ simpleSelectorP = withPos do
         do
           binding <- bindingName
           pure $ \pos -> BindingAssignment pos binding
+      ),
+      ( "pattern",
+        do
+          const <$> patternStringP '"' '"'
       )
     ]
 

@@ -9,6 +9,8 @@ module Focus.Untyped
     ShellMode (..),
     BindingName (..),
     TemplateString (..),
+    PatternElem (..),
+    PatternString (..),
     Bindings,
     BindingDeclarations,
     Chunk (..),
@@ -56,6 +58,14 @@ data BindingName
   = BindingName Text
   | InputBinding
   deriving stock (Show, Eq, Ord)
+
+data PatternElem a
+  = PatternText a Text
+  | PatternBinding a Text
+  deriving stock (Show, Functor, Foldable, Traversable)
+
+newtype PatternString a = PatternString [PatternElem a]
+  deriving stock (Show, Functor, Foldable, Traversable)
 
 newtype TemplateString a = TemplateString [Either (Selector a) Text]
   deriving stock (Show)

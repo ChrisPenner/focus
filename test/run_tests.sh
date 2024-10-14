@@ -121,6 +121,9 @@ echo "The password is swordfish" | run binding_usage modify '/The password is (?
 ## Binding usages in template strings
 echo "The password is swordfish" | run binding_usage_in_template view '/The password is (?<password>\w+)/ | "password: %{ %password | {rev}}!"'
 
+## Pattern strings
+echo "The password is swordfish" | run pattern_string view 'pattern "The password is %password" | "password: %password"'
+
 ## String Concatenation
 echo "one,two,three" | run string_concat_view view '[splitOn ","] | concat %.'
 
