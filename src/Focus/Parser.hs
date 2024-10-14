@@ -155,13 +155,16 @@ patternStringP begin end = withPos $ M.between (lexeme $ M.char begin) (lexeme $
         flip PatternText . Text.pack
           <$> some (escaped <|> M.noneOf (['%', end] :: String))
       ]
+  Debug.debugM "PatternString" $ "Pattern pieces: " <> show patPieces
   let (bindingDecls, regexStr) =
         patPieces & foldMap \case
-          PatternText _pos t -> (mempty, t)
+          PatternText _pos t -> (mempty, Regex.escape t)
           PatternBinding pos t -> (M.singleton t (pos, TextType), "(?<" <> t <> ">.+)")
   case Regex.compileM (Text.encodeUtf8 regexStr) [] of
     Left err -> M.customFailure $ BadRegex (Text.pack err)
-    Right re -> pure $ \pos -> Regex pos re bindingDecls
+    Right re -> do
+      Debug.debugM "Regex" $ re
+      pure $ \pos -> Regex pos re bindingDecls
   where
     -- selExprP =
     --   M.try (M.char '%' *> M.between (lexeme (M.char '{')) (lexeme (M.char '}')) selectorsP)
@@ -172,16 +175,16 @@ patternStringP begin end = withPos $ M.between (lexeme $ M.char begin) (lexeme $
     bareBindingNameP :: P Text
     bareBindingNameP = do
       _ <- M.char '%'
-      lexeme bindingName
+      bindingName
 
 bareBindingP :: P BindingName
 bareBindingP = do
   _ <- M.char '%'
-  lexeme ((BindingName <$> bindingName) <|> (M.string "." $> InputBinding))
+  ((BindingName <$> bindingName) <|> (M.string "." $> InputBinding))
 
 bindingName :: P Text
 bindingName = do
-  Text.pack <$> lexeme (M.some M.alphaNumChar)
+  Text.pack <$> (M.some M.alphaNumChar)
 
 groupedP :: P (Selector Pos)
 groupedP = do
@@ -350,6 +353,6 @@ exprLiteralP :: P (Expr Pos)
 exprLiteralP = withPos do
   M.choice
     [ flip Number <$> numberP,
-      flip Binding <$> bareBindingP,
+      flip Binding <$> lexeme bareBindingP,
       flip Str <$> templateStringP '"' '"'
     ]

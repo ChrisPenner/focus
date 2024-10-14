@@ -31,6 +31,7 @@ import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import Error.Diagnose qualified as D
 import Focus.Command (CommandF (..), CommandT (..), IsCmd)
+import Focus.Debug qualified as Debug
 import Focus.Focus
 import Focus.Prelude
 import Focus.Tagged (Tagged (..))
@@ -291,7 +292,7 @@ compileSelectorG cmdF = \case
         let groups =
               match ^. RE.namedGroups
                 <&> TextChunk
-        local (over focusBindings (groups <>)) $ foldMapMOf trav (f . TextChunk) match
+        local (over focusBindings (Map.union groups)) $ foldMapMOf trav (f . TextChunk) match
 
     modifyRegex :: RE.Regex -> (Traversal' RE.Match Text) -> Focus 'ModifyT Chunk Chunk
     modifyRegex pat trav = ModifyFocus \f chunk -> do
@@ -300,7 +301,8 @@ compileSelectorG cmdF = \case
         let groups =
               match ^. RE.namedGroups
                 <&> TextChunk
-        local (over focusBindings (groups <>)) $ forOf trav match (fmap textChunk . f . TextChunk)
+        Debug.debugM "Match Groups" groups
+        local (over focusBindings (Map.union groups)) $ forOf trav match (fmap textChunk . f . TextChunk)
 
 -- | Expressions aren't reversible and are always ViewT, but it's still often useful to have
 -- them inside two-way selectors. It's the typechecker's job to ensure all expressions return
@@ -336,6 +338,7 @@ resolveBinding pos input = \case
     case Map.lookup name bindings of
       Just chunk -> pure chunk
       Nothing -> do
+        Debug.debugM "Bindings before err" bindings
         mayErr $ BindingError pos $ "Binding not in scope: " <> name
         pure $ input
   InputBinding -> pure input

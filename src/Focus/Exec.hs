@@ -3,14 +3,16 @@
 module Focus.Exec (runView, runSet, runModify) where
 
 import Control.Lens
-import Control.Monad.IO.Class (MonadIO (..))
+import Control.Monad.Reader
 import Data.Monoid (First (..))
 import Data.Text (Text)
 import Data.Text.IO qualified as Text
 import Focus.Cli (ChunkSize (..))
 import Focus.Command
 import Focus.Compile (Focus (..), FocusM)
+import Focus.Debug qualified as Debug
 import Focus.Prelude
+import Focus.Types (focusBindings)
 import Focus.Untyped
 import System.IO qualified as IO
 import UnliftIO (BufferMode (LineBuffering), Handle, hSetBuffering)
@@ -50,6 +52,8 @@ runModify :: Focus ModifyT Chunk Chunk -> Focus ViewT Chunk Chunk -> ChunkSize -
 runModify (ModifyFocus trav) (ViewFocus action) chunkSize input output = do
   runGeneric chunkSize input output \chunk -> do
     Just . renderChunk <$> forOf trav (TextChunk chunk) \chunk' -> do
+      bindings <- view focusBindings
+      Debug.debugM "runtime Bindings" bindings
       chunk' & action %%~ (pure . First . Just) >>= \case
         First (Just c) -> pure c
         First Nothing -> pure chunk'

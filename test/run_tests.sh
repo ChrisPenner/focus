@@ -123,6 +123,7 @@ echo "The password is swordfish" | run binding_usage_in_template view '/The pass
 
 ## Pattern strings
 echo "The password is swordfish" | run pattern_string view 'pattern "The password is %password" | "password: %password"'
+echo '[http://google.ca](My Link)' | run pattern_modify modify 'pattern "[%descr](%link)"' '"[%link](%descr)"'
 
 ## String Concatenation
 echo "one,two,three" | run string_concat_view view '[splitOn ","] | concat %.'
