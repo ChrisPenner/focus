@@ -159,7 +159,7 @@ patternStringP begin end = withPos $ M.between (lexeme $ M.char begin) (lexeme $
   let (bindingDecls, regexStr) =
         patPieces & foldMap \case
           PatternText _pos t -> (mempty, Regex.escape t)
-          PatternBinding pos t -> (M.singleton t (pos, TextType), "(?<" <> t <> ">.+)")
+          PatternBinding pos t -> (M.singleton t (pos, TextType), "(?<" <> t <> ">.+?|.*)")
   case Regex.compileM (Text.encodeUtf8 regexStr) [] of
     Left err -> M.customFailure $ BadRegex (Text.pack err)
     Right re -> do
