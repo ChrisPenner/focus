@@ -228,8 +228,9 @@ unifySelectorG = \case
   UT.Modify _pos selector modifier -> do
     -- TODO: add warning if modifier found in another modifier
     (selInp, selOut, selArity) <- unifySelectorG selector
-    (modInp, _modOut, _modArity) <- unifySelectorG modifier
+    (modInp, modOut, _modArity) <- unifySelectorG modifier
     _ <- liftUnify $ Unify.unify selOut modInp
+    _ <- liftUnify $ Unify.unify selOut modOut
     pure (selInp, selInp, selArity)
   UT.SplitFields pos _delim -> pure $ (T.textType pos, T.textType pos, Any)
   UT.SplitLines pos -> do

@@ -102,32 +102,6 @@ run = do
             withOutputHandle (either (Just . fst) (const Nothing) input) \outputHandle ->
               action (either snd id input) outputHandle
 
-    -- getSelectorFocus :: (IsCmd cmd) => CommandF cmd -> Text -> CliM (Focus cmd Chunk Chunk)
-    -- getSelectorFocus cmdF selectorTxt = do
-    --   addSource "<selector>" selectorTxt
-    --   case parseSelector "<selector>" selectorTxt of
-    --     Left errDiagnostic -> do
-    --       failWithDiagnostic errDiagnostic
-    --     Right ast -> do
-    --       case typecheckSelector True ast of
-    --         Left errReport -> failWithReport errReport
-    --         Right warnings -> do
-    --           printWarnings warnings
-    --           pure $ compileSelector cmdF ast
-
-    -- getActionFocus :: Text -> CliM (Focus ViewT Chunk Chunk)
-    -- getActionFocus actionTxt = do
-    --   addSource "<action>" actionTxt
-    --   case parseSelector "<action>" actionTxt of
-    --     Left errDiagnostic -> do
-    --       failWithDiagnostic errDiagnostic
-    --     Right ast -> do
-    --       case typecheckView ast of
-    --         Left errReport -> failWithReport errReport
-    --         Right warnings -> do
-    --           printWarnings warnings
-    --           pure $ compileSelector ViewF ast
-
     getModifyFocus :: Text -> CliM (Focus ViewT Chunk Chunk)
     getModifyFocus selectorTxt = do
       addSource "<selector>" selectorTxt

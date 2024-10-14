@@ -1,18 +1,14 @@
 {-# LANGUAGE DataKinds #-}
 
-module Focus.Exec (runView, runSet, runModify) where
+module Focus.Exec (runView) where
 
-import Control.Lens
 import Control.Monad.Reader
-import Data.Monoid (First (..))
 import Data.Text (Text)
 import Data.Text.IO qualified as Text
 import Focus.Cli (ChunkSize (..))
 import Focus.Command
 import Focus.Compile (Focus (..), FocusM)
-import Focus.Debug qualified as Debug
 import Focus.Prelude
-import Focus.Types (focusBindings)
 import Focus.Untyped
 import System.IO qualified as IO
 import UnliftIO (BufferMode (LineBuffering), Handle, hSetBuffering)
@@ -42,18 +38,3 @@ runView :: Focus ViewT Chunk Chunk -> ChunkSize -> Handle -> Handle -> FocusM ()
 runView (ViewFocus f) chunkSize input output = do
   runGeneric chunkSize input output \chunk -> do
     Nothing <$ f (liftIO . Text.hPutStrLn output . renderChunk) (TextChunk chunk)
-
-runSet :: Focus ModifyT Chunk Chunk -> ChunkSize -> Handle -> Handle -> Text -> FocusM ()
-runSet (ModifyFocus trav) chunkSize input output val = do
-  runGeneric chunkSize input output \chunk -> do
-    Just . renderChunk <$> forOf trav (TextChunk chunk) (const (pure $ TextChunk val))
-
-runModify :: Focus ModifyT Chunk Chunk -> Focus ViewT Chunk Chunk -> ChunkSize -> Handle -> Handle -> FocusM ()
-runModify (ModifyFocus trav) (ViewFocus action) chunkSize input output = do
-  runGeneric chunkSize input output \chunk -> do
-    Just . renderChunk <$> forOf trav (TextChunk chunk) \chunk' -> do
-      bindings <- view focusBindings
-      Debug.debugM "runtime Bindings" bindings
-      chunk' & action %%~ (pure . First . Just) >>= \case
-        First (Just c) -> pure c
-        First Nothing -> pure chunk'

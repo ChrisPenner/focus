@@ -171,6 +171,7 @@ before feeding the result back through the selector.
 
 ## TODO
 
+- [ ] Fix or warn on cases which trigger unsafePartsOf (e.g. changing number of elements in returned list)
 - [ ] Fix parsing ambiguity of division and regex
 - [ ] Fix casting, e.g. `echo 1,2 | focus modify '[ splitOn "," ] | !(at 0) + !(at 1)' '%{.}'`
 - [ ] Maybe remove distinction between selectors and actions, just have selectors, but allow wrapping in a "forward" or "backward" action.

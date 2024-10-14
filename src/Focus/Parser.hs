@@ -311,7 +311,7 @@ simpleSelectorP = withPos do
       ),
       ( "->",
         do
-          binding <- bindingName
+          binding <- lexeme bindingName
           pure $ \pos -> BindingAssignment pos binding
       ),
       ( "pattern",
