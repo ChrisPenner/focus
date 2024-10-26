@@ -1,5 +1,5 @@
 ===COMMAND===============================================================================
-focus view '/The password is (?<password>\w+)/ | "password: %{ %password | {rev}}!"' ''
+focus '/The password is (?<password>\w+)/ | "password: %{ %password | {rev}}!"' ''
 ===INPUT===============================================================================
 The password is swordfish
 ===OUTPUT===============================================================================
