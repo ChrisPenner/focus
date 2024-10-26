@@ -7,6 +7,7 @@ import Data.Bifunctor (Bifunctor (..))
 import Data.Function
 import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as M
+import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
@@ -143,6 +144,18 @@ shellActionP :: P (Selector Pos)
 shellActionP = withPos do
   flip Action <$> shellP
 
+recordP :: P (Selector Pos)
+recordP = withPos do
+  _ <- (M.char ':' *> M.lookAhead (M.char '{'))
+  fields <- Map.fromList <$> M.between (lexeme $ M.char '{') (lexeme $ M.char '}') (M.sepBy field (lexeme $ M.char '#'))
+  pure $ \pos -> Record pos fields
+  where
+    field = do
+      key <- lexeme bindingName
+      _ <- lexeme $ M.char ':'
+      value <- selectorP
+      pure (key, value)
+
 templateStringP :: Char -> Char -> P (TemplateString D.Position)
 templateStringP begin end = M.between (lexeme $ M.char begin) (lexeme $ M.char end) $ do
   TemplateString <$> many do
@@ -236,7 +249,7 @@ selectorP = withPos do
             M.char '%' $> Modulo
           ]
       pure (\pos -> MathBinOp pos op)
-    sp = shellActionP <|> listOfP <|> regexP <|> groupedP <|> simpleSelectorP <|> evalP
+    sp = recordP <|> shellActionP <|> listOfP <|> regexP <|> groupedP <|> simpleSelectorP <|> evalP
 
 evalP :: P (Selector Pos)
 evalP = withPos do flip Action <$> basicExprP

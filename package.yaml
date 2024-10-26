@@ -59,6 +59,7 @@ dependencies:
 - optparse-applicative
 - megaparsec
 - lens-regex-pcre
+- monad-coroutine
 - nonempty-containers
 - pcre-heavy
 - pcre-light

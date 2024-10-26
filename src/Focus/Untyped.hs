@@ -111,6 +111,7 @@ data Selector a
   | ParseJSON a
   | BindingAssignment a Text
   | Cast a
+  | Record a (Map Text (Selector a))
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Selector a) a where
@@ -137,6 +138,7 @@ instance Tagged (Selector a) a where
     ParseJSON a -> a
     BindingAssignment a _ -> a
     Cast a -> a
+    Record a _ -> a
 
 data Chunk
   = TextChunk Text
@@ -144,6 +146,7 @@ data Chunk
   | NumberChunk NumberT
   | RegexMatchChunk Re.Match
   | JsonChunk Value
+  | RecordChunk (Map Text Chunk)
 
 instance Show Chunk where
   show = \case
@@ -152,6 +155,7 @@ instance Show Chunk where
     NumberChunk n -> show n
     RegexMatchChunk m -> show $ m ^.. Re.matchAndGroups
     JsonChunk v -> BSC.unpack $ Aeson.encode v
+    RecordChunk m -> show m
 
 renderChunk :: Chunk -> Text
 renderChunk = \case
@@ -162,6 +166,9 @@ renderChunk = \case
     DoubleNumber d -> Text.pack $ show d
   RegexMatchChunk _m -> error "Can't render a regex match chunk"
   JsonChunk v -> Text.pack $ BSC.unpack $ Aeson.encode v
+  RecordChunk m ->
+    let inner = m & ifoldMap \k v -> k <> ": " <> renderChunk v <> ", \n"
+     in "{" <> inner <> "}"
 
 data ChunkType
   = TextType

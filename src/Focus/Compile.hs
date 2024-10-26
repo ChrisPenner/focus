@@ -16,11 +16,16 @@ where
 
 import Control.Lens
 import Control.Lens.Regex.Text qualified as RE
+import Control.Monad.Coroutine (Coroutine)
+import Control.Monad.Coroutine qualified as Co
+import Control.Monad.Coroutine.SuspensionFunctors qualified as Co
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe (MaybeT (..))
 import Data.Aeson qualified as Aeson
+import Data.Align qualified as Align
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NE
+import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Monoid (First (First, getFirst))
 import Data.Text (Text)
@@ -29,6 +34,7 @@ import Data.Text.Encoding qualified as Text
 import Data.Text.IO qualified as Text
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
+import Data.These (These (..))
 import Error.Diagnose qualified as D
 import Focus.Command (CommandF (..), CommandT (..), IsCmd)
 import Focus.Debug qualified as Debug
@@ -277,6 +283,7 @@ compileSelectorG cmdF = \case
         bwd chunk = pure $ TextChunk . TL.toStrict . TL.decodeUtf8 $ Aeson.encode (jsonChunk chunk)
     liftSimple fwd bwd
   Cast _pos -> focusId
+  Record _pos fields -> compileRecord cmdF fields
   where
     hasMatches :: (Focusable m) => CommandF cmd -> Focus cmd i o -> i -> m Bool
     hasMatches cmd foc i = do
@@ -361,3 +368,72 @@ resolveBinding pos input = \case
         mayErr $ BindingError pos $ "Binding not in scope: " <> name
         pure $ input
   InputBinding -> pure input
+
+compileRecord :: forall cmd. CommandF cmd -> (Map Text (Selector Pos)) -> Focus cmd Chunk Chunk
+compileRecord cmdF fields = do
+  let fieldFocuses = compileSelectorG ModifyF <$> fields
+  case cmdF of
+    ViewF {} ->
+      let foc :: forall m r. (Focusable m, Monoid r) => (Chunk -> m r) -> Chunk -> m r
+          foc f chunk = do
+            let corts :: Map Text (Coroutine (Co.Request Chunk Chunk) m Chunk)
+                corts =
+                  fieldFocuses <&> \fieldFocus ->
+                    let modF = getModifyFocus fieldFocus
+                        cort :: Coroutine (Co.Request Chunk Chunk) m Chunk
+                        cort =
+                          chunk & modF \focChunk -> do
+                            Co.request focChunk
+                     in cort
+            let loop :: Map Text (Coroutine (Co.Request Chunk Chunk) m Chunk) -> m r
+                loop xs = do
+                  step <- do
+                    for xs \cort -> do
+                      Co.resume cort >>= \case
+                        Left (Co.Request req k) ->
+                          pure $ (req, Just k)
+                        Right r -> pure $ (r, Nothing)
+                  let resultMap = fst <$> step
+                  result <- f . RecordChunk $ resultMap
+                  case sequenceA (snd <$> step) of
+                    Nothing -> pure result
+                    Just ks -> do
+                      let go = \case
+                            This _ -> error "This should never happen"
+                            That _ -> error "This should never happen"
+                            These k r -> k r
+                      (result <>) <$> (loop $ Align.alignWith go ks resultMap)
+            loop corts
+       in ViewFocus foc
+    ModifyF {} ->
+      let foc :: forall m. (Focusable m) => (Chunk -> m Chunk) -> Chunk -> m Chunk
+          foc f chunk = do
+            let corts :: Map Text (Coroutine (Co.Request Chunk Chunk) m Chunk)
+                corts =
+                  fieldFocuses <&> \fieldFocus ->
+                    let modF = getModifyFocus fieldFocus
+                        cort :: Coroutine (Co.Request Chunk Chunk) m Chunk
+                        cort =
+                          chunk & modF \focChunk -> do
+                            Co.request focChunk
+                     in cort
+            let loop :: Map Text (Coroutine (Co.Request Chunk Chunk) m Chunk) -> m Chunk
+                loop xs = do
+                  step <- do
+                    for xs \cort -> do
+                      Co.resume cort >>= \case
+                        Left (Co.Request req k) ->
+                          pure $ (req, Just k)
+                        Right r -> pure $ (r, Nothing)
+                  let resultMap = fst <$> step
+                  result <- f . RecordChunk $ resultMap
+                  case sequenceA (snd <$> step) of
+                    Nothing -> pure result
+                    Just ks -> do
+                      let go = \case
+                            This _ -> error "This should never happen"
+                            That _ -> error "This should never happen"
+                            These k r -> k r
+                      (loop $ Align.alignWith go ks resultMap) $> result
+            loop corts
+       in ModifyFocus foc

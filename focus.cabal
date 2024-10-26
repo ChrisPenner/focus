@@ -82,6 +82,7 @@ library
     , lens-action
     , lens-regex-pcre
     , megaparsec
+    , monad-coroutine
     , mtl
     , nonempty-containers
     , optparse-applicative
@@ -145,6 +146,7 @@ executable focus
     , lens-action
     , lens-regex-pcre
     , megaparsec
+    , monad-coroutine
     , mtl
     , nonempty-containers
     , optparse-applicative
