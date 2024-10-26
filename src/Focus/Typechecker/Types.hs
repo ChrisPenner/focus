@@ -14,11 +14,14 @@ module Focus.Typechecker.Types
     numberType,
     regexMatchType,
     jsonType,
+    recordType,
     castableType,
   )
 where
 
+import Control.Lens (ifoldMap)
 import Control.Unification (UTerm (..))
+import Data.Map (Map)
 import Data.Set.NonEmpty qualified as NESet
 import Data.Text (Text)
 import Error.Diagnose qualified as D
@@ -42,9 +45,22 @@ regexMatchType pos = UTerm $ RegexMatchTypeT (NESet.singleton pos)
 jsonType :: D.Position -> Typ v
 jsonType pos = UTerm $ JsonTypeT (NESet.singleton pos)
 
+recordType :: D.Position -> Map Text (Typ v) -> Typ v
+recordType pos fields = UTerm $ RecordTypeT (NESet.singleton pos) fields
+
 castableType :: D.Position -> Typ v -> Typ v
 castableType pos t = UTerm $ CastableTypeT (NESet.singleton pos) t
 
+-- | Render a 'ChunkType' as a 'Text' value.
+--
+-- >>> renderType TextType
+-- "Text"
+-- >>> renderType (ListType TextType)
+-- "[Text]"
+--
+-- >>> import qualified Data.Map as Map
+-- >>> renderType (RecordType $ Map.fromList [("foo", TextType), ("bar", ListType NumberType)])
+-- "{bar: [Number],\nfoo: Text,\n}"
 renderType :: ChunkType -> Text
 renderType = \case
   TextType -> "Text"
@@ -52,3 +68,4 @@ renderType = \case
   NumberType -> "Number"
   RegexMatchType -> "Regex-Match"
   JsonType -> "Json"
+  RecordType fields -> "{" <> ifoldMap (\k v -> k <> ": " <> renderType v <> ",\n") fields <> "}"

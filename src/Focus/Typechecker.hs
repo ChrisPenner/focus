@@ -92,6 +92,7 @@ unificationErrorReport = \case
       T.NumberTypeT _ -> renderType T.NumberType
       T.RegexMatchTypeT _ -> renderType T.RegexMatchType
       T.JsonTypeT _ -> renderType T.JsonType
+      T.RecordTypeT _ fields -> "{" <> Text.intercalate ", \n" (M.toList fields <&> \(k, v) -> k <> ": " <> renderTyp v) <> "}"
 
 warningReport :: Warning -> D.Report Text
 warningReport = \case
@@ -150,6 +151,7 @@ declareBindings bd = do
       T.NumberType -> T.numberType pos
       T.RegexMatchType -> T.regexMatchType pos
       T.JsonType -> T.jsonType pos
+      T.RecordType fields -> T.recordType pos (chunkTypeToChunkTypeT pos <$> fields)
 
 initBinding :: Text -> UnifyM s (Typ s)
 initBinding name = do

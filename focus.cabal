@@ -90,8 +90,10 @@ library
     , prettyprinter-ansi-terminal
     , recursion-schemes
     , scientific
+    , semialign
     , some
     , text
+    , these
     , transformers
     , unification-fd
     , unliftio
@@ -151,8 +153,10 @@ executable focus
     , prettyprinter-ansi-terminal
     , recursion-schemes
     , scientific
+    , semialign
     , some
     , text
+    , these
     , transformers
     , unification-fd
     , unliftio

@@ -40,10 +40,13 @@ import Control.Unification (UTerm, Unifiable)
 import Control.Unification.STVar qualified as Unify
 import Control.Unification.Types (Unifiable (..))
 import Data.Aeson qualified as Aeson
+import Data.Align (Semialign (..))
+import Data.Map (Map)
 import Data.Scientific qualified as S
 import Data.Set.NonEmpty (NESet)
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.These (These (..))
 import Error.Diagnose qualified as D
 import Focus.Command (CommandF (..), CommandT (..), IsCmd (..))
 import Focus.Prelude
@@ -105,10 +108,17 @@ data ChunkTypeT a r
   | RegexMatchTypeT a
   | JsonTypeT a
   | CastableTypeT a r
+  | RecordTypeT a (Map Text r)
   deriving stock (Show, Eq, Functor, Foldable, Traversable)
 
 instance (Semigroup a) => Unifiable (ChunkTypeT a) where
   zipMatch = \cases
+    (RecordTypeT posL l) (RecordTypeT posR r) -> Just (RecordTypeT (posL <> posR) (alignWith go l r))
+      where
+        go = \case
+          This x -> Left x
+          That y -> Left y
+          These x y -> Right (x, y)
     -- TODO: this isn't quite right
     (CastableTypeT posL x) (CastableTypeT posR y) -> Just (CastableTypeT (posL <> posR) (Right (x, y)))
     (CastableTypeT posL _) (NumberTypeT posR) -> Just (NumberTypeT (posL <> posR))
@@ -127,6 +137,7 @@ instance (Semigroup a) => Unifiable (ChunkTypeT a) where
     RegexMatchTypeT {} _ -> Nothing
     Arrow {} _ -> Nothing
     JsonTypeT {} _ -> Nothing
+    RecordTypeT {} _ -> Nothing
 
 instance Tagged (ChunkTypeT a r) a where
   tag = \case
@@ -137,6 +148,7 @@ instance Tagged (ChunkTypeT a r) a where
     RegexMatchTypeT pos -> pos
     JsonTypeT pos -> pos
     CastableTypeT pos _ -> pos
+    RecordTypeT pos _ -> pos
 
 type TypeErrorReport = D.Report Text
 

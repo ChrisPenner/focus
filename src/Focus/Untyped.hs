@@ -169,6 +169,7 @@ data ChunkType
   | NumberType
   | RegexMatchType
   | JsonType
+  | RecordType (Map Text ChunkType)
   deriving (Show, Eq)
 
 type TaggedExpr = Expr Pos
