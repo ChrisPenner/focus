@@ -23,6 +23,10 @@ import Text.Megaparsec.Char qualified as M
 import Text.Megaparsec.Char.Lexer qualified as L
 import Text.Regex.PCRE.Heavy qualified as Regex
 import Text.Regex.PCRE.Light qualified as PCRE.Light
+import Text.Regex.PCRE.Light qualified as Regex
+
+defaultPCREOptions :: [Regex.PCREOption]
+defaultPCREOptions = [Regex.multiline, Regex.dotall]
 
 data CustomError
   = BadRegex Text
@@ -110,7 +114,7 @@ regexLiteralP =
   withPos $ M.label "regex" $ do
     pat <- lexeme $ M.between (M.char '/') (M.char '/') $ do
       Text.pack <$> many (escaped <|> M.anySingleBut '/')
-    case Regex.compileM (Text.encodeUtf8 pat) [] of
+    case Regex.compileM (Text.encodeUtf8 pat) defaultPCREOptions of
       Left err -> M.customFailure $ BadRegex (Text.pack err)
       Right re -> pure $ \pos ->
         let bindingDeclarations =
@@ -166,7 +170,7 @@ templateStringP begin end = M.between (lexeme $ M.char begin) (lexeme $ M.char e
       ]
   where
     selExprP =
-      M.try (M.char '%' *> M.between (lexeme (M.char '{')) (lexeme (M.char '}')) selectorsP)
+      M.try (M.char '%' *> M.between (lexeme (M.char '{')) ((M.char '}')) selectorsP)
         <|> (M.try $ withPos ((\b pos -> Action pos $ Binding pos b) <$> bareBindingP))
     -- Escape bindings
     escaped = M.string "\\%" $> '%'
@@ -183,9 +187,9 @@ patternStringP begin end = withPos $ M.between (lexeme $ M.char begin) (lexeme $
   Debug.debugM "PatternString" $ "Pattern pieces: " <> show patPieces
   let (bindingDecls, regexStr) =
         patPieces & foldMap \case
-          PatternText _pos t -> (mempty, Regex.escape t)
-          PatternBinding pos t -> (M.singleton t (pos, TextType), "(?<" <> t <> ">.+?|.*)")
-  case Regex.compileM (Text.encodeUtf8 regexStr) [] of
+          PatternText _pos t -> (mempty {- Regex.escape -}, t)
+          PatternBinding pos t -> (M.singleton t (pos, TextType), "(?<" <> t <> ">.+?)")
+  case Regex.compileM (Text.encodeUtf8 $ Debug.debug "Pattern:" $ regexStr) defaultPCREOptions of
     Left err -> M.customFailure $ BadRegex (Text.pack err)
     Right re -> do
       Debug.debugM "Regex" $ re
@@ -195,12 +199,16 @@ patternStringP begin end = withPos $ M.between (lexeme $ M.char begin) (lexeme $
     --   M.try (M.char '%' *> M.between (lexeme (M.char '{')) (lexeme (M.char '}')) selectorsP)
     --     <|> (M.try $ withPos ((\b pos -> Action pos $ Binding pos b) <$> bareBindingP))
     -- Escape bindings
-    escaped = M.string "\\%" $> '%'
+    escaped =
+      M.string "\\%" $> '%'
 
     bareBindingNameP :: P Text
     bareBindingNameP = do
       _ <- M.char '%'
-      bindingName
+      bracketed <- optional (M.char '{')
+      n <- bindingName
+      when (isJust bracketed) $ void $ M.char '}'
+      pure n
 
 bareBindingP :: P BindingName
 bareBindingP = do
