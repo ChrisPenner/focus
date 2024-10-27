@@ -181,7 +181,10 @@ before feeding the result back through the selector.
 - [x] ~Math, boolean ops~
 - [ ] Add 'index' selector
 - [ ] Generate help and examples from source
-- [ ] ability to zip/cartesian product selectors (for paste-like things)
+- [x] ~ability to zip/cartesian product selectors (for paste-like things)~
+- [ ] Redesign record syntax
+- [ ] Allow uplifting records to vars/environment
+- [ ] Make 'at' work with records, including typechecking
 - [ ] figure out how to typecheck JSON union types
 - [ ] allow failing exit code on view on non-matches
 - [x] ~Switch to input file arguments~
@@ -199,3 +202,4 @@ before feeding the result back through the selector.
 - [ ] shell 'if'
 - [ ] Fix annoying ansi codes coming from diagnose even on no-color mode.
 - [x] ~Fix printing of "STVar" in type errors, e.g. `focus view '/one/ | ...'`~
+- [ ] Option for separating output with null bytes for better fzf integration
