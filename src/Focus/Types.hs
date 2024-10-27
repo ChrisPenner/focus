@@ -97,7 +97,7 @@ type UVar s = Unify.STVar s (ChunkTypeT (NESet D.Position))
 
 type Typ s = UTerm (ChunkTypeT (NESet D.Position)) (UVar s)
 
-data ReturnArity = Affine | Exactly Int | Any
+data ReturnArity = Affine | Exactly Int | Infinite | Any
   deriving stock (Show, Eq, Ord)
 
 data ChunkTypeT a r

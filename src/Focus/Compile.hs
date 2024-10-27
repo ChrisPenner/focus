@@ -391,18 +391,20 @@ compileRecord cmdF fields = do
                     for xs \cort -> do
                       Co.resume cort >>= \case
                         Left (Co.Request req k) ->
-                          pure $ (req, Just k)
-                        Right r -> pure $ (r, Nothing)
-                  let resultMap = fst <$> step
-                  result <- f . RecordChunk $ resultMap
-                  case sequenceA (snd <$> step) of
-                    Nothing -> pure result
-                    Just ks -> do
-                      let go = \case
-                            This _ -> error "This should never happen"
-                            That _ -> error "This should never happen"
-                            These k r -> k r
-                      (result <>) <$> (loop $ Align.alignWith go ks resultMap)
+                          pure $ (Just req, Just k)
+                        Right _ -> pure $ (Nothing, Nothing)
+                  case traverse fst step of
+                    Nothing -> pure mempty
+                    Just resultMap -> do
+                      result <- f . RecordChunk $ resultMap
+                      case sequenceA (snd <$> step) of
+                        Nothing -> pure result
+                        Just ks -> do
+                          let go = \case
+                                This _ -> error "This should never happen"
+                                That _ -> error "This should never happen"
+                                These k r -> k r
+                          (result <>) <$> (loop $ Align.alignWith go ks resultMap)
             loop corts
        in ViewFocus foc
     ModifyF {} ->
@@ -423,17 +425,19 @@ compileRecord cmdF fields = do
                     for xs \cort -> do
                       Co.resume cort >>= \case
                         Left (Co.Request req k) ->
-                          pure $ (req, Just k)
-                        Right r -> pure $ (r, Nothing)
-                  let resultMap = fst <$> step
-                  result <- f . RecordChunk $ resultMap
-                  case sequenceA (snd <$> step) of
-                    Nothing -> pure result
-                    Just ks -> do
-                      let go = \case
-                            This _ -> error "This should never happen"
-                            That _ -> error "This should never happen"
-                            These k r -> k r
-                      (loop $ Align.alignWith go ks resultMap) $> result
+                          pure $ (Just req, Just k)
+                        Right r -> pure $ (Just r, Nothing)
+                  case traverse fst step of
+                    Nothing -> pure chunk
+                    Just resultMap -> do
+                      result <- f . RecordChunk $ resultMap
+                      case sequenceA (snd <$> step) of
+                        Nothing -> pure result
+                        Just ks -> do
+                          let go = \case
+                                This _ -> error "This should never happen"
+                                That _ -> error "This should never happen"
+                                These k r -> k r
+                          (loop $ Align.alignWith go ks resultMap) $> result
             loop corts
        in ModifyFocus foc

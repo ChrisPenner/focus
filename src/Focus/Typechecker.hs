@@ -287,6 +287,18 @@ unifySelectorG = \case
   UT.Cast pos -> do
     inp <- freshVar
     pure $ (inp, T.castableType pos inp, Exactly 1)
+  UT.Record pos fields -> do
+    fields' <- for fields unifySelectorG
+    inp <- freshVar
+    inp' <-
+      foldM
+        ( \i1 i2 -> do
+            liftUnify $ Unify.unify i1 i2
+        )
+        inp
+        (view _1 <$> fields')
+    let arity = foldl zipArities Infinite (view _3 <$> fields')
+    pure $ (inp', T.recordType pos (view _2 <$> fields'), arity)
   where
     compose ::
       (Typ s, Typ s, ReturnArity) ->
@@ -306,8 +318,26 @@ composeArity = \cases
   _ Any -> Any
   Affine Affine -> Affine
   Affine Exactly {} -> Any
+  Affine Infinite -> Any
+  (Exactly 0) Infinite -> Exactly 0
+  Infinite (Exactly 0) -> Exactly 0
+  Infinite (Exactly _) -> Infinite
+  (Exactly _) Infinite -> Infinite
+  Infinite Affine -> Any
   Exactly {} Affine -> Any
+  Infinite Infinite -> Infinite
   (Exactly n) (Exactly m) -> Exactly (n * m)
+
+zipArities :: ReturnArity -> ReturnArity -> ReturnArity
+zipArities = \cases
+  x Infinite -> x
+  Infinite x -> x
+  Any _ -> Any
+  _ Any -> Any
+  Affine Affine -> Affine
+  Affine Exactly {} -> Affine
+  Exactly {} Affine -> Affine
+  (Exactly n) (Exactly m) -> Exactly (min n m)
 
 unifyExpr :: UT.TaggedExpr -> UnifyME (TypecheckFailure s) s (Typ s, Typ s, ReturnArity)
 unifyExpr expr = do
