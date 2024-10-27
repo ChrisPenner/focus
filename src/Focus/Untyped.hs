@@ -38,6 +38,7 @@ import Data.Bitraversable
 import Data.ByteString.Lazy.Char8 qualified as BSC
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
+import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Error.Diagnose qualified as D
@@ -166,9 +167,8 @@ renderChunk = \case
     DoubleNumber d -> Text.pack $ show d
   RegexMatchChunk _m -> error "Can't render a regex match chunk"
   JsonChunk v -> Text.pack $ BSC.unpack $ Aeson.encode v
-  RecordChunk m ->
-    let inner = m & ifoldMap \k v -> k <> ": " <> renderChunk v <> ", \n"
-     in "{" <> inner <> "}"
+  RecordChunk fields ->
+    "{" <> Text.intercalate ", " (Map.toList fields <&> \(k, v) -> k <> ": " <> renderChunk v) <> "}"
 
 data ChunkType
   = TextType

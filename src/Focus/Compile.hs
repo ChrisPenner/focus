@@ -401,8 +401,8 @@ compileRecord cmdF fields = do
                         Nothing -> pure result
                         Just ks -> do
                           let go = \case
-                                This _ -> error "This should never happen"
-                                That _ -> error "This should never happen"
+                                This _ -> error "compileRecord-view: Somehow fields were different between iterations. Please report this"
+                                That _ -> error "compileRecord-view: Somehow fields were different between iterations. Please report this"
                                 These k r -> k r
                           (result <>) <$> (loop $ Align.alignWith go ks resultMap)
             loop corts
@@ -435,8 +435,8 @@ compileRecord cmdF fields = do
                         Nothing -> pure result
                         Just ks -> do
                           let go = \case
-                                This _ -> error "This should never happen"
-                                That _ -> error "This should never happen"
+                                This _ -> error "compileRecord-modify: Somehow fields were different between iterations. Please report this"
+                                That _ -> error "compileRecord-modify: Somehow fields were different between iterations. Please report this"
                                 These k r -> k r
                           (loop $ Align.alignWith go ks resultMap) $> result
             loop corts
