@@ -94,6 +94,7 @@ data Selector a
   | Modify a (Selector a {- <- selector -}) (Selector a {- <- modifier -})
   | SplitFields a Text {- delimeter -}
   | SplitLines a
+  | Chars a
   | SplitWords a
   | Regex a Regex BindingDeclarations
   | RegexMatches a
@@ -121,6 +122,7 @@ instance Tagged (Selector a) a where
     Modify a _ _ -> a
     SplitFields a _ -> a
     SplitLines a -> a
+    Chars a -> a
     SplitWords a -> a
     Regex a _ _ -> a
     RegexMatches a -> a

@@ -195,6 +195,7 @@ compileSelectorG cmdF = \case
       ModifyF -> error "Can't use a |= inside of another assignment. This should have been caught during typechecking, please report this error to the developers."
   SplitFields _ delim -> underText $ liftTrav (\f txt -> (Text.intercalate delim) <$> traverse f (Text.splitOn delim txt))
   SplitLines _ -> underText $ liftTrav (\f txt -> Text.unlines <$> traverse f (Text.lines txt))
+  Chars _pos -> underText $ liftTrav $ \f txt -> Text.concat <$> traverse f (Text.singleton <$> Text.unpack txt)
   SplitWords _ -> underText $ liftTrav $ (\f txt -> Text.unwords <$> traverse f (Text.words txt))
   Regex _ pat _ -> do
     case cmdF of

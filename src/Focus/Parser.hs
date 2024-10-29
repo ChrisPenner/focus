@@ -265,7 +265,11 @@ evalP = withPos do flip Action <$> basicExprP
 simpleSelectorP :: P (Selector Pos)
 simpleSelectorP = withPos do
   caseMatchP
-    [ ( "splitOn",
+    [ ( "chars",
+        do
+          pure Chars
+      ),
+      ( "splitOn",
         do
           delim <- strP
           pure $ flip SplitFields delim

@@ -237,6 +237,8 @@ unifySelectorG = \case
   UT.SplitFields pos _delim -> pure $ (T.textType pos, T.textType pos, Any)
   UT.SplitLines pos -> do
     pure (T.textType pos, T.textType pos, Any)
+  UT.Chars pos -> do
+    pure (T.textType pos, T.textType pos, Any)
   UT.SplitWords pos -> do
     pure (T.textType pos, T.textType pos, Any)
   UT.Regex pos _regex bindings -> do
