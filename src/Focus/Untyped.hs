@@ -30,7 +30,7 @@ module Focus.Untyped
   )
 where
 
-import Control.Lens
+import Control.Lens hiding (Reversed)
 import Control.Lens.Regex.Text qualified as Re
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
@@ -108,6 +108,7 @@ data Selector a
   | TakeEnd a Int (Selector a)
   | Drop a Int (Selector a)
   | DropEnd a Int (Selector a)
+  | Reversed a (Selector a)
   | Contains a Text
   | Action a (Expr a)
   | ParseJSON a
@@ -136,6 +137,7 @@ instance Tagged (Selector a) a where
     TakeEnd a _ _ -> a
     Drop a _ _ -> a
     DropEnd a _ _ -> a
+    Reversed a _ -> a
     Contains a _ -> a
     Action a _ -> a
     ParseJSON a -> a

@@ -277,6 +277,9 @@ unifySelectorG = \case
   UT.DropEnd _pos _n inner -> do
     (inp, out, _arity) <- unifySelectorG inner
     pure (inp, out, Any)
+  UT.Reversed _pos inner -> do
+    (inp, out, arity) <- unifySelectorG inner
+    pure (inp, out, arity)
   UT.Contains pos _txt -> do
     pure $ (T.textType pos, T.textType pos, Affine)
   UT.Action _pos expr -> do

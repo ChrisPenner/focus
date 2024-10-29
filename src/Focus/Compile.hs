@@ -14,7 +14,7 @@ module Focus.Compile
   )
 where
 
-import Control.Lens
+import Control.Lens hiding (Reversed)
 import Control.Lens.Regex.Text qualified as RE
 import Control.Monad.Coroutine (Coroutine)
 import Control.Monad.Coroutine qualified as Co
@@ -253,6 +253,13 @@ compileSelectorG cmdF = \case
     listOfFocus (compileSelectorG cmdF selector) >.> liftTrav (dropping n traversed)
   DropEnd _ n selector -> do
     listOfFocus (compileSelectorG cmdF selector) >.> liftTrav (droppingEnd n)
+  Reversed _ inner -> do
+    let innerFocus = compileSelectorG cmdF inner
+        rev :: Focus cmd [Chunk] [Chunk]
+        rev = liftIso reversed
+        listed :: Focus cmd [Chunk] Chunk
+        listed = liftIso (from asListI)
+     in listOfFocus innerFocus >.> rev >.> listed
   Contains _ needle -> do
     liftTrav $ \f chunk ->
       do

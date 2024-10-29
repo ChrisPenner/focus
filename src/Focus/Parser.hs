@@ -265,11 +265,7 @@ evalP = withPos do flip Action <$> basicExprP
 simpleSelectorP :: P (Selector Pos)
 simpleSelectorP = withPos do
   caseMatchP
-    [ ( "chars",
-        do
-          pure Chars
-      ),
-      ( "splitOn",
+    [ ( "splitOn",
         do
           delim <- strP
           pure $ flip SplitFields delim
@@ -279,6 +275,10 @@ simpleSelectorP = withPos do
       ),
       ( "lines",
         pure SplitLines
+      ),
+      ( "chars",
+        do
+          pure Chars
       ),
       ( "at",
         do
@@ -308,6 +308,11 @@ simpleSelectorP = withPos do
           n <- lexeme L.decimal
           selector <- groupedP
           pure $ \pos -> DropEnd pos n selector
+      ),
+      ( "reversed",
+        do
+          selector <- groupedP
+          pure $ \pos -> Reversed pos selector
       ),
       ( "take",
         do
