@@ -161,7 +161,7 @@ recordP = withPos do
       pure (key, value)
 
 templateStringP :: Char -> Char -> P (TemplateString D.Position)
-templateStringP begin end = M.between (lexeme $ M.char begin) (lexeme $ M.char end) $ do
+templateStringP begin end = M.between (M.char begin) (lexeme $ M.char end) $ do
   TemplateString <$> many do
     M.choice
       [ Left <$> selExprP,
@@ -176,7 +176,7 @@ templateStringP begin end = M.between (lexeme $ M.char begin) (lexeme $ M.char e
     escaped = M.string "\\%" $> '%'
 
 patternStringP :: Char -> Char -> P (Selector Pos)
-patternStringP begin end = withPos $ M.between (lexeme $ M.char begin) (lexeme $ M.char end) $ do
+patternStringP begin end = withPos $ M.between (M.char begin) (lexeme $ M.char end) $ do
   patPieces <- many . withPos $ do
     M.choice
       [ flip PatternBinding <$> bareBindingNameP,
@@ -189,7 +189,12 @@ patternStringP begin end = withPos $ M.between (lexeme $ M.char begin) (lexeme $
         patPieces & foldMap \case
           PatternText _pos t -> (mempty {- Regex.escape -}, t)
           PatternBinding pos t -> (M.singleton t (pos, TextType), "(?<" <> t <> ">.+?)")
-  case Regex.compileM (Text.encodeUtf8 $ Debug.debug "Pattern:" $ regexStr) defaultPCREOptions of
+  -- If the final piece is a binding, expand it to match till the end of the string
+  regexStr' <- case reverse patPieces of
+    PatternBinding {} : _ -> do
+      pure $ regexStr <> "$"
+    _ -> pure regexStr
+  case Regex.compileM (Text.encodeUtf8 $ Debug.debug "Pattern:" $ regexStr') defaultPCREOptions of
     Left err -> M.customFailure $ BadRegex (Text.pack err)
     Right re -> do
       Debug.debugM "Regex" $ re
