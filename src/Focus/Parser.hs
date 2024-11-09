@@ -28,6 +28,9 @@ import Text.Regex.PCRE.Light qualified as Regex
 defaultPCREOptions :: [Regex.PCREOption]
 defaultPCREOptions = [Regex.multiline, Regex.dotall]
 
+compileRegex :: Text -> Either String Regex.Regex
+compileRegex regex = Regex.compileM (Text.encodeUtf8 $ Debug.debug "Regex:" regex) defaultPCREOptions
+
 data CustomError
   = BadRegex Text
   | ActionInSelector
@@ -114,7 +117,7 @@ regexLiteralP =
   withPos $ M.label "regex" $ do
     pat <- lexeme $ M.between (M.char '/') (M.char '/') $ do
       Text.pack <$> many (escaped <|> M.anySingleBut '/')
-    case Regex.compileM (Text.encodeUtf8 pat) defaultPCREOptions of
+    case compileRegex pat of
       Left err -> M.customFailure $ BadRegex (Text.pack err)
       Right re -> pure $ \pos ->
         let bindingDeclarations =
@@ -187,14 +190,14 @@ patternStringP begin end = withPos $ M.between (M.char begin) (lexeme $ M.char e
   Debug.debugM "PatternString" $ "Pattern pieces: " <> show patPieces
   let (bindingDecls, regexStr) =
         patPieces & foldMap \case
-          PatternText _pos t -> (mempty {- Regex.escape -}, t)
+          PatternText _pos t -> (mempty, Regex.escape t)
           PatternBinding pos t -> (M.singleton t (pos, TextType), "(?<" <> t <> ">.+?)")
   -- If the final piece is a binding, expand it to match till the end of the string
   regexStr' <- case reverse patPieces of
     PatternBinding {} : _ -> do
       pure $ regexStr <> "$"
     _ -> pure regexStr
-  case Regex.compileM (Text.encodeUtf8 $ Debug.debug "Pattern:" $ regexStr') defaultPCREOptions of
+  case compileRegex regexStr' of
     Left err -> M.customFailure $ BadRegex (Text.pack err)
     Right re -> do
       Debug.debugM "Regex" $ re

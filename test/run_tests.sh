@@ -172,15 +172,3 @@ echo '1,2' | run expression_in_selector '[ splitOn "," ] | !(at 0) + !(at 1) |= 
 
 ## Records
 echo 'one 1 2 two three' | run record_view ':{ numbers: /\d+/ # words: /[a-z]+/ }'
-
-# Extract test cases from the readme
-
-focus --full 'groups /```focus\n$ (?<command>.+?)\n(?<rest>.*?)```/ | %rest |= -{ %{command} }' README.md
-
-# focus --full '/```focus\n((.|\s)*?)\n```/ | drop 1 (dropEnd 1 lines) | filter (not (contains "Result")) | -{ echo %{.} }' README.md
-# focus --full '"```focus\n_\n```" | drop 1 (dropEnd 1 lines) | filter (not (contains "Result")) | . + "\nOutput: " -{ echo %{.} }' README.md
-
-# focus --full '"```focus\n_\n```" | drop 1 (dropEnd 1 lines) | filter (not (contains "Result")) | . + "\nOutput: " -{ echo %{.} }' README.md
-#
-#
-# focus --full '/```focus\n(?<script>(.|\s)*?)\n```/ |= %script | drop 1 (dropEnd 1 lines) | filter (not (contains "Result")) | -{ echo %{.} }' README.md
