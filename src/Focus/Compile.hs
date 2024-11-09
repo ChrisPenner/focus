@@ -381,26 +381,25 @@ resolveBinding pos input = \case
 
 compileRecord :: forall cmd. CommandF cmd -> (Map Text (Selector Pos)) -> Focus cmd Chunk Chunk
 compileRecord cmdF fields = do
-  let fieldFocuses = compileSelectorG ModifyF <$> fields
   case cmdF of
     ViewF {} ->
-      let foc :: forall m r. (Focusable m, Monoid r) => (Chunk -> m r) -> Chunk -> m r
+      let fieldFocuses = compileSelectorG cmdF <$> fields
+          foc :: forall m r. (Focusable m, Monoid r) => (Chunk -> m r) -> Chunk -> m r
           foc f chunk = do
-            let corts :: Map Text (Coroutine (Co.Request Chunk Chunk) m Chunk)
+            let corts :: Map Text (Coroutine (Co.Yield Chunk) m ())
                 corts =
                   fieldFocuses <&> \fieldFocus ->
-                    let modF = getModifyFocus fieldFocus
-                        cort :: Coroutine (Co.Request Chunk Chunk) m Chunk
+                    let goF = getViewFocus fieldFocus
+                        cort :: Coroutine (Co.Yield Chunk) m ()
                         cort =
-                          chunk & modF \focChunk -> do
-                            Co.request focChunk
+                          chunk & goF Co.yield
                      in cort
-            let loop :: Map Text (Coroutine (Co.Request Chunk Chunk) m Chunk) -> m r
+            let loop :: Map Text (Coroutine (Co.Yield Chunk) m ()) -> m r
                 loop xs = do
                   step <- do
                     for xs \cort -> do
                       Co.resume cort >>= \case
-                        Left (Co.Request req k) ->
+                        Left (Co.Yield req k) ->
                           pure $ (Just req, Just k)
                         Right _ -> pure $ (Nothing, Nothing)
                   case traverse fst step of
@@ -409,16 +408,12 @@ compileRecord cmdF fields = do
                       result <- f . RecordChunk $ resultMap
                       case sequenceA (snd <$> step) of
                         Nothing -> pure result
-                        Just ks -> do
-                          let go = \case
-                                This _ -> error "compileRecord-view: Somehow fields were different between iterations. Please report this"
-                                That _ -> error "compileRecord-view: Somehow fields were different between iterations. Please report this"
-                                These k r -> k r
-                          (result <>) <$> (loop $ Align.alignWith go ks resultMap)
+                        Just ks -> (result <>) <$> (loop ks)
             loop corts
        in ViewFocus foc
     ModifyF {} ->
-      let foc :: forall m. (Focusable m) => (Chunk -> m Chunk) -> Chunk -> m Chunk
+      let fieldFocuses = compileSelectorG cmdF <$> fields
+          foc :: forall m. (Focusable m) => (Chunk -> m Chunk) -> Chunk -> m Chunk
           foc f chunk = do
             let corts :: Map Text (Coroutine (Co.Request Chunk Chunk) m Chunk)
                 corts =

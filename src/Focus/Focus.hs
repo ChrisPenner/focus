@@ -120,7 +120,7 @@ listOfFocus = \case
                     tell [chunk']
                 )
           & execWriterT
-      f (results)
+      f results
   ModifyFocus inner ->
     ModifyFocus $ \f chunk -> do
       let action :: (Focusable m) => Lazy.StateT (ListOfS o) m i
