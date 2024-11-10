@@ -161,6 +161,11 @@ compileExpr =
           (IntNumber i) (DoubleNumber j) -> f (fromIntegral i) j
           (DoubleNumber i) (IntNumber j) -> f i (fromIntegral j)
           (DoubleNumber i) (DoubleNumber j) -> f i j
+    Record _pos fields -> do
+      compileRecord ViewF fields
+    Cycle _pos selector -> do
+      listOfFocus (compileSelectorG ViewF selector) >.> liftTrav \f xs -> do
+        for (cycle xs) f
   where
     compileTemplateString :: (Focusable m, Monoid r) => Chunk -> TemplateString Pos -> (Chunk -> m r) -> m r
     compileTemplateString inp (TemplateString xs) f = compileTemplateStringHelper inp xs f
@@ -293,7 +298,6 @@ compileSelectorG cmdF = \case
         bwd chunk = pure $ TextChunk . TL.toStrict . TL.decodeUtf8 $ Aeson.encode (jsonChunk chunk)
     liftSimple fwd bwd
   Cast _pos -> focusId
-  Record _pos fields -> compileRecord cmdF fields
   where
     hasMatches :: (Focusable m) => CommandF cmd -> Focus cmd i o -> i -> m Bool
     hasMatches cmd foc i = do
@@ -404,7 +408,7 @@ compileRecord cmdF fields = do
                         Right _ -> pure $ (Nothing, Nothing)
                   case traverse fst step of
                     Nothing -> pure mempty
-                    Just resultMap -> do
+                    Just resultMap -> local (over focusBindings (Map.union resultMap)) $ do
                       result <- f . RecordChunk $ resultMap
                       case sequenceA (snd <$> step) of
                         Nothing -> pure result
@@ -434,7 +438,7 @@ compileRecord cmdF fields = do
                         Right r -> pure $ (Just r, Nothing)
                   case traverse fst step of
                     Nothing -> pure chunk
-                    Just resultMap -> do
+                    Just resultMap -> local (over focusBindings (Map.union resultMap)) $ do
                       result <- f . RecordChunk $ resultMap
                       case sequenceA (snd <$> step) of
                         Nothing -> pure result

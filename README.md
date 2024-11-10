@@ -203,3 +203,4 @@ before feeding the result back through the selector.
 - [ ] Fix annoying ansi codes coming from diagnose even on no-color mode.
 - [x] ~Fix printing of "STVar" in type errors, e.g. `focus view '/one/ | ...'`~
 - [ ] Option for separating output with null bytes for better fzf integration
+- [  ] Pass env vars via an `%env` object.

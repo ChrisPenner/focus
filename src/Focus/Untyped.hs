@@ -114,7 +114,6 @@ data Selector a
   | ParseJSON a
   | BindingAssignment a Text
   | Cast a
-  | Record a (Map Text (Selector a))
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Selector a) a where
@@ -143,7 +142,6 @@ instance Tagged (Selector a) a where
     ParseJSON a -> a
     BindingAssignment a _ -> a
     Cast a -> a
-    Record a _ -> a
 
 data Chunk
   = TextChunk Text
@@ -200,6 +198,8 @@ data Expr a
   | Count a (Selector a)
   | Shell a (TemplateString a) ShellMode
   | MathBinOp a MathBinOp (Selector a) (Selector a)
+  | Record a (Map Text (Selector a))
+  | Cycle a (Selector a)
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Expr a) a where
@@ -213,6 +213,8 @@ instance Tagged (Expr a) a where
     Count a _ -> a
     MathBinOp a _ _ _ -> a
     Shell a _ _ -> a
+    Record a _ -> a
+    Cycle a _ -> a
 
 data NumberT
   = IntNumber Int

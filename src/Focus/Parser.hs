@@ -155,7 +155,7 @@ recordP :: P (Selector Pos)
 recordP = withPos do
   _ <- (M.char ':' *> M.lookAhead (M.char '{'))
   fields <- Map.fromList <$> M.between (lexeme $ M.char '{') (lexeme $ M.char '}') (M.sepBy field (lexeme $ M.char '#'))
-  pure $ \pos -> Record pos fields
+  pure $ \pos -> Action pos $ Record pos fields
   where
     field = do
       key <- lexeme bindingName

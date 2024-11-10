@@ -8,7 +8,7 @@ where
 import Control.Lens
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT, withExceptT)
 import Control.Monad.Reader (ReaderT (..), asks)
-import Control.Monad.State (MonadState (..), StateT, evalStateT, mapStateT)
+import Control.Monad.State (MonadState (..), StateT, evalStateT, mapStateT, modify)
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Writer.CPS (WriterT, runWriterT)
 import Control.Monad.Writer (MonadWriter (..))
@@ -136,13 +136,16 @@ instance Unify.Fallible (ChunkTypeT (NESet D.Position)) (UVar s) (TypecheckFailu
 liftUnify :: (ExceptT (TypecheckFailure s) (Unify.STBinding s)) a -> UnifyM s a
 liftUnify = lift . lift . lift
 
+unifyBindings :: UBindings s -> UnifyM s ()
+unifyBindings bindings =
+  modify (bindings <>)
+
 declareBindings :: BindingDeclarations -> UnifyM s ()
 declareBindings bd = do
-  ifor_ bd $ \name (pos, typ) -> do
+  newBindings <- ifor bd $ \name (pos, typ) -> do
     v <- initBinding name
-    r <- liftUnify $ Unify.unify v (chunkTypeToChunkTypeT pos typ)
-    bindings <- get
-    put $ M.insert name r bindings
+    liftUnify $ Unify.unify v (chunkTypeToChunkTypeT pos typ)
+  unifyBindings newBindings
   where
     chunkTypeToChunkTypeT :: D.Position -> ChunkType -> Typ s
     chunkTypeToChunkTypeT pos = \case
@@ -292,18 +295,6 @@ unifySelectorG = \case
   UT.Cast pos -> do
     inp <- freshVar
     pure $ (inp, T.castableType pos inp, Exactly 1)
-  UT.Record pos fields -> do
-    fields' <- for fields unifySelectorG
-    inp <- freshVar
-    inp' <-
-      foldM
-        ( \i1 i2 -> do
-            liftUnify $ Unify.unify i1 i2
-        )
-        inp
-        (view _1 <$> fields')
-    let arity = foldl zipArities Infinite (view _3 <$> fields')
-    pure $ (inp', T.recordType pos (view _2 <$> fields'), arity)
   where
     compose ::
       (Typ s, Typ s, ReturnArity) ->
@@ -393,6 +384,26 @@ unifyExpr expr = do
       o <- liftUnify $ Unify.unify out' (T.numberType pos)
       i <- liftUnify $ Unify.unify inp inp'
       pure $ (i, o, composeArity arity arity')
+    UT.Record pos fields -> do
+      fields' <- for fields unifySelectorG
+      inp <- freshVar
+      inp' <-
+        foldM
+          ( \i1 i2 -> do
+              liftUnify $ Unify.unify i1 i2
+          )
+          inp
+          (view _1 <$> fields')
+      let arity = foldl zipArities Infinite (view _3 <$> fields')
+      unifyBindings (fields' <&> \(_i, o, _arity) -> o)
+      pure $ (inp', T.recordType pos (view _2 <$> fields'), arity)
+    UT.Cycle _pos inner -> do
+      (inp, out, innerArity) <- unifyAction inner
+      let arity = case innerArity of
+            Exactly 0 -> Exactly 0
+            Affine -> Any
+            _ -> Infinite
+      pure $ (inp, out, arity)
   where
     exprWarning :: UnifyM s ()
     exprWarning = do
