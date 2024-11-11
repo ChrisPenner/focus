@@ -200,6 +200,7 @@ compileExpr =
 
 compileSelectorG :: forall cmd. (IsCmd cmd) => CommandF cmd -> Selector D.Position -> Focus cmd Chunk Chunk
 compileSelectorG cmdF = \case
+  Id _ -> focusId
   Compose _ xs -> foldr1 (>.>) (compileSelectorG cmdF <$> xs)
   SplitFields _ delim -> underText $ liftTrav (\f txt -> (Text.intercalate delim) <$> traverse f (Text.splitOn delim txt))
   SplitLines _ -> underText $ liftTrav (\f txt -> Text.unlines <$> traverse f (Text.lines txt))

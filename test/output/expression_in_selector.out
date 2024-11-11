@@ -3,7 +3,7 @@ focus '[ splitOn "," ] | !(at 0) + !(at 1) |= %.' ''
 ===INPUT===============================================================================
 1,2
 ===OUTPUT===============================================================================
-[warning]: Expression found in selector
+[error]: Expression found in selector
      ╭──▶ <selector>@1:19-1:37
      │
    1 │ [ splitOn "," ] | !(at 0) + !(at 1) |= %.
@@ -12,6 +12,5 @@ focus '[ splitOn "," ] | !(at 0) + !(at 1) |= %.' ''
      •
      │ Note: Certain expressions can't be sensibly 'reversed' as required by the use of '|='
 ─────╯
-3
 ===EXIT CODE===============================================================================
 0

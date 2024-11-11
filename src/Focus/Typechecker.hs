@@ -226,6 +226,9 @@ unifyAction = unifySelectorG
 
 unifySelectorG :: forall s. UT.Selector D.Position -> UnifyM s (Typ s, Typ s, ReturnArity)
 unifySelectorG = \case
+  UT.Id _pos -> do
+    inp <- freshVar
+    pure $ (inp, inp, Exactly 1)
   UT.Compose _pos (s NE.:| rest) -> do
     s' <- unifySelectorG s
     foldlM compose s' rest

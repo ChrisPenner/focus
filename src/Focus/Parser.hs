@@ -253,12 +253,6 @@ selectorP = withPos do
       pure $ const l
     ]
   where
-    -- case builder of
-    --   Just b -> do
-    --     r <- selectorP <|> sp
-    --     pure $ \pos -> Action pos (b pos l r)
-    --   Nothing -> pure $ const l
-
     comma :: (Selector Pos) -> P (Pos -> Selector Pos)
     comma l = do
       _ <- lexeme (M.char ',')
@@ -326,6 +320,11 @@ simpleSelectorP = withPos do
       ( "...",
         do
           pure Splat
+      ),
+      ( "->",
+        do
+          binding <- lexeme bindingName
+          pure $ \pos -> Action pos $ BindingAssignment pos (Id pos) binding
       ),
       ( "takeEnd",
         do

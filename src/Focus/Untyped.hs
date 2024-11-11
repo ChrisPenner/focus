@@ -112,6 +112,7 @@ data Selector a
   | Action a (Expr a)
   | ParseJSON a
   | Cast a
+  | Id a
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Selector a) a where
@@ -138,6 +139,7 @@ instance Tagged (Selector a) a where
     Action a _ -> a
     ParseJSON a -> a
     Cast a -> a
+    Id a -> a
 
 data Chunk
   = TextChunk Text
