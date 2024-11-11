@@ -84,7 +84,7 @@ selectorsP = withPos do
     Nothing -> pure $ const sel
     Just PipeModify -> do
       rest <- selectorsP
-      pure $ \pos -> Modify pos sel rest
+      pure $ \pos -> Action pos $ Modify pos sel rest
     Just Pipe -> do
       rest <- selectorsP
       pure $ \pos -> Compose pos (sel NE.:| [rest])
@@ -246,25 +246,44 @@ mayBracketedP p = bracketedP p <|> p
 selectorP :: P (Selector Pos)
 selectorP = withPos do
   l <- sp
-  builder <- optional (lexeme ((M.char ',' $> Comma) <|> mathBinOp))
-  case builder of
-    Just b -> do
-      r <- selectorP <|> sp
-      pure $ \pos -> Action pos (b pos l r)
-    Nothing -> pure $ const l
+  M.choice
+    [ comma l,
+      assignment l,
+      mathBinOp l,
+      pure $ const l
+    ]
   where
-    mathBinOp :: P (Pos -> Selector Pos -> Selector Pos -> Expr Pos)
-    mathBinOp = do
+    -- case builder of
+    --   Just b -> do
+    --     r <- selectorP <|> sp
+    --     pure $ \pos -> Action pos (b pos l r)
+    --   Nothing -> pure $ const l
+
+    comma :: (Selector Pos) -> P (Pos -> Selector Pos)
+    comma l = do
+      _ <- lexeme (M.char ',')
+      r <- selectorP <|> sp
+      pure $ \pos -> Action pos $ Comma pos l r
+    assignment :: Selector Pos -> P (Pos -> Selector Pos)
+    assignment l = do
+      _ <- lexeme (M.string "->")
+      binding <- lexeme bindingName
+      pure $ \pos -> Action pos $ BindingAssignment pos l binding
+    mathBinOp :: Selector Pos -> P (Pos -> Selector Pos)
+    mathBinOp l = do
       op <-
-        M.choice
-          [ M.char '+' $> Plus,
-            M.char '-' $> Minus,
-            M.char '*' $> Multiply,
-            M.char '^' $> Power,
-            -- M.char '/' $> Divide,
-            M.char '%' $> Modulo
-          ]
-      pure (\pos -> MathBinOp pos op)
+        lexeme
+          ( M.choice
+              [ M.char '+' $> Plus,
+                M.char '-' $> Minus,
+                M.char '*' $> Multiply,
+                M.char '^' $> Power,
+                -- M.char '/' $> Divide,
+                M.char '%' $> Modulo
+              ]
+          )
+      r <- selectorP <|> sp
+      pure (\pos -> Action pos $ MathBinOp pos op l r)
     sp = recordP <|> shellActionP <|> listOfP <|> regexP <|> groupedP <|> simpleSelectorP <|> evalP
 
 evalP :: P (Selector Pos)
@@ -300,6 +319,9 @@ simpleSelectorP = withPos do
       ( "filter",
         do
           flip Filter <$> groupedP
+      ),
+      ( "cycle",
+        do (\s p -> Action p $ Cycle p s) <$> groupedP
       ),
       ( "...",
         do
@@ -346,11 +368,6 @@ simpleSelectorP = withPos do
       ),
       ( "json",
         pure ParseJSON
-      ),
-      ( "->",
-        do
-          binding <- lexeme bindingName
-          pure $ \pos -> BindingAssignment pos binding
       ),
       ( "pattern",
         do

@@ -54,6 +54,14 @@ compileSelector cmdF = compileSelectorG cmdF
 compileExpr :: TaggedExpr -> Focus ViewT Chunk Chunk
 compileExpr =
   \case
+    Modify _pos sel modifier -> do
+      let selF = compileSelectorG ModifyF sel
+      let modF = compileSelectorG ViewF modifier
+      ViewFocus $ \f inp -> do
+        r <-
+          inp & getModifyFocus selF \theFocus -> do
+            viewFirst modF theFocus
+        f r
     Binding pos bindingName -> do
       ViewFocus \f inp -> do
         binding <- resolveBinding pos inp bindingName
@@ -166,6 +174,12 @@ compileExpr =
     Cycle _pos selector -> do
       listOfFocus (compileSelectorG ViewF selector) >.> liftTrav \f xs -> do
         for (cycle xs) f
+    BindingAssignment _pos sel name -> do
+      ViewFocus \f inp -> do
+        let inner = getViewFocus $ compileSelectorG ViewF sel
+        inp
+          & inner %%~ \foc -> do
+            local (over focusBindings (Map.insert name foc)) $ f inp
   where
     compileTemplateString :: (Focusable m, Monoid r) => Chunk -> TemplateString Pos -> (Chunk -> m r) -> m r
     compileTemplateString inp (TemplateString xs) f = compileTemplateStringHelper inp xs f
@@ -187,17 +201,6 @@ compileExpr =
 compileSelectorG :: forall cmd. (IsCmd cmd) => CommandF cmd -> Selector D.Position -> Focus cmd Chunk Chunk
 compileSelectorG cmdF = \case
   Compose _ xs -> foldr1 (>.>) (compileSelectorG cmdF <$> xs)
-  Modify _pos sel modifier ->
-    case cmdF of
-      ViewF -> do
-        let selF = compileSelectorG ModifyF sel
-        let modF = compileSelectorG ViewF modifier
-        ViewFocus $ \f inp -> do
-          r <-
-            inp & getModifyFocus selF \theFocus -> do
-              viewFirst modF theFocus
-          f r
-      ModifyF -> error "Can't use a |= inside of another assignment. This should have been caught during typechecking, please report this error to the developers."
   SplitFields _ delim -> underText $ liftTrav (\f txt -> (Text.intercalate delim) <$> traverse f (Text.splitOn delim txt))
   SplitLines _ -> underText $ liftTrav (\f txt -> Text.unlines <$> traverse f (Text.lines txt))
   Chars _pos -> underText $ liftTrav $ \f txt -> Text.concat <$> traverse f (Text.singleton <$> Text.unpack txt)
@@ -280,11 +283,6 @@ compileSelectorG cmdF = \case
   Action _ expr -> case cmdF of
     ViewF -> compileExpr expr
     ModifyF -> viewInModify $ compileExpr expr
-  BindingAssignment _pos name -> do
-    let go :: forall r m. (Focusable m) => (Chunk -> m r) -> Chunk -> m r
-        go f chunk = do
-          local (over focusBindings (Map.insert name chunk)) $ f chunk
-    liftSimpleWithBindings go pure
   ParseJSON pos -> do
     let fwd :: (Focusable m) => Chunk -> m Chunk
         fwd chunk =

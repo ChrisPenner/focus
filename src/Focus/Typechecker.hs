@@ -1,3 +1,5 @@
+{-# LANGUAGE EmptyCase #-}
+
 module Focus.Typechecker
   ( typecheckSelector,
     typecheckModify,
@@ -7,11 +9,10 @@ where
 
 import Control.Lens
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT, withExceptT)
-import Control.Monad.Reader (ReaderT (..), asks)
+import Control.Monad.Reader (MonadReader (..), ReaderT (..), asks)
 import Control.Monad.State (MonadState (..), StateT, evalStateT, mapStateT, modify)
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Writer.CPS (WriterT, runWriterT)
-import Control.Monad.Writer (MonadWriter (..))
 import Control.Unification qualified as Unify
 import Control.Unification.STVar qualified as Unify
 import Control.Unification.Types (UTerm (..))
@@ -34,6 +35,12 @@ import Focus.Untyped qualified as UT
 
 unificationErrorReport :: TypecheckFailure s -> D.Report Text
 unificationErrorReport = \case
+  ExprInSelector pos ->
+    Diagnose.Err
+      Nothing
+      "Expression found in selector"
+      [(pos, D.This "This expression can't be used in the selector on the left-hand side of a '|='")]
+      ["Certain expressions can't be sensibly 'reversed' as required by the use of '|='"]
   OccursFailure _ trm ->
     case trm of
       UTerm trm' ->
@@ -71,7 +78,7 @@ unificationErrorReport = \case
     Diagnose.Err
       Nothing
       "Type error"
-      (expandPositions D.This ("Selector must accept text input, but instead expects: " <> renderTyp typ) pos)
+      (expandPositions D.This ("The first selector must accept text input, but currently expects: " <> renderTyp typ) pos)
       []
   where
     varNames :: [Text]
@@ -95,14 +102,7 @@ unificationErrorReport = \case
       T.RecordTypeT _ fields -> "{" <> Text.intercalate ", " (M.toList fields <&> \(k, v) -> k <> ": " <> renderTyp v) <> "}"
 
 warningReport :: Warning -> D.Report Text
-warningReport = \case
-  ExprInSelector pos ->
-    Diagnose.Warn
-      Nothing
-      "Expression found in selector"
-      [(pos, D.This "This expression isn't reversable.")]
-      [ D.Note "You can still run the selector, but any results will be passed through it unaltered."
-      ]
+warningReport = \case {}
 
 expandPositions :: (Foldable f) => (Text -> Diagnose.Marker Text) -> Text -> f D.Position -> [(D.Position, D.Marker Text)]
 expandPositions marker msg xs = toList xs <&> \pos -> (pos, marker msg)
@@ -110,14 +110,12 @@ expandPositions marker msg xs = toList xs <&> \pos -> (pos, marker msg)
 type UBindings s = M.Map Text (Typ s)
 
 data Warning
-  = ExprInSelector Diagnose.Position
-  deriving stock (Show, Eq, Ord)
 
 type Warnings = [Warning]
 
 type UnifyM s = UnifyME (TypecheckFailure s) s
 
-data UnifyEnv = UnifyEnv {warnExpr :: Bool}
+data UnifyEnv = UnifyEnv {inPathSelector :: Bool}
   deriving stock (Show, Eq, Ord)
 
 type UnifyME e s = (ReaderT UnifyEnv (WriterT Warnings (StateT (UBindings s) (ExceptT e (Unify.STBinding s)))))
@@ -128,6 +126,7 @@ data TypecheckFailure s
   | UndeclaredBinding Diagnose.Position Text
   | ExpectedSingularArity Diagnose.Position ReturnArity
   | NonTextInput (NESet Diagnose.Position) (Typ s)
+  | ExprInSelector Diagnose.Position
 
 instance Unify.Fallible (ChunkTypeT (NESet D.Position)) (UVar s) (TypecheckFailure s) where
   occursFailure = OccursFailure
@@ -230,13 +229,6 @@ unifySelectorG = \case
   UT.Compose _pos (s NE.:| rest) -> do
     s' <- unifySelectorG s
     foldlM compose s' rest
-  UT.Modify _pos selector modifier -> do
-    -- TODO: add warning if modifier found in another modifier
-    (selInp, selOut, selArity) <- unifySelectorG selector
-    (modInp, modOut, _modArity) <- unifySelectorG modifier
-    _ <- liftUnify $ Unify.unify selOut modInp
-    _ <- liftUnify $ Unify.unify selOut modOut
-    pure (selInp, selInp, selArity)
   UT.SplitFields pos _delim -> pure $ (T.textType pos, T.textType pos, Any)
   UT.SplitLines pos -> do
     pure (T.textType pos, T.textType pos, Any)
@@ -289,9 +281,6 @@ unifySelectorG = \case
     unifyExpr expr
   UT.ParseJSON pos -> do
     pure $ (T.textType pos, T.jsonType pos, Exactly 1)
-  UT.BindingAssignment _pos name -> do
-    v <- initBinding name
-    pure $ (v, v, Exactly 1)
   UT.Cast pos -> do
     inp <- freshVar
     pure $ (inp, T.castableType pos inp, Exactly 1)
@@ -339,6 +328,12 @@ unifyExpr :: UT.TaggedExpr -> UnifyME (TypecheckFailure s) s (Typ s, Typ s, Retu
 unifyExpr expr = do
   exprWarning
   case expr of
+    UT.Modify _pos selector modifier -> do
+      (selInp, selOut, selArity) <- local (\e -> e {inPathSelector = True}) $ unifySelectorG selector
+      (modInp, modOut, _modArity) <- unifySelectorG modifier
+      _ <- liftUnify $ Unify.unify selOut modInp
+      _ <- liftUnify $ Unify.unify selOut modOut
+      pure (selInp, selInp, selArity)
     Binding _pos InputBinding -> do
       inputTyp <- freshVar
       pure (inputTyp, inputTyp, Exactly 1)
@@ -404,12 +399,17 @@ unifyExpr expr = do
             Affine -> Any
             _ -> Infinite
       pure $ (inp, out, arity)
+    UT.BindingAssignment _pos inner name -> do
+      v <- initBinding name
+      (i, o, arity) <- unifySelector inner
+      _ <- liftUnify $ Unify.unify v o
+      pure $ (i, i, arity)
   where
     exprWarning :: UnifyM s ()
     exprWarning = do
-      asks warnExpr >>= \case
+      asks inPathSelector >>= \case
         True -> do
-          tell $ [ExprInSelector (tag expr)]
+          throwError $ ExprInSelector (tag expr)
         False -> do
           pure ()
 

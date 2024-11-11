@@ -91,7 +91,6 @@ data ShellMode
 
 data Selector a
   = Compose a (NonEmpty (Selector a))
-  | Modify a (Selector a {- <- selector -}) (Selector a {- <- modifier -})
   | SplitFields a Text {- delimeter -}
   | SplitLines a
   | Chars a
@@ -112,14 +111,12 @@ data Selector a
   | Contains a Text
   | Action a (Expr a)
   | ParseJSON a
-  | BindingAssignment a Text
   | Cast a
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Selector a) a where
   tag = \case
     Compose a _ -> a
-    Modify a _ _ -> a
     SplitFields a _ -> a
     SplitLines a -> a
     Chars a -> a
@@ -140,7 +137,6 @@ instance Tagged (Selector a) a where
     Contains a _ -> a
     Action a _ -> a
     ParseJSON a -> a
-    BindingAssignment a _ -> a
     Cast a -> a
 
 data Chunk
@@ -189,7 +185,8 @@ data MathBinOp = Plus | Minus | Multiply | Divide | Modulo | Power
   deriving stock (Show, Eq, Ord)
 
 data Expr a
-  = Binding a BindingName
+  = Modify a (Selector a {- <- selector -}) (Selector a {- <- modifier -})
+  | Binding a BindingName
   | Str a (TemplateString a)
   | Number a (NumberT)
   | StrConcat a (Action a)
@@ -200,10 +197,12 @@ data Expr a
   | MathBinOp a MathBinOp (Selector a) (Selector a)
   | Record a (Map Text (Selector a))
   | Cycle a (Selector a)
+  | BindingAssignment a (Selector a) Text
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Expr a) a where
   tag = \case
+    Modify a _ _ -> a
     Binding a _ -> a
     Str a _ -> a
     Number a _ -> a
@@ -215,6 +214,7 @@ instance Tagged (Expr a) a where
     Shell a _ _ -> a
     Record a _ -> a
     Cycle a _ -> a
+    BindingAssignment a _ _ -> a
 
 data NumberT
   = IntNumber Int
