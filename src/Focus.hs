@@ -113,7 +113,7 @@ run = do
             Left errReport -> failWithReport errReport
             Right warnings -> do
               printWarnings warnings
-              let compiledSel = compileSelector ViewF selectorAst
+              compiledSel <- liftIO $ compileSelector ViewF selectorAst
               pure compiledSel
 
 printWarnings :: [WarningReport] -> CliM ()

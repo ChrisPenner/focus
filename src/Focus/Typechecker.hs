@@ -407,6 +407,8 @@ unifyExpr expr = do
       (i, o, arity) <- unifySelector inner
       _ <- liftUnify $ Unify.unify v o
       pure $ (i, i, arity)
+    UT.Index pos -> do
+      pure $ (T.textType pos, T.numberType pos, Exactly 1)
   where
     exprWarning :: UnifyM s ()
     exprWarning = do

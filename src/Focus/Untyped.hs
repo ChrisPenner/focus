@@ -200,6 +200,7 @@ data Expr a
   | Record a (Map Text (Selector a))
   | Cycle a (Selector a)
   | BindingAssignment a (Selector a) Text
+  | Index a
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Expr a) a where
@@ -217,6 +218,7 @@ instance Tagged (Expr a) a where
     Record a _ -> a
     Cycle a _ -> a
     BindingAssignment a _ _ -> a
+    Index a -> a
 
 data NumberT
   = IntNumber Int

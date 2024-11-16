@@ -409,6 +409,10 @@ simpleExprP = withPos $ do
           rest <- some (lexeme selectorsP)
           pure $ \pos -> Intersperse pos (a NE.:| rest)
       ),
+      ( "index",
+        do
+          pure Index
+      ),
       ( "count",
         do
           flip Count <$> selectorP

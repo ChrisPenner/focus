@@ -46,43 +46,46 @@ import Focus.Untyped
 import System.Exit (ExitCode (..))
 import UnliftIO qualified
 import UnliftIO.Process qualified as UnliftIO
+import UnliftIO.STM
 import Prelude hiding (reads)
 
-compileSelector :: forall cmd. (IsCmd cmd) => CommandF cmd -> TaggedSelector -> Focus cmd Chunk Chunk
+compileSelector :: forall cmd. (IsCmd cmd) => CommandF cmd -> TaggedSelector -> IO (Focus cmd Chunk Chunk)
 compileSelector cmdF = compileSelectorG cmdF
 
-compileExpr :: TaggedExpr -> Focus ViewT Chunk Chunk
+compileExpr :: TaggedExpr -> IO (Focus ViewT Chunk Chunk)
 compileExpr =
   \case
     Modify _pos sel modifier -> do
-      let selF = compileSelectorG ModifyF sel
-      let modF = compileSelectorG ViewF modifier
-      ViewFocus $ \f inp -> do
+      selF <- compileSelectorG ModifyF sel
+      modF <- compileSelectorG ViewF modifier
+      pure $ ViewFocus $ \f inp -> do
         r <-
           inp & getModifyFocus selF \theFocus -> do
             viewFirst modF theFocus
         f r
     Binding pos bindingName -> do
-      ViewFocus \f inp -> do
+      pure $ ViewFocus \f inp -> do
         binding <- resolveBinding pos inp bindingName
         f binding
-    Str _pos bindingStr ->
+    Str _pos (TemplateString xs) -> do
+      compiledFocs <- xs & traversed . _Left %%~ compileSelectorG ViewF
       let handler :: forall m r. (Focusable m, Monoid r) => (Chunk -> m r) -> Chunk -> m r
           handler f inp = do
-            compileTemplateString inp bindingStr \txt -> do
+            compileTemplateString inp compiledFocs \txt -> do
               f txt
-       in ViewFocus handler
-    Number _pos num -> liftTrav $ \f _ -> f (NumberChunk num)
+      pure $ ViewFocus handler
+    Number _pos num -> pure $ liftTrav $ \f _ -> f (NumberChunk num)
     StrConcat _pos innerExpr -> do
-      let inner = compileSelector ViewF innerExpr
+      inner <- compileSelector ViewF innerExpr
       let go :: ((Chunk -> m c) -> a -> m b) -> (Chunk -> m c) -> a -> m b
           go vf f inp =
             inp & vf \xs -> do
               f . TextChunk $ Text.concat (textChunk <$> listChunk xs)
-      ViewFocus $ \f inp -> go (getViewFocus inner) f inp
+      pure $ ViewFocus $ \f inp -> go (getViewFocus inner) f inp
     Intersperse _pos actions -> do
-      let actionFocuses = (listOfFocus . compileSelector ViewF <$> actions)
-      ViewFocus $ \f inp -> do
+      selectors <- traverse (compileSelector ViewF) actions
+      let actionFocuses = (listOfFocus <$> selectors)
+      pure $ ViewFocus $ \f inp -> do
         chunkResults <- for actionFocuses \af -> do
           inp & getViewFocus af pure
         let go = \case
@@ -93,44 +96,46 @@ compileExpr =
                 (r <>) <$> go (rest ++ [xs])
         go (NE.toList chunkResults)
     Comma _ a b -> do
-      let l = compileSelectorG ViewF a
-      let r = compileSelectorG ViewF b
-      ViewFocus $ \f chunk -> do
+      l <- compileSelectorG ViewF a
+      r <- compileSelectorG ViewF b
+      pure $ ViewFocus $ \f chunk -> do
         liftA2 (<>) (getViewFocus l f chunk) (getViewFocus r f chunk)
     Count _ selector -> do
-      let inner = compileSelectorG ViewF selector
-      listOfFocus inner >.> focusTo (pure . NumberChunk . IntNumber . length)
-    Shell pos shellScript shellMode -> ViewFocus \f inp -> do
-      compileTemplateString inp shellScript \txt -> do
-        let shellTxt = textChunk txt
-        let proc = UnliftIO.shell (Text.unpack shellTxt)
-        let proc' = proc {UnliftIO.std_in = UnliftIO.CreatePipe, UnliftIO.std_out = UnliftIO.CreatePipe, UnliftIO.std_err = UnliftIO.CreatePipe}
-        procResult <- liftIO $ UnliftIO.withCreateProcess proc' \mstdin mstdout mstderr phandle -> do
-          let stdin = fromMaybe (error "missing stdin") mstdin
-          let stdout = fromMaybe (error "missing stdout") mstdout
-          let stderr = fromMaybe (error "missing stderr") mstderr
-          case shellMode of
-            Normal -> liftIO $ Text.hPutStrLn stdin (textChunk inp)
-            NullStdin -> pure ()
-          UnliftIO.hClose stdin
-          UnliftIO.waitForProcess phandle >>= \case
-            ExitFailure code -> do
-              errOut <- liftIO $ Text.hGetContents stderr
-              pure $ Left (code, errOut)
-            ExitSuccess -> do
-              out <- liftIO $ Text.hGetContents stdout
-              let out' = fromMaybe out $ Text.stripSuffix "\n" out
-              pure $ Right out'
-        case procResult of
-          Left (code, errOut) -> do
-            mayErr $ ShellError pos $ "Shell script failed with exit code " <> tShow code <> ": " <> "\n" <> errOut
-            pure mempty
-          Right out -> do
-            f (TextChunk out)
+      inner <- compileSelectorG ViewF selector
+      pure $ listOfFocus inner >.> focusTo (pure . NumberChunk . IntNumber . length)
+    Shell pos (TemplateString xs) shellMode -> do
+      compiledFocs <- xs & traversed . _Left %%~ compileSelectorG ViewF
+      pure $ ViewFocus \f inp -> do
+        compileTemplateString inp compiledFocs \txt -> do
+          let shellTxt = textChunk txt
+          let proc = UnliftIO.shell (Text.unpack shellTxt)
+          let proc' = proc {UnliftIO.std_in = UnliftIO.CreatePipe, UnliftIO.std_out = UnliftIO.CreatePipe, UnliftIO.std_err = UnliftIO.CreatePipe}
+          procResult <- liftIO $ UnliftIO.withCreateProcess proc' \mstdin mstdout mstderr phandle -> do
+            let stdin = fromMaybe (error "missing stdin") mstdin
+            let stdout = fromMaybe (error "missing stdout") mstdout
+            let stderr = fromMaybe (error "missing stderr") mstderr
+            case shellMode of
+              Normal -> liftIO $ Text.hPutStrLn stdin (textChunk inp)
+              NullStdin -> pure ()
+            UnliftIO.hClose stdin
+            UnliftIO.waitForProcess phandle >>= \case
+              ExitFailure code -> do
+                errOut <- liftIO $ Text.hGetContents stderr
+                pure $ Left (code, errOut)
+              ExitSuccess -> do
+                out <- liftIO $ Text.hGetContents stdout
+                let out' = fromMaybe out $ Text.stripSuffix "\n" out
+                pure $ Right out'
+          case procResult of
+            Left (code, errOut) -> do
+              mayErr $ ShellError pos $ "Shell script failed with exit code " <> tShow code <> ": " <> "\n" <> errOut
+              pure mempty
+            Right out -> do
+              f (TextChunk out)
     MathBinOp pos operation ls rs -> do
-      let l = compileSelectorG ViewF ls
-      let r = compileSelectorG ViewF rs
-      ViewFocus $ \f inp -> do
+      l <- compileSelectorG ViewF ls
+      r <- compileSelectorG ViewF rs
+      pure $ ViewFocus $ \f inp -> do
         inp & getViewFocus l \lchunk -> do
           inp & getViewFocus r \rchunk -> do
             case (castNumber lchunk, castNumber rchunk) of
@@ -172,56 +177,71 @@ compileExpr =
     Record _pos fields -> do
       compileRecord ViewF fields
     Cycle _pos selector -> do
-      listOfFocus (compileSelectorG ViewF selector) >.> liftTrav \f xs -> do
-        for (cycle xs) f
+      s <- compileSelectorG ViewF selector
+      pure $
+        listOfFocus s >.> liftTrav \f xs -> do
+          for (cycle xs) f
     BindingAssignment _pos sel name -> do
-      ViewFocus \f inp -> do
-        let inner = getViewFocus $ compileSelectorG ViewF sel
+      s <- compileSelectorG ViewF sel
+      pure $ ViewFocus \f inp -> do
+        let inner = getViewFocus s
         inp
           & inner %%~ \foc -> do
             local (over focusBindings (Map.insert name foc)) $ f inp
+    Index _pos -> do
+      counter <- newTVarIO 0
+      pure $ ViewFocus \f _inp -> do
+        i <- atomically $ do
+          i <- readTVar counter
+          modifyTVar' counter (+ 1)
+          pure i
+        f (NumberChunk $ IntNumber i)
   where
-    compileTemplateString :: (Focusable m, Monoid r) => Chunk -> TemplateString Pos -> (Chunk -> m r) -> m r
-    compileTemplateString inp (TemplateString xs) f = compileTemplateStringHelper inp xs f
-    compileTemplateStringHelper :: (Focusable m, Monoid r) => Chunk -> [Either (Selector Pos) Text] -> (Chunk -> m r) -> m r
-    compileTemplateStringHelper inp xs f = case xs of
-      [] -> f (TextChunk "")
-      (Left sel : rest) -> do
-        case compileSelectorG ViewF sel of
-          ViewFocus vf -> do
-            inp
-              & vf
-                ( \t ->
-                    compileTemplateStringHelper inp rest \restT ->
-                      f (TextChunk $ textChunk t <> textChunk restT)
-                )
-      Right txt : rest -> do
-        compileTemplateStringHelper inp rest (\t -> f . TextChunk $ (txt <> textChunk t))
+    compileTemplateString :: (Focusable m, Monoid r) => Chunk -> [Either (Focus ViewT Chunk Chunk) Text] -> (Chunk -> m r) -> m r
+    compileTemplateString inp compiledFocs f = do
+      compileTemplateStringHelper inp compiledFocs f
+    compileTemplateStringHelper :: (Focusable m, Monoid r) => Chunk -> [Either (Focus ViewT Chunk Chunk) Text] -> (Chunk -> m r) -> m r
+    compileTemplateStringHelper inp xs f =
+      case xs of
+        [] -> f (TextChunk "")
+        (Left foc : rest) -> do
+          case foc of
+            ViewFocus vf -> do
+              inp
+                & vf
+                  ( \t ->
+                      compileTemplateStringHelper inp rest \restT ->
+                        f (TextChunk $ textChunk t <> textChunk restT)
+                  )
+        Right txt : rest -> do
+          compileTemplateStringHelper inp rest (\t -> f . TextChunk $ (txt <> textChunk t))
 
-compileSelectorG :: forall cmd. (IsCmd cmd) => CommandF cmd -> Selector D.Position -> Focus cmd Chunk Chunk
+compileSelectorG :: forall cmd. (IsCmd cmd) => CommandF cmd -> Selector D.Position -> IO (Focus cmd Chunk Chunk)
 compileSelectorG cmdF = \case
-  Id _ -> focusId
-  Compose _ xs -> foldr1 (>.>) (compileSelectorG cmdF <$> xs)
-  SplitFields _ delim -> underText $ liftTrav (\f txt -> (Text.intercalate delim) <$> traverse f (Text.splitOn delim txt))
-  SplitLines _ -> underText $ liftTrav (\f txt -> Text.unlines <$> traverse f (Text.lines txt))
-  Chars _pos -> underText $ liftTrav $ \f txt -> Text.concat <$> traverse f (Text.singleton <$> Text.unpack txt)
-  SplitWords _ -> underText $ liftTrav $ (\f txt -> Text.unwords <$> traverse f (Text.words txt))
+  Id _ -> pure $ focusId
+  Compose _ xs -> do
+    compiled <- traverse (compileSelectorG cmdF) xs
+    pure $ foldr1 (>.>) compiled
+  SplitFields _ delim -> pure $ underText $ liftTrav (\f txt -> (Text.intercalate delim) <$> traverse f (Text.splitOn delim txt))
+  SplitLines _ -> pure $ underText $ liftTrav (\f txt -> Text.unlines <$> traverse f (Text.lines txt))
+  Chars _pos -> pure $ underText $ liftTrav $ \f txt -> Text.concat <$> traverse f (Text.singleton <$> Text.unpack txt)
+  SplitWords _ -> pure $ underText $ liftTrav $ (\f txt -> Text.unwords <$> traverse f (Text.words txt))
   Regex _ pat _ -> do
     case cmdF of
-      ViewF -> do viewRegex pat RE.match
-      ModifyF -> do modifyRegex pat RE.match
+      ViewF -> do pure $ viewRegex pat RE.match
+      ModifyF -> do pure $ modifyRegex pat RE.match
   RegexMatches _ ->
-    liftTrav $ _RegexMatchChunk . RE.match . from textI
+    pure $ liftTrav $ _RegexMatchChunk . RE.match . from textI
   RegexGroups _ pat _ -> do
-    case cmdF of
+    pure $ case cmdF of
       ViewF -> do viewRegex pat (RE.groups . traverse)
       ModifyF -> do modifyRegex pat (RE.groups . traverse)
   ListOf _ selector -> do
-    listOfFocus (compileSelectorG cmdF selector) >.> liftTrav (from asListI)
+    compiled <- compileSelectorG cmdF selector
+    pure $ listOfFocus compiled >.> liftTrav (from asListI)
   Filter _ selector -> do
-    let inner :: Focus cmd Chunk Chunk
-        inner = compileSelectorG cmdF selector
-    case cmdF of
+    inner <- compileSelectorG cmdF selector
+    pure $ case cmdF of
       ViewF -> do
         ViewFocus $ \f chunk -> do
           hasMatches cmdF inner chunk >>= \case
@@ -232,9 +252,8 @@ compileSelectorG cmdF = \case
           True -> f chunk
           False -> pure chunk
   Not _ selector -> do
-    let inner :: Focus cmd Chunk Chunk
-        inner = compileSelectorG cmdF selector
-    case cmdF of
+    inner <- compileSelectorG cmdF selector
+    pure $ case cmdF of
       ViewF -> do
         ViewFocus $ \f chunk -> do
           hasMatches cmdF inner chunk >>= \case
@@ -244,35 +263,39 @@ compileSelectorG cmdF = \case
         hasMatches cmdF inner chunk >>= \case
           True -> pure chunk
           False -> f chunk
-  Splat _ -> do
+  Splat _ -> pure $ do
     liftTrav $ \f chunk -> do
       listChunk chunk
         & traversed %%~ f
         <&> ListChunk
-  At _ n -> do
+  At _ n -> pure $ do
     liftTrav $ \f chunk -> do
       listChunk chunk
         & ix n %%~ f
         <&> ListChunk
-  Take _ n selector ->
-    listOfFocus (compileSelectorG cmdF selector) >.> liftTrav (taking n traversed)
+  Take _ n selector -> do
+    compiled <- compileSelectorG cmdF selector
+    pure $ listOfFocus compiled >.> liftTrav (taking n traversed)
   TakeEnd _ n selector -> do
-    listOfFocus (compileSelectorG cmdF selector) >.> liftTrav (takingEnd n)
+    compiled <- compileSelectorG cmdF selector
+    pure $ listOfFocus compiled >.> liftTrav (takingEnd n)
   Drop _ n selector -> do
-    listOfFocus (compileSelectorG cmdF selector) >.> liftTrav (dropping n traversed)
+    compiled <- compileSelectorG cmdF selector
+    pure $ listOfFocus compiled >.> liftTrav (dropping n traversed)
   DropEnd _ n selector -> do
-    listOfFocus (compileSelectorG cmdF selector) >.> liftTrav (droppingEnd n)
+    compiled <- compileSelectorG cmdF selector
+    pure $ listOfFocus compiled >.> liftTrav (droppingEnd n)
   Reversed _ inner -> do
-    let innerFocus = compileSelectorG cmdF inner
-        revFocus :: Focus cmd [Chunk] Chunk
+    innerFocus <- compileSelectorG cmdF inner
+    let revFocus :: Focus cmd [Chunk] Chunk
         revFocus = case cmdF of
           ViewF -> ViewFocus $ \f chunks -> do
             foldMapM f (reverse chunks)
           ModifyF -> ModifyFocus $ \f chunks -> do
             for (reverse chunks) f
-     in listOfFocus innerFocus >.> revFocus
+    pure $ listOfFocus innerFocus >.> revFocus
   Contains _ needle -> do
-    liftTrav $ \f chunk ->
+    pure $ liftTrav $ \f chunk ->
       do
         Text.splitOn needle (textChunk chunk)
         & fmap Left
@@ -283,7 +306,7 @@ compileSelectorG cmdF = \case
         & fmap (TextChunk . Text.concat . fmap textChunk)
   Action _ expr -> case cmdF of
     ViewF -> compileExpr expr
-    ModifyF -> viewInModify $ compileExpr expr
+    ModifyF -> viewInModify <$> compileExpr expr
   ParseJSON pos -> do
     let fwd :: (Focusable m) => Chunk -> m Chunk
         fwd chunk =
@@ -295,8 +318,8 @@ compileSelectorG cmdF = \case
                 Right val -> pure (JsonChunk val)
         bwd :: (Focusable m) => Chunk -> m Chunk
         bwd chunk = pure $ TextChunk . TL.toStrict . TL.decodeUtf8 $ Aeson.encode (jsonChunk chunk)
-    liftSimple fwd bwd
-  Cast _pos -> focusId
+    pure $ liftSimple fwd bwd
+  Cast _pos -> pure $ focusId
   where
     hasMatches :: (Focusable m) => CommandF cmd -> Focus cmd i o -> i -> m Bool
     hasMatches cmd foc i = do
@@ -382,12 +405,12 @@ resolveBinding pos input = \case
         pure $ input
   InputBinding -> pure input
 
-compileRecord :: forall cmd. CommandF cmd -> (Map Text (Selector Pos)) -> Focus cmd Chunk Chunk
+compileRecord :: forall cmd. CommandF cmd -> (Map Text (Selector Pos)) -> IO (Focus cmd Chunk Chunk)
 compileRecord cmdF fields = do
   case cmdF of
-    ViewF {} ->
-      let fieldFocuses = compileSelectorG cmdF <$> fields
-          foc :: forall m r. (Focusable m, Monoid r) => (Chunk -> m r) -> Chunk -> m r
+    ViewF {} -> do
+      fieldFocuses <- traverse (compileSelectorG cmdF) fields
+      let foc :: forall m r. (Focusable m, Monoid r) => (Chunk -> m r) -> Chunk -> m r
           foc f chunk = do
             let corts :: Map Text (Coroutine (Co.Yield Chunk) m ())
                 corts =
@@ -413,10 +436,10 @@ compileRecord cmdF fields = do
                         Nothing -> pure result
                         Just ks -> (result <>) <$> (loop ks)
             loop corts
-       in ViewFocus foc
-    ModifyF {} ->
-      let fieldFocuses = compileSelectorG cmdF <$> fields
-          foc :: forall m. (Focusable m) => (Chunk -> m Chunk) -> Chunk -> m Chunk
+      pure $ ViewFocus foc
+    ModifyF {} -> do
+      fieldFocuses <- traverse (compileSelectorG cmdF) fields
+      let foc :: forall m. (Focusable m) => (Chunk -> m Chunk) -> Chunk -> m Chunk
           foc f chunk = do
             let corts :: Map Text (Coroutine (Co.Request Chunk Chunk) m Chunk)
                 corts =
@@ -448,4 +471,4 @@ compileRecord cmdF fields = do
                                 These k r -> k r
                           (loop $ Align.alignWith go ks resultMap) $> result
             loop corts
-       in ModifyFocus foc
+      pure $ ModifyFocus foc
