@@ -409,6 +409,9 @@ unifyExpr expr = do
       pure $ (i, i, arity)
     UT.Index pos -> do
       pure $ (T.textType pos, T.numberType pos, Exactly 1)
+    UT.Uniq _pos inner -> do
+      (inp, out, _arity) <- unifySelector inner
+      pure $ (inp, out, Any)
   where
     exprWarning :: UnifyM s ()
     exprWarning = do

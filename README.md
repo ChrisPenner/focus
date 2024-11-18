@@ -204,3 +204,4 @@ before feeding the result back through the selector.
 - [x] ~Fix printing of "STVar" in type errors, e.g. `focus view '/one/ | ...'`~
 - [ ] Option for separating output with null bytes for better fzf integration
 - [ ] Pass env vars via an `%env` object.
+- [ ] Flip columns around: `focus '[words] | concat [at 1, " ", at 0]'`

@@ -80,7 +80,7 @@ library
     , generic-lens
     , lens
     , lens-action
-    , lens-regex-pcre
+    , lens-regex-pcre >=1.1.1.0
     , megaparsec
     , monad-coroutine
     , mtl
@@ -144,7 +144,7 @@ executable focus
     , generic-lens
     , lens
     , lens-action
-    , lens-regex-pcre
+    , lens-regex-pcre >=1.1.1.0
     , megaparsec
     , monad-coroutine
     , mtl

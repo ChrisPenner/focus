@@ -58,7 +58,7 @@ dependencies:
 - vector
 - optparse-applicative
 - megaparsec
-- lens-regex-pcre
+- lens-regex-pcre >= 1.1.1.0
 - monad-coroutine
 - nonempty-containers
 - pcre-heavy

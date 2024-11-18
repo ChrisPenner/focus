@@ -416,6 +416,10 @@ simpleExprP = withPos $ do
       ( "count",
         do
           flip Count <$> selectorP
+      ),
+      ( "uniq",
+        do
+          flip Uniq <$> selectorP
       )
     ]
 

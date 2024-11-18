@@ -148,6 +148,7 @@ data Chunk
   | RegexMatchChunk Re.Match
   | JsonChunk Value
   | RecordChunk (Map Text Chunk)
+  deriving (Eq, Ord)
 
 instance Show Chunk where
   show = \case
@@ -201,6 +202,7 @@ data Expr a
   | Cycle a (Selector a)
   | BindingAssignment a (Selector a) Text
   | Index a
+  | Uniq a (Selector a)
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Expr a) a where
@@ -219,10 +221,11 @@ instance Tagged (Expr a) a where
     Cycle a _ -> a
     BindingAssignment a _ _ -> a
     Index a -> a
+    Uniq a _ -> a
 
 data NumberT
   = IntNumber Int
   | DoubleNumber Double
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Ord)
 
 makePrisms ''Chunk

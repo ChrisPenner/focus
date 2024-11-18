@@ -25,6 +25,13 @@ packages:
       size: 1122
   original:
     hackage: unification-fd-0.11.2.2@sha256:2eb9eae455b8db582d2706b23ed7eb2bbd1b48b064ec4c1988c2b7e95fcfb638,3919
+- completed:
+    hackage: lens-regex-pcre-1.1.1.0@sha256:0d23a77311a5ad0d29fa12847ebbefeeeaa75b845a211d431eacb055da9df6a8,2209
+    pantry-tree:
+      sha256: 408ac374f16b049f9ccf12ed8c9fc621283360589aa470fa25b2ec6f501c1baf
+      size: 630
+  original:
+    hackage: lens-regex-pcre-1.1.1.0
 snapshots:
 - completed:
     sha256: 8e7996960d864443a66eb4105338bbdd6830377b9f6f99cd5527ef73c10c01e7

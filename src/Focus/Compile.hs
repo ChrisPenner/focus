@@ -20,6 +20,7 @@ import Control.Monad.Coroutine (Coroutine)
 import Control.Monad.Coroutine qualified as Co
 import Control.Monad.Coroutine.SuspensionFunctors qualified as Co
 import Control.Monad.Reader
+import Control.Monad.State
 import Control.Monad.Trans.Maybe (MaybeT (..))
 import Data.Aeson qualified as Aeson
 import Data.Align qualified as Align
@@ -28,6 +29,8 @@ import Data.List.NonEmpty qualified as NE
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Monoid (First (First, getFirst))
+import Data.Set (Set)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
@@ -196,6 +199,23 @@ compileExpr =
           modifyTVar' counter (+ 1)
           pure i
         f (NumberChunk $ IntNumber i)
+    Uniq _pos inner -> do
+      innerT <- compileSelectorG ViewF inner
+      let go :: forall r m. (Focusable m, Monoid r) => (Chunk -> m r) -> Chunk -> m r
+          go f chunk =
+            let foc :: (Chunk -> StateT (Set Chunk) m r) -> Chunk -> StateT (Set Chunk) m r
+                foc = getViewFocus innerT
+             in flip evalStateT mempty $ do
+                  chunk
+                    & foc
+                      %%~ ( \focChunk -> do
+                              seen <- get
+                              modify (Set.insert focChunk)
+                              if Set.member focChunk seen
+                                then pure mempty
+                                else lift $ f focChunk
+                          )
+      pure $ ViewFocus go
   where
     compileTemplateString :: (Focusable m, Monoid r) => Chunk -> [Either (Focus ViewT Chunk Chunk) Text] -> (Chunk -> m r) -> m r
     compileTemplateString inp compiledFocs f = do
