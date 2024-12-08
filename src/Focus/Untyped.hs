@@ -27,6 +27,7 @@ module Focus.Untyped
     absurdF,
     renderChunk,
     MathBinOp (..),
+    renderNumber,
   )
 where
 
@@ -268,5 +269,10 @@ data NumberT
   = IntNumber Int
   | DoubleNumber Double
   deriving stock (Show, Eq, Ord)
+
+renderNumber :: NumberT -> Text
+renderNumber = \case
+  IntNumber i -> Text.pack $ show i
+  DoubleNumber d -> Text.pack $ show d
 
 makePrisms ''Chunk

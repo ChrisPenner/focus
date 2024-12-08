@@ -50,6 +50,7 @@ getModifyFocus (ModifyFocus f) = f
 textChunk :: (HasCallStack) => Chunk -> Text
 textChunk = \case
   TextChunk txt -> txt
+  NumberChunk n -> renderNumber n
   actual -> error $ "Expected TextChunk, got " <> show actual
 
 jsonChunk :: Chunk -> Value

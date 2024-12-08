@@ -50,7 +50,7 @@ import Data.These (These (..))
 import Error.Diagnose qualified as D
 import Focus.Command (CommandF (..), CommandT (..), IsCmd (..))
 import Focus.Prelude
-import Focus.Tagged (Tagged (..))
+import Focus.Tagged (Tagged (..), tag_)
 import Focus.Untyped
 import Text.Read (readMaybe)
 import Prelude hiding (reads)
@@ -121,16 +121,15 @@ instance (Semigroup a) => Unifiable (ChunkTypeT a) where
           These x y -> Right (x, y)
     -- TODO: this isn't quite right
     (CastableTypeT posL x) (CastableTypeT posR _y) -> Just (CastableTypeT (posL <> posR) (Left x))
-    (CastableTypeT posL _) (NumberTypeT posR) -> Just (NumberTypeT (posL <> posR))
-    (TextTypeT posL) (CastableTypeT posR _) -> Just (TextTypeT (posL <> posR))
-    (CastableTypeT posL _) (TextTypeT posR) -> Just (TextTypeT (posL <> posR))
-    (NumberTypeT posL) (CastableTypeT posR _) -> Just (NumberTypeT (posL <> posR))
+    (CastableTypeT posL _) other -> Just (Left <$> other & tag_ <>~ posL)
+    other (CastableTypeT posR _) -> Just (Left <$> other & tag_ <>~ posR)
     (NumberTypeT posL) (NumberTypeT posR) -> Just $ NumberTypeT (posL <> posR)
+    (NumberTypeT posL) (TextTypeT posR) -> Just $ NumberTypeT (posL <> posR)
+    (TextTypeT posL) (NumberTypeT posR) -> Just $ TextTypeT (posL <> posR)
     (Arrow posL x y) (Arrow posR x' y') -> Just (Arrow (posL <> posR) (Right (x, x')) (Right (y, y')))
     (TextTypeT posL) (TextTypeT posR) -> Just (TextTypeT (posL <> posR))
     (ListTypeT posL x) (ListTypeT posR y) -> Just (ListTypeT (posL <> posR) $ Right (x, y))
     (RegexMatchTypeT posL) (RegexMatchTypeT posR) -> Just $ RegexMatchTypeT (posL <> posR)
-    CastableTypeT {} _ -> Nothing
     TextTypeT {} _ -> Nothing
     ListTypeT {} _ -> Nothing
     NumberTypeT {} _ -> Nothing

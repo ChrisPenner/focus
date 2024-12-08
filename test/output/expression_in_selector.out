@@ -1,13 +1,13 @@
 ===COMMAND===============================================================================
-focus '[ splitOn "," ] | !(at 0) + !(at 1) |= %.' ''
+focus '[ splitOn "," ] | (at 0) + (at 1) |= %.' ''
 ===INPUT===============================================================================
 1,2
 ===OUTPUT===============================================================================
 [error]: Expression found in selector
-     ╭──▶ <selector>@1:19-1:37
+     ╭──▶ <selector>@1:19-1:35
      │
-   1 │ [ splitOn "," ] | !(at 0) + !(at 1) |= %.
-     •                   ┬───────────────── 
+   1 │ [ splitOn "," ] | (at 0) + (at 1) |= %.
+     •                   ┬─────────────── 
      •                   ╰╸ This expression can't be used in the selector on the left-hand side of a '|='
      •
      │ Note: Certain expressions can't be sensibly 'reversed' as required by the use of '|='

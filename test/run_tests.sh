@@ -98,8 +98,8 @@ echo "one,two,three" | run not_modify 'splitOn "," | filter (not (contains "two"
 echo '{"one": 1, "two": 2, "three": 3}' | run json_view 'json'
 
 ## Casting
-echo '1,2,3' | run requires_cast '[ splitOn "," ] | (at 0) + (at 1)'
-echo '1,2,3' | run successful_cast '[ splitOn "," ] | (at 0) + (at 1)'
+echo '1,2,3' | run auto_cast '[ splitOn "," ] | (at 0) + (at 1)'
+echo '1,2,3' | run auto_cast_2 '[ splitOn "," ] | (at 0) + (at 1) | %. ++ "!"'
 
 # Expressions
 
@@ -133,45 +133,45 @@ echo 'one,two,three' | run count_view 'count (splitOn ",")'
 ### Int Math
 
 #### Plus
-echo '1,2,3' | run plus_view '[ splitOn "," ] | !(at 0) + !(at 1)'
+echo '1,2,3' | run plus_view '[ splitOn "," ] | (at 0) + (at 1)'
 
 #### Minus
-echo '10,8' | run minus_view '[ splitOn "," ] | !(at 0) - !(at 1)'
+echo '10,8' | run minus_view '[ splitOn "," ] | (at 0) - (at 1)'
 
 #### Times
-echo '10,8' | run times_view '[ splitOn "," ] | !(at 0) * !(at 1)'
+echo '10,8' | run times_view '[ splitOn "," ] | (at 0) * (at 1)'
 
 #### Division
-echo '10,5' | run division_view '[ splitOn "," ] | !(at 0) / !(at 1)'
+echo '10,5' | run division_view '[ splitOn "," ] | (at 0) / (at 1)'
 
 #### Modulus
-echo '10,3' | run modulus_view '[ splitOn "," ] | !(at 0) % !(at 1)'
+echo '10,3' | run modulus_view '[ splitOn "," ] | (at 0) % (at 1)'
 
 #### Power
-echo '2,3' | run power_view '[ splitOn "," ] | !(at 0) ^ !(at 1)'
+echo '2,3' | run power_view '[ splitOn "," ] | (at 0) ^ (at 1)'
 
 ### Mixed Math
 
 #### Plus
-echo '1.5,2' | run plus_mixed_view '[ splitOn "," ] | !(at 0) + !(at 1)'
+echo '1.5,2' | run plus_mixed_view '[ splitOn "," ] | (at 0) + (at 1)'
 
 #### Minus
-echo '10,8.5' | run minus_mixed_view '[ splitOn "," ] | !(at 0) - !(at 1)'
+echo '10,8.5' | run minus_mixed_view '[ splitOn "," ] | (at 0) - (at 1)'
 
 #### Times
-echo '10,8.5' | run times_mixed_view '[ splitOn "," ] | !(at 0) * !(at 1)'
+echo '10,8.5' | run times_mixed_view '[ splitOn "," ] | (at 0) * (at 1)'
 
 #### Division
-echo '10,2.5' | run division_mixed_view '[ splitOn "," ] | !(at 0) / !(at 1)'
+echo '10,2.5' | run division_mixed_view '[ splitOn "," ] | (at 0) / (at 1)'
 
 #### Modulus
-echo '10,3.5' | run modulus_mixed_view '[ splitOn "," ] | !(at 0) % !(at 1)'
+echo '10,3.5' | run modulus_mixed_view '[ splitOn "," ] | (at 0) % (at 1)'
 
 #### Power
-echo '2,3.5' | run power_mixed_view '[ splitOn "," ] | !(at 0) ^ !(at 1)'
+echo '2,3.5' | run power_mixed_view '[ splitOn "," ] | (at 0) ^ (at 1)'
 
 ## Expressions in modify commands
-echo '1,2' | run expression_in_selector '[ splitOn "," ] | !(at 0) + !(at 1) |= %.'
+echo '1,2' | run expression_in_selector '[ splitOn "," ] | (at 0) + (at 1) |= %.'
 
 ## Records
 echo 'one 1 2 two three' | run record_view ':{ numbers: /\d+/ # words: /[a-z]+/ }'
