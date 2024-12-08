@@ -287,6 +287,10 @@ unifySelectorG = \case
   UT.Cast pos -> do
     inp <- freshVar
     pure $ (inp, T.castableType pos inp, Exactly 1)
+  UT.Noop _pos -> do
+    inp <- freshVar
+    out <- freshVar
+    pure $ (inp, out, Exactly 0)
   where
     compose ::
       (Typ s, Typ s, ReturnArity) ->

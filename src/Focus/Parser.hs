@@ -136,15 +136,14 @@ reGroupsP = do
 listOfP :: P (Selector Pos)
 listOfP = withPos do
   M.between (lexeme $ M.char '[') (lexeme $ M.char ']') $ do
-    flip ListOf <$> selectorsP
+    M.sepBy selectorsP (lexeme $ M.char ',')
+      <&> \selectors pos ->
+        ListOf pos (foldl' (\l r -> Action pos $ Comma pos l r) (Noop pos) selectors)
 
 shellP :: P (Expr Pos)
 shellP = withPos do
-  shellMode <-
-    optional (M.try $ M.char '-' *> M.lookAhead (M.char '{')) >>= \case
-      Just _ -> pure NullStdin
-      Nothing -> pure Normal
-  script <- templateStringP '{' '}'
+  shellMode <- (((M.string "-{" $> NullStdin) <|> (M.string "#{" $> Normal)))
+  script <- templateStringP Nothing '}'
   pure $ \pos -> Shell pos script shellMode
 
 shellActionP :: P (Selector Pos)
@@ -153,8 +152,7 @@ shellActionP = withPos do
 
 recordP :: P (Selector Pos)
 recordP = withPos do
-  _ <- (M.char ':' *> M.lookAhead (M.char '{'))
-  fields <- Map.fromList <$> M.between (lexeme $ M.char '{') (lexeme $ M.char '}') (M.sepBy field (lexeme $ M.char '#'))
+  fields <- Map.fromList <$> M.between (lexeme $ M.char '{') (lexeme $ M.char '}') (M.sepBy field (lexeme $ M.char ','))
   pure $ \pos -> Action pos $ Record pos fields
   where
     field = do
@@ -163,8 +161,8 @@ recordP = withPos do
       value <- selectorP
       pure (key, value)
 
-templateStringP :: Char -> Char -> P (TemplateString D.Position)
-templateStringP begin end = M.between (M.char begin) (lexeme $ M.char end) $ do
+templateStringP :: Maybe Char -> Char -> P (TemplateString D.Position)
+templateStringP begin end = M.between (maybe (pure ()) (void . M.char) begin) (lexeme $ M.char end) $ do
   TemplateString <$> many do
     M.choice
       [ Left <$> selExprP,
@@ -247,18 +245,17 @@ selectorP :: P (Selector Pos)
 selectorP = withPos do
   l <- sp
   M.choice
-    [ comma l,
-      assignment l,
+    [ assignment l,
       strAppend l,
       mathBinOp l,
       pure $ const l
     ]
   where
-    comma :: (Selector Pos) -> P (Pos -> Selector Pos)
-    comma l = do
-      _ <- lexeme (M.char ',')
-      r <- selectorP <|> sp
-      pure $ \pos -> Action pos $ Comma pos l r
+    -- comma :: (Selector Pos) -> P (Pos -> Selector Pos)
+    -- comma l = do
+    --   _ <- lexeme (M.char ',')
+    --   r <- selectorP <|> sp
+    --   pure $ \pos -> Action pos $ Comma pos l r
     assignment :: Selector Pos -> P (Pos -> Selector Pos)
     assignment l = do
       _ <- lexeme (M.string "->")
@@ -434,5 +431,5 @@ exprLiteralP = withPos do
   M.choice
     [ flip Number <$> numberP,
       flip Binding <$> lexeme bareBindingP,
-      flip Str <$> templateStringP '"' '"'
+      flip Str <$> templateStringP (Just '"') '"'
     ]

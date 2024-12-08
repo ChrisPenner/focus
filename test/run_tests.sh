@@ -65,34 +65,34 @@ echo "one,two,three" | run at_view '[splitOn ","] | at 1'
 
 ## Regex
 echo "one two 555-123-4567 three" | run regex_view '/[\d-]+/'
-echo "one two 555-123-4567 three 999-876-5432" | run regex_modify '/[\d-]+/ |= {rev}'
-echo "one-two-three" | run regex_modify '/(\w+)-\w+-(\w+)/ |= {tr a-z A-Z}'
+echo "one two 555-123-4567 three 999-876-5432" | run regex_modify '/[\d-]+/ |= #{rev}'
+echo "one-two-three" | run regex_modify '/(\w+)-\w+-(\w+)/ |= #{tr a-z A-Z}'
 
 ### Regex Groups
 echo "one two 555-123-4567 three" | run regex_groups_view 'groups /(\d+)-(\d+)-(\d+)/'
-echo "one two 555-123-4567 three" | run regex_groups_modify 'groups /(\d+)-(\d+)-(\d+)/ |= {rev}'
+echo "one two 555-123-4567 three" | run regex_groups_modify 'groups /(\d+)-(\d+)-(\d+)/ |= #{rev}'
 
 ## Filter
 echo "one,two,three" | run filter_view 'splitOn "," | filter /e/'
 
 ## Take/Drop
 echo "one,two,three" | run take_view 'take 2 (splitOn ",")'
-echo "one,two,three" | run take_modify 'take 2 (splitOn ",") |= {rev}'
+echo "one,two,three" | run take_modify 'take 2 (splitOn ",") |= #{rev}'
 echo "one,two,three" | run drop_view 'drop 1 (splitOn ",")'
-echo "one,two,three" | run drop_modify 'drop 1 (splitOn ",") |= {rev}'
+echo "one,two,three" | run drop_modify 'drop 1 (splitOn ",") |= #{rev}'
 
 echo "one,two,three" | run take_end_view 'takeEnd 1 (splitOn ",")'
-echo "one,two,three" | run take_end_modify 'takeEnd 1 (splitOn ",") |= {rev}'
+echo "one,two,three" | run take_end_modify 'takeEnd 1 (splitOn ",") |= #{rev}'
 echo "one,two,three" | run drop_end_view 'dropEnd 1 (splitOn ",")'
-echo "one,two,three" | run drop_end_modify 'dropEnd 1 (splitOn ",") |= {rev}'
+echo "one,two,three" | run drop_end_modify 'dropEnd 1 (splitOn ",") |= #{rev}'
 
 ## Contains
 echo "one,two,three" | run contains_view 'splitOn "," | filter (contains "two")'
-echo "one,two,three" | run contains_modify 'splitOn "," | filter (contains "two") |= {rev}'
+echo "one,two,three" | run contains_modify 'splitOn "," | filter (contains "two") |= #{rev}'
 
 ## Not
 echo "one,two,three" | run not_view 'splitOn "," | filter (not (contains "two"))'
-echo "one,two,three" | run not_modify 'splitOn "," | filter (not (contains "two")) |= {rev}'
+echo "one,two,three" | run not_modify 'splitOn "," | filter (not (contains "two")) |= #{rev}'
 
 ## JSON
 echo '{"one": 1, "two": 2, "three": 3}' | run json_view 'json'
@@ -107,7 +107,7 @@ echo '1,2,3' | run auto_cast_2 '[ splitOn "," ] | (at 0) + (at 1) | %. ++ "!"'
 echo "The password is swordfish" | run binding_usage '/The password is (?<password>\w+)/ |= %password'
 
 ## Binding usages in template strings
-echo "The password is swordfish" | run binding_usage_in_template '/The password is (?<password>\w+)/ | "password: %{ %password | {rev}}!"'
+echo "The password is swordfish" | run binding_usage_in_template '/The password is (?<password>\w+)/ | "password: %{ %password | #{rev}}!"'
 
 ## Pattern strings
 echo "The password is swordfish" | run pattern_string 'pattern "The password is %password" | "password: %password"'
@@ -174,4 +174,4 @@ echo '2,3.5' | run power_mixed_view '[ splitOn "," ] | (at 0) ^ (at 1)'
 echo '1,2' | run expression_in_selector '[ splitOn "," ] | (at 0) + (at 1) |= %.'
 
 ## Records
-echo 'one 1 2 two three' | run record_view ':{ numbers: /\d+/ # words: /[a-z]+/ }'
+echo 'one 1 2 two three' | run record_view '{ numbers: /\d+/ , words: /[a-z]+/ }'

@@ -114,6 +114,7 @@ data Selector a
   | ParseJSON a
   | Cast a
   | Id a
+  | Noop a
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Selector a) a where
@@ -141,6 +142,7 @@ instance Tagged (Selector a) a where
     ParseJSON a -> a
     Cast a -> a
     Id a -> a
+    Noop a -> a
   setTag p = \case
     Compose _ x -> Compose p x
     SplitFields _ x -> SplitFields p x
@@ -165,6 +167,7 @@ instance Tagged (Selector a) a where
     ParseJSON _ -> ParseJSON p
     Cast _ -> Cast p
     Id _ -> Id p
+    Noop _ -> Noop p
 
 data Chunk
   = TextChunk Text

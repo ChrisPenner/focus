@@ -347,6 +347,9 @@ compileSelectorG cmdF = \case
         bwd chunk = pure $ TextChunk . TL.toStrict . TL.decodeUtf8 $ Aeson.encode (jsonChunk chunk)
     pure $ liftSimple fwd bwd
   Cast _pos -> pure $ focusId
+  Noop _pos -> case cmdF of
+    ViewF -> pure $ ViewFocus \_f _chunk -> pure mempty
+    ModifyF -> pure $ ModifyFocus \_f chunk -> pure chunk
   where
     hasMatches :: (Focusable m) => CommandF cmd -> Focus cmd i o -> i -> m Bool
     hasMatches cmd foc i = do
