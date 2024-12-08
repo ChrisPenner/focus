@@ -120,7 +120,7 @@ instance (Semigroup a) => Unifiable (ChunkTypeT a) where
           That y -> Left y
           These x y -> Right (x, y)
     -- TODO: this isn't quite right
-    (CastableTypeT posL x) (CastableTypeT posR y) -> Just (CastableTypeT (posL <> posR) (Right (x, y)))
+    (CastableTypeT posL x) (CastableTypeT posR _y) -> Just (CastableTypeT (posL <> posR) (Left x))
     (CastableTypeT posL _) (NumberTypeT posR) -> Just (NumberTypeT (posL <> posR))
     (TextTypeT posL) (CastableTypeT posR _) -> Just (TextTypeT (posL <> posR))
     (CastableTypeT posL _) (TextTypeT posR) -> Just (TextTypeT (posL <> posR))
@@ -149,6 +149,15 @@ instance Tagged (ChunkTypeT a r) a where
     JsonTypeT pos -> pos
     CastableTypeT pos _ -> pos
     RecordTypeT pos _ -> pos
+  setTag p = \case
+    Arrow _ x y -> Arrow p x y
+    TextTypeT _ -> TextTypeT p
+    ListTypeT _ x -> ListTypeT p x
+    NumberTypeT _ -> NumberTypeT p
+    RegexMatchTypeT _ -> RegexMatchTypeT p
+    JsonTypeT _ -> JsonTypeT p
+    CastableTypeT _ x -> CastableTypeT p x
+    RecordTypeT _ x -> RecordTypeT p x
 
 type TypeErrorReport = D.Report Text
 

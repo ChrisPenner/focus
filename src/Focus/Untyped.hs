@@ -140,6 +140,30 @@ instance Tagged (Selector a) a where
     ParseJSON a -> a
     Cast a -> a
     Id a -> a
+  setTag p = \case
+    Compose _ x -> Compose p x
+    SplitFields _ x -> SplitFields p x
+    SplitLines _ -> SplitLines p
+    Chars _ -> Chars p
+    SplitWords _ -> SplitWords p
+    Regex _ x y -> Regex p x y
+    RegexMatches _ -> RegexMatches p
+    RegexGroups _ x y -> RegexGroups p x y
+    ListOf _ x -> ListOf p x
+    Filter _ x -> Filter p x
+    Not _ x -> Not p x
+    Splat _ -> Splat p
+    At _ x -> At p x
+    Take _ x y -> Take p x y
+    TakeEnd _ x y -> TakeEnd p x y
+    Drop _ x y -> Drop p x y
+    DropEnd _ x y -> DropEnd p x y
+    Reversed _ x -> Reversed p x
+    Contains _ x -> Contains p x
+    Action _ x -> Action p x
+    ParseJSON _ -> ParseJSON p
+    Cast _ -> Cast p
+    Id _ -> Id p
 
 data Chunk
   = TextChunk Text
@@ -222,6 +246,23 @@ instance Tagged (Expr a) a where
     BindingAssignment a _ _ -> a
     Index a -> a
     Uniq a _ -> a
+  setTag p = \case
+    Modify _ x y -> Modify p x y
+    Binding _ x -> Binding p x
+    Str _ x -> Str p x
+    Number _ x -> Number p x
+    StrConcat _ x -> StrConcat p x
+    StrAppend _ x y -> StrAppend p x y
+    Intersperse _ x -> Intersperse p x
+    Comma _ x y -> Comma p x y
+    Count _ x -> Count p x
+    MathBinOp _ x y z -> MathBinOp p x y z
+    Shell _ x y -> Shell p x y
+    Record _ x -> Record p x
+    Cycle _ x -> Cycle p x
+    BindingAssignment _ x y -> BindingAssignment p x y
+    Index _ -> Index p
+    Uniq _ x -> Uniq p x
 
 data NumberT
   = IntNumber Int

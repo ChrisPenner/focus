@@ -171,37 +171,37 @@ before feeding the result back through the selector.
 
 ## TODO
 
+- [ ] Fix casting, e.g. `echo 1,2 | focus modify '[ splitOn "," ] | !(at 0) + !(at 1)' '%{.}'`
 - [ ] Allow defining custom selectors and actions in lua
   * Allow sharing these/caching them, etc.
-- [x] Fix or warn on cases which trigger unsafePartsOf (e.g. changing number of elements in returned list)
 - [ ] Fix parsing ambiguity of division and regex
-- [ ] Fix casting, e.g. `echo 1,2 | focus modify '[ splitOn "," ] | !(at 0) + !(at 1)' '%{.}'`
-- [x] ~Maybe remove distinction between selectors and actions, just have selectors, but allow wrapping in a "forward" or "backward" action.~
 - [ ] any/all
-- [x] ~Math, boolean ops~
 - [ ] Add 'index' selector
 - [ ] Generate help and examples from source
-- [x] ~ability to zip/cartesian product selectors (for paste-like things)~
 - [ ] Redesign record syntax
-- [ ] Allow uplifting records to vars/environment
-- [ ] Make 'at' work with records, including typechecking
 - [ ] figure out how to typecheck JSON union types
 - [ ] allow failing exit code on view on non-matches
-- [x] ~Switch to input file arguments~
-- [x] ~In-place editing~
-- [x] ~Make expression language and selectors more consistent and distinct~
-- [x] ~Ability to 'NOT'/invert filters~
 - [ ] Add more examples
 - [ ] Add more tests
 - [ ] README tests
 - [ ] Support JSON
-- [x] ~List splat~
-- [x] ~Expression language~
-- [x] ~Require reversible selectors~
 - [ ] Handle errors from shell commands better
 - [ ] shell 'if'
 - [ ] Fix annoying ansi codes coming from diagnose even on no-color mode.
-- [x] ~Fix printing of "STVar" in type errors, e.g. `focus view '/one/ | ...'`~
 - [ ] Option for separating output with null bytes for better fzf integration
 - [ ] Pass env vars via an `%env` object.
-- [ ] Flip columns around: `focus '[words] | concat [at 1, " ", at 0]'`
+- [ ] Implement "paste"
+- [ ] Make 'at' work with records, including typechecking
+- [x] ~Fix or warn on cases which trigger unsafePartsOf (e.g. changing number of elements in returned list)~
+- [x] ~Maybe remove distinction between selectors and actions, just have selectors, but allow wrapping in a "forward" or "backward" action.~
+- [x] ~Math, boolean ops~
+- [x] ~ability to zip/cartesian product selectors (for paste-like things)~
+- [x] ~Switch to input file arguments~
+- [x] ~In-place editing~
+- [x] ~Make expression language and selectors more consistent and distinct~
+- [x] ~Ability to 'NOT'/invert filters~
+- [x] ~List splat~
+- [x] ~Expression language~
+- [x] ~Require reversible selectors~
+- [x] ~Fix printing of "STVar" in type errors, e.g. `focus view '/one/ | ...'`~
+- [x] ~Flip columns around: `focus '[words] | at 1 ++ " " ++ at 0'`~
