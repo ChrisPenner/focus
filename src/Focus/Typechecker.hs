@@ -356,6 +356,13 @@ unifyExpr expr = do
       _ <- liftUnify $ Unify.unify innerResult (T.listType pos (T.textType pos))
       -- TODO: Should We require the inner to have exactly 1 return?
       pure $ (inp, T.textType pos, Exactly 1)
+    StrAppend pos innerL innerR -> do
+      (lInp, lOut, _innerArity) <- unifyAction innerL
+      (rInp, rOut, _innerArity) <- unifyAction innerR
+      inp <- liftUnify $ Unify.unify lInp rInp
+      out <- liftUnify $ Unify.unify lOut rOut
+      out' <- liftUnify $ Unify.unify out (T.textType pos)
+      pure $ (inp, out', Exactly 1)
     Intersperse _pos actions -> do
       typs <- for actions unifyAction <&> fmap \(i, o, _) -> (i, o)
       (i, o) <- liftUnify $ F1.foldrM1 (\(i1, o1) (i2, o2) -> (,) <$> Unify.unify i1 i2 <*> Unify.unify o1 o2) typs

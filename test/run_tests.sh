@@ -116,6 +116,9 @@ echo '[http://google.ca](My Link)' | run pattern_modify 'pattern "[%descr](%link
 ## String Concatenation
 echo "one,two,three" | run string_concat_view '[splitOn ","] | concat %.'
 
+## String append
+printf "one,two,three\n1,2,3" | run string_append_view '[splitOn ","] | at 0 ++ "-" ++ at 2'
+
 ## Intersperse
 echo "1 2 3 one two three" | run intersperse_view 'intersperse /\d+/ /\w+/ (splitOn " ")'
 

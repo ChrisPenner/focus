@@ -249,6 +249,7 @@ selectorP = withPos do
   M.choice
     [ comma l,
       assignment l,
+      strAppend l,
       mathBinOp l,
       pure $ const l
     ]
@@ -263,6 +264,11 @@ selectorP = withPos do
       _ <- lexeme (M.string "->")
       binding <- lexeme bindingName
       pure $ \pos -> Action pos $ BindingAssignment pos l binding
+    strAppend :: Selector Pos -> P (Pos -> Selector Pos)
+    strAppend l = do
+      _ <- lexeme (M.string "++")
+      r <- selectorP <|> sp
+      pure $ \pos -> Action pos $ StrAppend pos l r
     mathBinOp :: Selector Pos -> P (Pos -> Selector Pos)
     mathBinOp l = do
       op <-

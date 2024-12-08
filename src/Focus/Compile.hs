@@ -23,7 +23,6 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Trans.Maybe (MaybeT (..))
 import Data.Aeson qualified as Aeson
-import Data.Align qualified as Align
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NE
 import Data.Map (Map)
@@ -37,7 +36,6 @@ import Data.Text.Encoding qualified as Text
 import Data.Text.IO qualified as Text
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
-import Data.These (These (..))
 import Error.Diagnose qualified as D
 import Focus.Command (CommandF (..), CommandT (..), IsCmd)
 import Focus.Debug qualified as Debug
@@ -54,6 +52,9 @@ import Prelude hiding (reads)
 
 compileSelector :: forall cmd. (IsCmd cmd) => CommandF cmd -> TaggedSelector -> IO (Focus cmd Chunk Chunk)
 compileSelector cmdF = compileSelectorG cmdF
+
+data Pair a = Pair {pairL :: a, pairR :: a}
+  deriving stock (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 compileExpr :: TaggedExpr -> IO (Focus ViewT Chunk Chunk)
 compileExpr =
@@ -85,6 +86,12 @@ compileExpr =
             inp & vf \xs -> do
               f . TextChunk $ Text.concat (textChunk <$> listChunk xs)
       pure $ ViewFocus $ \f inp -> go (getViewFocus inner) f inp
+    StrAppend _pos innerL innerR -> do
+      vf <- emitInterleaved (Pair innerL innerR)
+      pure $ ViewFocus $ \f inp -> do
+        let foc = getViewFocus vf
+        inp & foc \(Pair l r) -> do
+          f (TextChunk $ textChunk l <> textChunk r)
     Intersperse _pos actions -> do
       selectors <- traverse (compileSelector ViewF) actions
       let actionFocuses = (listOfFocus <$> selectors)
@@ -178,7 +185,7 @@ compileExpr =
           (DoubleNumber i) (IntNumber j) -> f i (fromIntegral j)
           (DoubleNumber i) (DoubleNumber j) -> f i j
     Record _pos fields -> do
-      compileRecord ViewF fields
+      compileRecord fields
     Cycle _pos selector -> do
       s <- compileSelectorG ViewF selector
       pure $
@@ -425,70 +432,41 @@ resolveBinding pos input = \case
         pure $ input
   InputBinding -> pure input
 
-compileRecord :: forall cmd. CommandF cmd -> (Map Text (Selector Pos)) -> IO (Focus cmd Chunk Chunk)
-compileRecord cmdF fields = do
-  case cmdF of
-    ViewF {} -> do
-      fieldFocuses <- traverse (compileSelectorG cmdF) fields
-      let foc :: forall m r. (Focusable m, Monoid r) => (Chunk -> m r) -> Chunk -> m r
-          foc f chunk = do
-            let corts :: Map Text (Coroutine (Co.Yield Chunk) m ())
-                corts =
-                  fieldFocuses <&> \fieldFocus ->
-                    let goF = getViewFocus fieldFocus
-                        cort :: Coroutine (Co.Yield Chunk) m ()
-                        cort =
-                          chunk & goF Co.yield
-                     in cort
-            let loop :: Map Text (Coroutine (Co.Yield Chunk) m ()) -> m r
-                loop xs = do
-                  step <- do
-                    for xs \cort -> do
-                      Co.resume cort >>= \case
-                        Left (Co.Yield req k) ->
-                          pure $ (Just req, Just k)
-                        Right _ -> pure $ (Nothing, Nothing)
-                  case traverse fst step of
-                    Nothing -> pure mempty
-                    Just resultMap -> local (over focusBindings (Map.union resultMap)) $ do
-                      result <- f . RecordChunk $ resultMap
-                      case sequenceA (snd <$> step) of
-                        Nothing -> pure result
-                        Just ks -> (result <>) <$> (loop ks)
-            loop corts
-      pure $ ViewFocus foc
-    ModifyF {} -> do
-      fieldFocuses <- traverse (compileSelectorG cmdF) fields
-      let foc :: forall m. (Focusable m) => (Chunk -> m Chunk) -> Chunk -> m Chunk
-          foc f chunk = do
-            let corts :: Map Text (Coroutine (Co.Request Chunk Chunk) m Chunk)
-                corts =
-                  fieldFocuses <&> \fieldFocus ->
-                    let modF = getModifyFocus fieldFocus
-                        cort :: Coroutine (Co.Request Chunk Chunk) m Chunk
-                        cort =
-                          chunk & modF \focChunk -> do
-                            Co.request focChunk
-                     in cort
-            let loop :: Map Text (Coroutine (Co.Request Chunk Chunk) m Chunk) -> m Chunk
-                loop xs = do
-                  step <- do
-                    for xs \cort -> do
-                      Co.resume cort >>= \case
-                        Left (Co.Request req k) ->
-                          pure $ (Just req, Just k)
-                        Right r -> pure $ (Just r, Nothing)
-                  case traverse fst step of
-                    Nothing -> pure chunk
-                    Just resultMap -> local (over focusBindings (Map.union resultMap)) $ do
-                      result <- f . RecordChunk $ resultMap
-                      case sequenceA (snd <$> step) of
-                        Nothing -> pure result
-                        Just ks -> do
-                          let go = \case
-                                This _ -> error "compileRecord-modify: Somehow fields were different between iterations. Please report this"
-                                That _ -> error "compileRecord-modify: Somehow fields were different between iterations. Please report this"
-                                These k r -> k r
-                          (loop $ Align.alignWith go ks resultMap) $> result
-            loop corts
-      pure $ ModifyFocus foc
+compileRecord :: (Map Text (Selector Pos)) -> IO (Focus ViewT Chunk Chunk)
+compileRecord fields = do
+  fv <- emitInterleaved fields
+  pure $ ViewFocus \f chunk -> do
+    let foc = getViewFocus fv
+    chunk & foc \rec -> do
+      local (over focusBindings (Map.union rec)) $ f (RecordChunk rec)
+
+emitInterleaved :: forall f. (Traversable f) => (f (Selector Pos)) -> IO (Focus ViewT Chunk (f Chunk))
+emitInterleaved fields = do
+  fieldFocuses <- traverse (compileSelectorG ViewF) fields
+  let foc :: forall m r. (Focusable m, Monoid r) => (f Chunk -> m r) -> Chunk -> m r
+      foc f chunk = do
+        let corts :: f (Coroutine (Co.Yield Chunk) m ())
+            corts =
+              fieldFocuses <&> \fieldFocus ->
+                let goF = getViewFocus fieldFocus
+                    cort :: Coroutine (Co.Yield Chunk) m ()
+                    cort =
+                      chunk & goF Co.yield
+                 in cort
+        let loop :: f (Coroutine (Co.Yield Chunk) m ()) -> m r
+            loop xs = do
+              step <- do
+                for xs \cort -> do
+                  Co.resume cort >>= \case
+                    Left (Co.Yield req k) ->
+                      pure $ (Just req, Just k)
+                    Right _ -> pure $ (Nothing, Nothing)
+              case traverse fst step of
+                Nothing -> pure mempty
+                Just resultMap -> do
+                  result <- f resultMap
+                  case sequenceA (snd <$> step) of
+                    Nothing -> pure result
+                    Just ks -> (result <>) <$> (loop ks)
+        loop corts
+  pure $ ViewFocus foc

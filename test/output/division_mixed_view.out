@@ -9,7 +9,7 @@ focus '[ splitOn "," ] | !(at 0) / !(at 1)' ''
    1 │ [ splitOn "," ] | !(at 0) / !(at 1)
      •                           ┬ 
      •                           ├╸ unexpected '/'
-     •                           ╰╸ expecting "->", "|=", '%', '*', '+', ',', '-', '^', '|', end of input, or white space
+     •                           ╰╸ expecting "++", "->", "|=", '%', '*', '+', ',', '-', '^', '|', end of input, or white space
 ─────╯
 ===EXIT CODE===============================================================================
 0

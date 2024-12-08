@@ -182,8 +182,6 @@ data ChunkType
 
 type TaggedExpr = Expr Pos
 
-type Action a = Selector a
-
 data MathBinOp = Plus | Minus | Multiply | Divide | Modulo | Power
   deriving stock (Show, Eq, Ord)
 
@@ -192,8 +190,9 @@ data Expr a
   | Binding a BindingName
   | Str a (TemplateString a)
   | Number a (NumberT)
-  | StrConcat a (Action a)
-  | Intersperse a (NonEmpty (Action a))
+  | StrConcat a (Selector a)
+  | StrAppend a (Selector a) (Selector a)
+  | Intersperse a (NonEmpty (Selector a))
   | Comma a (Selector a) (Selector a)
   | Count a (Selector a)
   | Shell a (TemplateString a) ShellMode
@@ -212,6 +211,7 @@ instance Tagged (Expr a) a where
     Str a _ -> a
     Number a _ -> a
     StrConcat a _ -> a
+    StrAppend a _ _ -> a
     Intersperse a _ -> a
     Comma a _ _ -> a
     Count a _ -> a
