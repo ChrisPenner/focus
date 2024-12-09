@@ -178,7 +178,6 @@ before feeding the result back through the selector.
 - [ ] any/all
 - [ ] Add 'index' selector
 - [ ] Generate help and examples from source
-- [ ] Redesign record syntax
 - [ ] figure out how to typecheck JSON union types
 - [ ] allow failing exit code on view on non-matches
 - [ ] Add more examples
@@ -205,3 +204,4 @@ before feeding the result back through the selector.
 - [x] ~Require reversible selectors~
 - [x] ~Fix printing of "STVar" in type errors, e.g. `focus view '/one/ | ...'`~
 - [x] ~Flip columns around: `focus '[words] | at 1 ++ " " ++ at 0'`~
+- [x] ~Redesign record syntax~

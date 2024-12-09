@@ -9,6 +9,7 @@ module Focus.Cli
     ChunkSize (..),
     InPlace (..),
     ShowWarnings (..),
+    Alignment (..),
   )
 where
 
@@ -36,6 +37,8 @@ data InPlace = InPlace | NotInPlace
 
 data ShowWarnings = ShowWarnings | NoWarnings
 
+data Alignment = Aligned | Unaligned
+
 data Options
   = Options
   { output :: OutputLocation,
@@ -43,7 +46,8 @@ data Options
     command :: Command,
     useColour :: UseColour,
     chunkSize :: ChunkSize,
-    showWarnings :: ShowWarnings
+    showWarnings :: ShowWarnings,
+    alignMode :: Alignment
   }
 
 optionsP :: Parser Options
@@ -88,8 +92,10 @@ optionsP = do
           <> short 's'
           <> help "Suppress warnings"
       )
+
+  alignMode <- alignModeP
   command <- overP
-  pure Options {output, command, useColour, chunkSize, inPlace, showWarnings}
+  pure Options {output, command, useColour, chunkSize, inPlace, showWarnings, alignMode}
 
 inputFilesP :: Parser [FilePath]
 inputFilesP = many $ strArgument (metavar "FILES..." <> help "Input files. If omitted, read from stdin")
@@ -100,9 +106,19 @@ overP = do
   inputFiles <- inputFilesP
   pure $ Modify script inputFiles
 
+alignModeP :: Parser Alignment
+alignModeP = do
+  flag
+    Unaligned
+    Aligned
+    ( long "align"
+        <> short 'a'
+        <> help "Align the input files line by line. Refer to them using %f1, %f2, etc."
+    )
+
 scriptP :: Parser Text
 scriptP =
   strArgument
-    ( metavar "COMMAND"
-        <> help "Command to run"
+    ( metavar "SCRIPT"
+        <> help "Focus script to run"
     )

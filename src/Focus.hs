@@ -1,16 +1,19 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TupleSections #-}
 
 module Focus (run) where
 
 import Control.Applicative
-import Control.Monad.Reader (MonadReader, ReaderT (..), asks)
+import Control.Monad.Reader (MonadReader (..), ReaderT (..), asks)
 import Control.Monad.State
+import Data.Bifunctor
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
 import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
-import Focus.Cli (InPlace (..), Options (..), OutputLocation (..), ShowWarnings (..), UseColour (..), optionsP)
+import Focus.Cli (Alignment (..), InPlace (..), Options (..), OutputLocation (..), ShowWarnings (..), UseColour (..), optionsP)
 import Focus.Command (Command (..), CommandF (..), CommandT (..))
 import Focus.Compile (compileSelector)
 import Focus.Exec qualified as Exec
@@ -22,10 +25,10 @@ import Focus.Untyped (renderChunk)
 import Options.Applicative qualified as Opts
 import Prettyprinter.Render.Terminal (AnsiStyle)
 import System.Exit qualified as System
-import UnliftIO (Handle, MonadUnliftIO)
 import UnliftIO qualified as IO
 import UnliftIO.Directory qualified as UnliftIO
 import UnliftIO.IO qualified as UnliftIO
+import UnliftIO.STM
 import UnliftIO.Temporary qualified as UnliftIO
 
 data CliState = CliState
@@ -36,11 +39,20 @@ addSource :: Text -> Text -> CliM ()
 addSource name src = do
   modify \s -> s {diagnostic = D.addFile (diagnostic s) (Text.unpack name) (Text.unpack src)}
 
-type CliM = StateT CliState (ReaderT Options IO)
+newtype CliM a = CliM {unCli :: ReaderT (TVar CliState, Options) IO a}
+  deriving newtype (Functor, Applicative, Monad, MonadIO, IO.MonadUnliftIO)
+
+instance MonadReader Options CliM where
+  ask = CliM $ asks snd
+  local f (CliM m) = CliM $ local (second f) m
+
+instance MonadState (CliState) CliM where
+  get = CliM $ asks fst >>= liftIO . readTVarIO
+  put s = CliM $ asks fst >>= \tv -> liftIO $ atomically $ writeTVar tv s
 
 run :: IO ()
 run = do
-  opts@Options {command, output, chunkSize, inPlace} <-
+  opts@Options {command = Modify script inputFiles, output, chunkSize, inPlace, alignMode} <-
     Opts.customExecParser
       (Opts.prefs (Opts.subparserInline <> Opts.showHelpOnError <> Opts.disambiguate <> Opts.showHelpOnEmpty <> Opts.helpShowGlobals))
       ( Opts.info
@@ -49,11 +61,48 @@ run = do
               <> Opts.progDesc "Focus - cli utility for hacking and slashing data"
           )
       )
-  flip runReaderT opts do
-    case command of
-      Modify script inputFiles -> withHandles command inPlace inputFiles output \inputHandle outputHandle -> flip evalStateT (CliState mempty) do
-        focus <- getModifyFocus script
-        focusMToCliM $ Exec.runView focus chunkSize inputHandle outputHandle
+  cliStateVar <- newTVarIO $ CliState mempty
+  flip runReaderT (cliStateVar, opts) . unCli $ do
+    focus <- getModifyFocus script
+    case (inputFiles, alignMode, inPlace) of
+      ([], _, InPlace) -> do
+        failWith "In-place mode specified, but no input files provided."
+      ([], _, NotInPlace) -> do
+        let getOutput =
+              case output of
+                StdOut -> pure IO.stdout
+                OutputFile path -> IO.openFile path IO.WriteMode
+        IO.bracket getOutput IO.hClose \outputHandle -> do
+          focusMToCliM $ do
+            Exec.runModify focus chunkSize IO.stdin outputHandle
+      (_, Unaligned, _) -> do
+        for_ inputFiles \inputFile -> do
+          let withOutput go =
+                case inPlace of
+                  NotInPlace -> do
+                    case output of
+                      StdOut -> go IO.stdout
+                      OutputFile path -> IO.withFile path IO.WriteMode go
+                  InPlace -> do
+                    UnliftIO.withSystemTempFile "focus.txt" \tempPath tempHandle -> do
+                      _ <- go tempHandle
+                      UnliftIO.renameFile tempPath inputFile
+                      pure ()
+          withOutput \outputHandle -> do
+            focusMToCliM $ do
+              Exec.runModify focus chunkSize IO.stdin outputHandle
+      (_, Aligned, InPlace) ->
+        failWith "Cannot use both aligned and in-place modes together."
+      (_, Aligned, _) -> do
+        let openInputs = traverse (\fp -> IO.openFile fp IO.ReadMode) inputFiles
+        let withInputs = IO.bracket openInputs (traverse IO.hClose)
+        withInputs \inputHandles -> do
+          let getOutput = case output of
+                StdOut -> pure IO.stdout
+                OutputFile path -> IO.openFile path IO.WriteMode
+          IO.bracket getOutput IO.hClose \outputHandle -> do
+            focusMToCliM $ do
+              Exec.runAligned focus chunkSize inputHandles outputHandle
   where
     failWithDiagnostic :: Diagnose.Diagnostic Text -> CliM a
     failWithDiagnostic diagnostic = do
@@ -70,37 +119,6 @@ run = do
     failWith msg = do
       liftIO $ TextIO.hPutStrLn UnliftIO.stderr msg
       liftIO $ System.exitFailure
-
-    withHandles :: forall m. (MonadUnliftIO m) => Command -> InPlace -> [FilePath] -> OutputLocation -> (IO.Handle -> IO.Handle -> m ()) -> m ()
-    withHandles cmd inPlace inputFiles output action = do
-      case (cmd, inPlace, inputFiles) of
-        (_, InPlace, []) -> failWith "In-place mode specified, but no input files provided."
-        _ -> do
-          for_ inputFiles \inpFile -> do
-            exists <- UnliftIO.doesFileExist inpFile
-            when (not exists) do
-              failWith $ "Input file does not exist: " <> (Text.pack inpFile)
-          let withInputHandler :: (Either (FilePath, Handle) Handle -> m ()) -> m ()
-              withInputHandler = case inputFiles of
-                [] -> \go -> go (Right IO.stdin)
-                _ -> \go -> do
-                  for_ inputFiles \inputFile -> do
-                    IO.withFile inputFile IO.ReadMode \inputHandle -> go $ Left (inputFile, inputHandle)
-          let withOutputHandle :: Maybe FilePath -> ((UnliftIO.Handle -> m ()) -> m ())
-              withOutputHandle inputFile = case (inputFile, inPlace) of
-                (_, NotInPlace) -> case output of
-                  StdOut -> \go -> go IO.stdout
-                  OutputFile path -> \go -> do
-                    IO.withFile path IO.WriteMode (\outputHandle -> go outputHandle)
-                (Just inputFilePath, InPlace) -> \go -> do
-                  UnliftIO.withSystemTempFile "focus.txt" \tempPath tempHandle -> do
-                    r <- go tempHandle
-                    UnliftIO.renameFile tempPath inputFilePath
-                    pure r
-                _ -> \_ -> failWith "Cannot modify stdin in-place"
-          withInputHandler \input -> do
-            withOutputHandle (either (Just . fst) (const Nothing) input) \outputHandle ->
-              action (either snd id input) outputHandle
 
     getModifyFocus :: Text -> CliM (Focus ViewT Chunk Chunk)
     getModifyFocus selectorTxt = do
