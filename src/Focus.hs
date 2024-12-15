@@ -8,6 +8,8 @@ import Control.Applicative
 import Control.Monad.Reader (MonadReader (..), ReaderT (..), asks)
 import Control.Monad.State
 import Data.Bifunctor
+import Data.Map (Map)
+import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
@@ -20,6 +22,7 @@ import Focus.Exec qualified as Exec
 import Focus.Parser (parseSelector)
 import Focus.Prelude
 import Focus.Typechecker (typecheckModify)
+import Focus.Typechecker.Types qualified as Types
 import Focus.Types
 import Focus.Untyped (renderChunk)
 import Options.Applicative qualified as Opts
@@ -63,7 +66,7 @@ run = do
       )
   cliStateVar <- newTVarIO $ CliState mempty
   flip runReaderT (cliStateVar, opts) . unCli $ do
-    focus <- getModifyFocus script
+    focus <- getModifyFocus inputFiles script
     case (inputFiles, alignMode, inPlace) of
       ([], _, InPlace) -> do
         failWith "In-place mode specified, but no input files provided."
@@ -120,19 +123,29 @@ run = do
       liftIO $ TextIO.hPutStrLn UnliftIO.stderr msg
       liftIO $ System.exitFailure
 
-    getModifyFocus :: Text -> CliM (Focus ViewT Chunk Chunk)
-    getModifyFocus selectorTxt = do
+    getModifyFocus :: [FilePath] -> Text -> CliM (Focus ViewT Chunk Chunk)
+    getModifyFocus inputFiles selectorTxt = do
       addSource "<selector>" selectorTxt
       case parseSelector "<selector>" selectorTxt of
         Left errDiagnostic -> do
           failWithDiagnostic errDiagnostic
         Right selectorAst -> do
-          case typecheckModify selectorAst of
+          alignment <- asks alignMode
+          case typecheckModify (initVars alignment inputFiles) selectorAst of
             Left errReport -> failWithReport errReport
             Right warnings -> do
               printWarnings warnings
               compiledSel <- liftIO $ compileSelector ViewF selectorAst
               pure compiledSel
+    initVars :: Alignment -> [FilePath] -> Map Text (Typ s)
+    initVars alignment inputFiles = case alignment of
+      Aligned -> Map.fromList $ zipWith const ([(1 :: Int) ..] <&> (\i -> ("f" <> Text.pack (show i), Types.textType argPosition))) inputFiles
+      Unaligned -> mempty
+
+    argPosition :: D.Position
+    argPosition =
+      -- TODO: fix this
+      D.Position (0, 0) (0, 0) "unknown"
 
 printWarnings :: [WarningReport] -> CliM ()
 printWarnings reports = do

@@ -3,7 +3,6 @@
 module Focus.Typechecker
   ( typecheckSelector,
     typecheckModify,
-    typecheckView,
   )
 where
 
@@ -25,6 +24,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
+import Focus.Debug qualified as Debug
 import Focus.Prelude
 import Focus.Tagged (Tagged (..))
 import Focus.Typechecker.Types (renderType)
@@ -176,17 +176,13 @@ expectBinding pos name = do
     Just v -> pure v
     Nothing -> throwError $ UndeclaredBinding pos name
 
-typecheckModify :: UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
-typecheckModify selector = do
-  typecheckThing False $ do
+typecheckModify :: (forall s. M.Map Text (Typ s)) -> UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
+typecheckModify initialBindings selector = do
+  Debug.debugM "Init vars" initialBindings
+  typecheckThing initialBindings False $ do
     (inp, _out, _arity) <- unifySelector selector
     expectTextInput inp (tag selector)
     pure ()
-
-typecheckView :: UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
-typecheckView action = typecheckThing False $ do
-  (inp, _out, _arity) <- unifyAction action
-  expectTextInput inp (tag action)
 
 expectTextInput :: Typ s -> Diagnose.Position -> UnifyM s ()
 expectTextInput inp pos =
@@ -207,15 +203,15 @@ expectTextInput inp pos =
 --   --   _ -> throwError $ ExpectedSingularArity (tag expr) actionArity
 --   pure (selectorIn, exprOut, actionArity)
 
-typecheckSelector :: Bool -> UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
-typecheckSelector warnOnExpr sel = typecheckThing warnOnExpr do
+typecheckSelector :: (forall s. M.Map Text (Typ s)) -> Bool -> UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
+typecheckSelector initialBindings warnOnExpr sel = typecheckThing initialBindings warnOnExpr do
   (inp, _out, _arity) <- unifySelector sel
   expectTextInput inp (tag sel)
   pure ()
 
-typecheckThing :: Bool -> (forall s. UnifyME (TypecheckFailure s) s ()) -> Either TypeErrorReport [WarningReport]
-typecheckThing warnOnExpr m = do
-  (_, warnings) <- Unify.runSTBinding $ runExceptT $ flip evalStateT mempty $ mapStateT (withExceptT unificationErrorReport) . runWriterT . flip runReaderT (UnifyEnv warnOnExpr) $ void $ m
+typecheckThing :: (forall s. M.Map Text (Typ s)) -> Bool -> (forall s. UnifyME (TypecheckFailure s) s ()) -> Either TypeErrorReport [WarningReport]
+typecheckThing initialBindings warnOnExpr m = do
+  (_, warnings) <- Unify.runSTBinding $ runExceptT $ flip evalStateT initialBindings $ mapStateT (withExceptT unificationErrorReport) . runWriterT . flip runReaderT (UnifyEnv warnOnExpr) $ void $ m
   pure $ warningReport <$> warnings
 
 unifySelector :: UT.TaggedSelector -> UnifyM s (Typ s, Typ s, ReturnArity)
