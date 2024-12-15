@@ -171,7 +171,8 @@ before feeding the result back through the selector.
 
 ## TODO
 
-- [ ] Fix casting, e.g. `echo 1,2 | focus modify '[ splitOn "," ] | !(at 0) + !(at 1)' '%{.}'`
+- [ ] Option for choosing split delimiter via cli flag for better perf, flexibility, and better fzf integration (null terminator)
+- [ ] replace alignment splitting, and 'all at once' options with language features.
 - [ ] Allow defining custom selectors and actions in lua
   * Allow sharing these/caching them, etc.
 - [ ] Fix parsing ambiguity of division and regex
@@ -187,10 +188,9 @@ before feeding the result back through the selector.
 - [ ] Handle errors from shell commands better
 - [ ] shell 'if'
 - [ ] Fix annoying ansi codes coming from diagnose even on no-color mode.
-- [ ] Option for separating output with null bytes for better fzf integration
 - [ ] Pass env vars via an `%env` object.
-- [ ] Implement "paste"
 - [ ] Make 'at' work with records, including typechecking
+- [x] ~Implement "aligned" mode~
 - [x] ~Fix or warn on cases which trigger unsafePartsOf (e.g. changing number of elements in returned list)~
 - [x] ~Maybe remove distinction between selectors and actions, just have selectors, but allow wrapping in a "forward" or "backward" action.~
 - [x] ~Math, boolean ops~
@@ -205,3 +205,4 @@ before feeding the result back through the selector.
 - [x] ~Fix printing of "STVar" in type errors, e.g. `focus view '/one/ | ...'`~
 - [x] ~Flip columns around: `focus '[words] | at 1 ++ " " ++ at 0'`~
 - [x] ~Redesign record syntax~
+- [x] ~Fix casting~

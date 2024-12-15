@@ -22,9 +22,8 @@ divider() {
 
 run() {
   out_file="$1.out"
-  selector="$2"
-  arg="$3"
-  rendered_cmd="focus '$selector' '$arg'"
+  shift;
+  rendered_cmd="focus $*"
 
   divider "COMMAND" "$out_file"
   echo "$rendered_cmd" >> "$out_file"
@@ -37,7 +36,7 @@ run() {
   cat "$input_file" >> "$out_file"
 
   divider "OUTPUT" "$out_file"
-  { <"$input_file"  "$focus" --no-color "$selector" 2>&1 | ansifilter >> "$out_file"
+  { <"$input_file"  "$focus" --no-color "$@" 2>&1 | ansifilter >> "$out_file"
     exit_code="$?"
   } || true
 
@@ -175,3 +174,10 @@ echo '1,2' | run expression_in_selector '[ splitOn "," ] | (at 0) + (at 1) |= %.
 
 ## Records
 echo 'one 1 2 two three' | run record_view '{ numbers: /\d+/ , words: /[a-z]+/ }'
+
+## Align mode
+f1=$(mktemp)
+f2=$(mktemp)
+printf "one\ntwo" > "$f1"
+printf "1\n2" > "$f2"
+echo '' | run align_mode -a '"%f1: %f2"' "$f1" "$f2"

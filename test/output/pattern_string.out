@@ -1,5 +1,5 @@
 ===COMMAND===============================================================================
-focus 'pattern "The password is %password" | "password: %password"' ''
+focus pattern "The password is %password" | "password: %password"
 ===INPUT===============================================================================
 The password is swordfish
 ===OUTPUT===============================================================================

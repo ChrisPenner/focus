@@ -1,5 +1,5 @@
 Usage: focus [-o|--output OUTPUT-FILE] [--no-color] [-f|--full] [-i|--in-place] 
-             [-s|--silent] COMMAND [FILES...]
+             [-s|--silent] [-a|--align] SCRIPT [FILES...]
 
   Focus - cli utility for hacking and slashing data
 
@@ -12,6 +12,8 @@ Available options:
   -i,--in-place            Modify each input file in place rather than writing
                            to output
   -s,--silent              Suppress warnings
-  COMMAND                  Command to run
+  -a,--align               Align the input files line by line. Refer to them
+                           using %f1, %f2, etc.
+  SCRIPT                   Focus script to run
   FILES...                 Input files. If omitted, read from stdin
   -h,--help                Show this help text
