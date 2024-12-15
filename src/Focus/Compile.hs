@@ -350,6 +350,14 @@ compileSelectorG cmdF = \case
   Noop _pos -> case cmdF of
     ViewF -> pure $ ViewFocus \_f _chunk -> pure mempty
     ModifyF -> pure $ ModifyFocus \_f chunk -> pure chunk
+  Prompt _pos ->
+    pure $
+      liftSimple
+        ( \p -> do
+            liftIO $ Text.putStrLn (renderChunk p)
+            liftIO $ Text.getLine <&> TextChunk
+        )
+        pure
   where
     hasMatches :: (Focusable m) => CommandF cmd -> Focus cmd i o -> i -> m Bool
     hasMatches cmd foc i = do

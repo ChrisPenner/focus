@@ -171,6 +171,8 @@ before feeding the result back through the selector.
 
 ## TODO
 
+- [ ] Use different commands for different default setups.
+  E.g. 'align', 'view', 'in-place'
 - [ ] Option for choosing split delimiter via cli flag for better perf, flexibility, and better fzf integration (null terminator)
 - [ ] replace alignment splitting, and 'all at once' options with language features.
 - [ ] Allow defining custom selectors and actions in lua
@@ -190,7 +192,7 @@ before feeding the result back through the selector.
 - [ ] Fix annoying ansi codes coming from diagnose even on no-color mode.
 - [ ] Pass env vars via an `%env` object.
 - [ ] Make 'at' work with records, including typechecking
-- [ ] Add 'prompt' command to fill in results interactively.
+- [x] ~Add 'prompt' command to fill in results interactively.~
 - [x] ~Implement "aligned" mode~
 - [x] ~Fix or warn on cases which trigger unsafePartsOf (e.g. changing number of elements in returned list)~
 - [x] ~Maybe remove distinction between selectors and actions, just have selectors, but allow wrapping in a "forward" or "backward" action.~

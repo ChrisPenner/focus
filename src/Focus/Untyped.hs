@@ -115,6 +115,7 @@ data Selector a
   | Cast a
   | Id a
   | Noop a
+  | Prompt a
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Selector a) a where
@@ -143,6 +144,7 @@ instance Tagged (Selector a) a where
     Cast a -> a
     Id a -> a
     Noop a -> a
+    Prompt a -> a
   setTag p = \case
     Compose _ x -> Compose p x
     SplitFields _ x -> SplitFields p x
@@ -168,6 +170,7 @@ instance Tagged (Selector a) a where
     Cast _ -> Cast p
     Id _ -> Id p
     Noop _ -> Noop p
+    Prompt _ -> Prompt p
 
 data Chunk
   = TextChunk Text

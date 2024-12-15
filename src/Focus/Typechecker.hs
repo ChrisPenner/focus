@@ -287,6 +287,9 @@ unifySelectorG = \case
     inp <- freshVar
     out <- freshVar
     pure $ (inp, out, Exactly 0)
+  UT.Prompt pos -> do
+    inp <- freshVar
+    pure $ (inp, T.textType pos, Exactly 1)
   where
     compose ::
       (Typ s, Typ s, ReturnArity) ->

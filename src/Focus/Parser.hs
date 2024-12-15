@@ -374,6 +374,9 @@ simpleSelectorP = withPos do
       ( "pattern",
         do
           const <$> patternStringP '"' '"'
+      ),
+      ( "prompt",
+        pure Prompt
       )
     ]
 

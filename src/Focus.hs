@@ -92,8 +92,9 @@ run = do
                       UnliftIO.renameFile tempPath inputFile
                       pure ()
           withOutput \outputHandle -> do
-            focusMToCliM $ do
-              Exec.runModify focus chunkSize IO.stdin outputHandle
+            IO.withFile inputFile IO.ReadMode \inputHandle -> do
+              focusMToCliM $ do
+                Exec.runModify focus chunkSize inputHandle outputHandle
       (_, Aligned, InPlace) ->
         failWith "Cannot use both aligned and in-place modes together."
       (_, Aligned, _) -> do
