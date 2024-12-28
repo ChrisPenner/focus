@@ -70,6 +70,7 @@ dependencies:
 - deriving-compat
 - prettyprinter-ansi-terminal
 - scientific
+- resourcet
 - unification-fd
 - transformers
 

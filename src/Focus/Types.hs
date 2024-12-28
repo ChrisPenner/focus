@@ -53,6 +53,7 @@ import Focus.Prelude
 import Focus.Tagged (Tagged (..), tag_)
 import Focus.Untyped
 import Text.Read (readMaybe)
+import UnliftIO (MonadUnliftIO)
 import Prelude hiding (reads)
 
 data SelectorError
@@ -63,7 +64,7 @@ data SelectorError
   | MathError Pos Text
 
 newtype FocusM a = FocusM {runFocusM :: ReaderT FocusEnv IO a}
-  deriving newtype (Functor, Applicative, Monad, MonadIO, MonadFix, MonadReader FocusEnv)
+  deriving newtype (Functor, Applicative, Monad, MonadIO, MonadFix, MonadReader FocusEnv, MonadUnliftIO)
 
 data FocusOpts = FocusOpts
   { _handleErr :: SelectorError -> IO ()
@@ -77,7 +78,7 @@ data FocusEnv = FocusEnv
 makeLenses ''FocusEnv
 makeLenses ''FocusOpts
 
-type Focusable m = (MonadReader FocusEnv m, MonadIO m, MonadFix m)
+type Focusable m = (MonadReader FocusEnv m, MonadFix m)
 
 data Focus (cmd :: CommandT) i o where
   ViewFocus :: (forall m r. (Focusable m, Monoid r) => LensLike m i r o r) -> Focus 'ViewT i o

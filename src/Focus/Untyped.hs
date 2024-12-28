@@ -116,6 +116,7 @@ data Selector a
   | Id a
   | Noop a
   | Prompt a
+  | File a (Selector a {- filepath -}) (Selector a {- separator -})
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Selector a) a where
@@ -145,6 +146,8 @@ instance Tagged (Selector a) a where
     Id a -> a
     Noop a -> a
     Prompt a -> a
+    File a _ _ -> a
+
   setTag p = \case
     Compose _ x -> Compose p x
     SplitFields _ x -> SplitFields p x
@@ -171,6 +174,7 @@ instance Tagged (Selector a) a where
     Id _ -> Id p
     Noop _ -> Noop p
     Prompt _ -> Prompt p
+    File _ fp sep -> File p fp sep
 
 data Chunk
   = TextChunk Text
@@ -179,6 +183,7 @@ data Chunk
   | RegexMatchChunk Re.Match
   | JsonChunk Value
   | RecordChunk (Map Text Chunk)
+  | UnitChunk
   deriving (Eq, Ord)
 
 instance Show Chunk where
@@ -189,6 +194,7 @@ instance Show Chunk where
     RegexMatchChunk m -> show $ m ^.. Re.matchAndGroups
     JsonChunk v -> BSC.unpack $ Aeson.encode v
     RecordChunk m -> show m
+    UnitChunk -> "null"
 
 renderChunk :: Chunk -> Text
 renderChunk = \case
@@ -201,6 +207,7 @@ renderChunk = \case
   JsonChunk v -> Text.pack $ BSC.unpack $ Aeson.encode v
   RecordChunk fields ->
     "{" <> Text.intercalate ", " (Map.toList fields <&> \(k, v) -> k <> ": " <> renderChunk v) <> "}"
+  UnitChunk -> "null"
 
 data ChunkType
   = TextType

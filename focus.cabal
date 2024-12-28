@@ -90,6 +90,7 @@ library
     , pcre-light
     , prettyprinter-ansi-terminal
     , recursion-schemes
+    , resourcet
     , scientific
     , semialign
     , some
@@ -154,6 +155,7 @@ executable focus
     , pcre-light
     , prettyprinter-ansi-terminal
     , recursion-schemes
+    , resourcet
     , scientific
     , semialign
     , some

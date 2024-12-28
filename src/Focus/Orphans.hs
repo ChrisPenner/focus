@@ -14,6 +14,7 @@ import Error.Diagnose qualified as D
 import Error.Diagnose.Compat.Megaparsec (HasHints (..))
 import GHC.Generics (Generic)
 import Text.Regex.PCRE.Light.Base qualified as RE
+import UnliftIO (MonadUnliftIO (..))
 
 instance HasHints Void a where
   hints e = case e of {}

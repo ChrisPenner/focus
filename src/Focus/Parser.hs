@@ -377,6 +377,9 @@ simpleSelectorP = withPos do
       ),
       ( "prompt",
         pure Prompt
+      ),
+      ( "file",
+        pure File
       )
     ]
 
