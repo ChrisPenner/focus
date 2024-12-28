@@ -171,6 +171,9 @@ before feeding the result back through the selector.
 
 ## TODO
 
+- [ ] Set default input mode to a single 'null', but allow stdin to be passed as a file via '-'
+- [ ] Add mechanism for warning when files may be written to.
+- [ ] Determine whether there's a semantics that works for using records as the selector for a modify; or maybe using bindings as a modify target.
 - [ ] Use different commands for different default setups.
   E.g. 'align', 'view', 'in-place'
 - [ ] Option for choosing split delimiter via cli flag for better perf, flexibility, and better fzf integration (null terminator)
