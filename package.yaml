@@ -47,6 +47,7 @@ dependencies:
 - base >= 4.7 && < 5
 - aeson
 - containers
+- filepath
 - generic-lens
 - lens
 - lens-action
@@ -73,6 +74,7 @@ dependencies:
 - resourcet
 - unification-fd
 - transformers
+- unix
 
 ghc-options:
 - -Wall

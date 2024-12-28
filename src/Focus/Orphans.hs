@@ -4,17 +4,19 @@
 
 module Focus.Orphans () where
 
-import Control.Monad.Coroutine (Coroutine)
+import Control.Monad.Coroutine (Coroutine (..))
 import Control.Monad.Coroutine qualified as Co
 import Control.Monad.Fix
 import Control.Monad.Reader
+import Control.Monad.Trans.Resource (MonadResource (..))
+import Control.Monad.Trans.Writer.CPS
 import Data.Functor ((<&>))
 import Data.Void (Void)
 import Error.Diagnose qualified as D
 import Error.Diagnose.Compat.Megaparsec (HasHints (..))
 import GHC.Generics (Generic)
 import Text.Regex.PCRE.Light.Base qualified as RE
-import UnliftIO (MonadUnliftIO (..))
+import UnliftIO.Resource (ResourceT)
 
 instance HasHints Void a where
   hints e = case e of {}
@@ -35,3 +37,12 @@ instance (MonadFix m, Functor f) => MonadFix (Coroutine f m) where
   mfix f = Co.Coroutine $ mfix $ \case
     Left sm -> pure . Left $ sm <&> \co -> co >>= f
     Right r -> Co.resume (f r)
+
+instance (MonadResource m, Functor f) => MonadResource (Coroutine f m) where
+  liftResourceT :: ResourceT IO a -> Coroutine f m a
+  liftResourceT rt = Coroutine $ do
+    x <- liftResourceT $ rt
+    pure $ Right x
+
+instance (MonadResource m) => MonadResource (WriterT w m) where
+  liftResourceT m = lift $ liftResourceT m

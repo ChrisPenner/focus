@@ -22,7 +22,6 @@ import Control.Monad.Coroutine.SuspensionFunctors qualified as Co
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Trans.Maybe (MaybeT (..))
-import Control.Monad.Trans.Resource (MonadResource (..))
 import Data.Aeson qualified as Aeson
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NE
@@ -41,14 +40,14 @@ import Error.Diagnose qualified as D
 import Focus.Command (CommandF (..), CommandT (..), IsCmd)
 import Focus.Debug qualified as Debug
 import Focus.Focus
+import Focus.IO qualified as IO
 import Focus.Prelude
 import Focus.Tagged (Tagged (..))
 import Focus.Types
 import Focus.Untyped
 import System.Exit (ExitCode (..))
 import UnliftIO qualified
-import UnliftIO qualified as IO
-import UnliftIO.Directory qualified as IO
+import UnliftIO.Directory qualified as UnliftIO
 import UnliftIO.Process qualified as UnliftIO
 import UnliftIO.STM
 import Prelude hiding (reads)
@@ -361,22 +360,21 @@ compileSelectorG cmdF = \case
             liftIO $ Text.getLine <&> TextChunk
         )
         pure
-  File _pos fileSelector sepSelector -> do
+  File _pos fileSelector -> do
+    let sep :: Text
+        sep = "\n"
     fp <- compileSelectorG ViewF fileSelector
-    sep <- compileSelectorG ViewF sepSelector
     pure $ case cmdF of
       ViewF -> do
         ViewFocus $ \f inp -> do
           inp & getViewFocus fp \path -> do
-            inp & getViewFocus sep \s -> do
-              let foc = getViewFocus (streamFile (textChunk s) (Text.unpack $ textChunk path) cmdF)
-              foc f ()
+            let foc = getViewFocus (streamFile sep (Text.unpack $ textChunk path) cmdF)
+            foc f ()
       ModifyF -> do
         ModifyFocus $ \f inp -> do
           inp & getViewFocus fp \path -> do
-            inp & getViewFocus sep \s -> do
-              let foc = getModifyFocus (streamFile (textChunk s) (Text.unpack $ textChunk path) cmdF)
-              foc f ()
+            let foc = getModifyFocus (streamFile sep (Text.unpack $ textChunk path) cmdF)
+            foc f ()
           pure UnitChunk
   where
     hasMatches :: (Focusable m) => CommandF cmd -> Focus cmd i o -> i -> m Bool
@@ -419,10 +417,10 @@ compileSelectorG cmdF = \case
 streamFile :: Text -> FilePath -> CommandF cmd -> Focus cmd () Chunk
 streamFile _sep input = \case
   ViewF -> ViewFocus $ \f () -> do
-    liftResourceT $ IO.withFile input IO.ReadMode \h -> do
-      liftIO $ IO.hSetBuffering h IO.LineBuffering
+    IO.withFile input UnliftIO.ReadMode \h -> do
+      liftIO $ UnliftIO.hSetBuffering h UnliftIO.LineBuffering
       let go = do
-            done <- liftIO $ IO.hIsEOF h
+            done <- liftIO $ UnliftIO.hIsEOF h
             if done
               then pure mempty
               else do
@@ -431,11 +429,11 @@ streamFile _sep input = \case
                 (result <>) <$> go
       go
   ModifyF -> ModifyFocus $ \f () -> do
-    liftResourceT $ IO.withFile input IO.ReadMode \h -> do
-      UnliftIO.withSystemTempFile "focus.txt" \tempPath tempHandle -> do
-        liftIO $ IO.hSetBuffering h IO.LineBuffering
+    IO.withFile input UnliftIO.ReadMode \h -> do
+      IO.withSystemTempFile "focus.txt" \tempPath tempHandle -> do
+        UnliftIO.hSetBuffering h UnliftIO.LineBuffering
         let go = do
-              done <- liftIO $ IO.hIsEOF h
+              done <- UnliftIO.hIsEOF h
               if done
                 then pure ()
                 else do
@@ -444,7 +442,7 @@ streamFile _sep input = \case
                   liftIO $ Text.hPutStrLn tempHandle result
                   go
         go
-        IO.renameFile tempPath input
+        UnliftIO.renameFile tempPath input
 
 -- | Get the first result of a view, or return the original input if no output is
 -- produced.

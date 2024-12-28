@@ -36,6 +36,7 @@ import Control.Monad.Fix (MonadFix (..))
 import Control.Monad.RWS.CPS (MonadReader (..))
 import Control.Monad.Reader (ReaderT)
 import Control.Monad.State.Lazy
+import Control.Monad.Trans.Resource (ResourceT)
 import Control.Unification (UTerm, Unifiable)
 import Control.Unification.STVar qualified as Unify
 import Control.Unification.Types (Unifiable (..))
@@ -54,6 +55,7 @@ import Focus.Tagged (Tagged (..), tag_)
 import Focus.Untyped
 import Text.Read (readMaybe)
 import UnliftIO (MonadUnliftIO)
+import UnliftIO.Resource (MonadResource)
 import Prelude hiding (reads)
 
 data SelectorError
@@ -63,8 +65,8 @@ data SelectorError
   | CastError Pos ChunkType {- destination type -} Chunk {- source chunk -}
   | MathError Pos Text
 
-newtype FocusM a = FocusM {runFocusM :: ReaderT FocusEnv IO a}
-  deriving newtype (Functor, Applicative, Monad, MonadIO, MonadFix, MonadReader FocusEnv, MonadUnliftIO)
+newtype FocusM a = FocusM {runFocusM :: ReaderT FocusEnv (ResourceT IO) a}
+  deriving newtype (Functor, Applicative, Monad, MonadIO, MonadFix, MonadReader FocusEnv, MonadUnliftIO, MonadResource)
 
 data FocusOpts = FocusOpts
   { _handleErr :: SelectorError -> IO ()
@@ -78,7 +80,7 @@ data FocusEnv = FocusEnv
 makeLenses ''FocusEnv
 makeLenses ''FocusOpts
 
-type Focusable m = (MonadReader FocusEnv m, MonadFix m)
+type Focusable m = (MonadReader FocusEnv m, MonadFix m, MonadIO m, MonadResource m)
 
 data Focus (cmd :: CommandT) i o where
   ViewFocus :: (forall m r. (Focusable m, Monoid r) => LensLike m i r o r) -> Focus 'ViewT i o

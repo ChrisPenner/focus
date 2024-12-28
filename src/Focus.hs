@@ -7,6 +7,7 @@ module Focus (run) where
 import Control.Applicative
 import Control.Monad.Reader (MonadReader (..), ReaderT (..), asks)
 import Control.Monad.State
+import Control.Monad.Trans.Resource (runResourceT)
 import Data.Bifunctor
 import Data.Map (Map)
 import Data.Map qualified as Map
@@ -164,7 +165,7 @@ printReport report = do
 focusMToCliM :: FocusM a -> CliM a
 focusMToCliM m = do
   env <- mkEnv
-  liftIO . flip runReaderT env . runFocusM $ m
+  liftIO . runResourceT . flip runReaderT env . runFocusM $ m
   where
     mkEnv :: CliM FocusEnv
     mkEnv = do

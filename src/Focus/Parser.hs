@@ -379,7 +379,9 @@ simpleSelectorP = withPos do
         pure Prompt
       ),
       ( "file",
-        pure File
+        do
+          filePathSel <- selectorP
+          pure $ \pos -> File pos filePathSel
       )
     ]
 
