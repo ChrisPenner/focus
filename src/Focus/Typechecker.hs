@@ -290,6 +290,11 @@ unifySelectorG = \case
   UT.Prompt pos -> do
     inp <- freshVar
     pure $ (inp, T.textType pos, Exactly 1)
+  UT.File pos fileSelector -> do
+    (inp, fpOut, _arity) <- unifySelectorG fileSelector
+    _ <- liftUnify $ Unify.unify fpOut (T.textType pos)
+    out <- freshVar
+    pure $ (inp, out, Any)
   where
     compose ::
       (Typ s, Typ s, ReturnArity) ->
