@@ -291,7 +291,7 @@ unifySelectorG = \case
     inp <- freshVar
     pure $ (inp, T.textType pos, Exactly 1)
   UT.File pos fileSelector -> do
-    (inp, fpOut, _arity) <- unifySelectorG fileSelector
+    (inp, fpOut, _arity) <- asView $ unifySelectorG fileSelector
     _ <- liftUnify $ Unify.unify fpOut (T.textType pos)
     out <- freshVar
     pure $ (inp, out, Any)
@@ -334,6 +334,9 @@ zipArities = \cases
   Affine Exactly {} -> Affine
   Exactly {} Affine -> Affine
   (Exactly n) (Exactly m) -> Exactly (min n m)
+
+asView :: (MonadReader UnifyEnv m) => m r -> m r
+asView = local \e -> e {inPathSelector = False}
 
 unifyExpr :: UT.TaggedExpr -> UnifyME (TypecheckFailure s) s (Typ s, Typ s, ReturnArity)
 unifyExpr expr = do
