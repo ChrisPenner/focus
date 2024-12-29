@@ -14,7 +14,7 @@ module Focus.Compile
   )
 where
 
-import Control.Lens hiding (Reversed)
+import Control.Lens hiding (Empty, Reversed)
 import Control.Lens.Regex.Text qualified as RE
 import Control.Monad.Coroutine (Coroutine)
 import Control.Monad.Coroutine qualified as Co
@@ -22,6 +22,7 @@ import Control.Monad.Coroutine.SuspensionFunctors qualified as Co
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Trans.Maybe (MaybeT (..))
+import Control.Monad.Trans.Writer.CPS qualified as Writer
 import Data.Aeson qualified as Aeson
 import Data.Align
 import Data.List qualified as List
@@ -29,6 +30,7 @@ import Data.List.NonEmpty qualified as NE
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Monoid (First (First, getFirst))
+import Data.Monoid qualified as Monoid
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -223,6 +225,7 @@ compileExpr =
                                 else lift $ f focChunk
                           )
       pure $ ViewFocus go
+    Select _pos branches -> condBranches (toList branches)
   where
     compileTemplateString :: (Focusable m, Monoid r) => Chunk -> [Either (Focus ViewT Chunk Chunk) Text] -> (Chunk -> m r) -> m r
     compileTemplateString inp compiledFocs f = do
@@ -347,9 +350,7 @@ compileSelectorG cmdF = \case
         bwd chunk = pure $ TextChunk . TL.toStrict . TL.decodeUtf8 $ Aeson.encode (jsonChunk chunk)
     pure $ liftSimple fwd bwd
   Cast _pos -> pure $ focusId
-  Noop _pos -> case cmdF of
-    ViewF -> pure $ ViewFocus \_f _chunk -> pure mempty
-    ModifyF -> pure $ ModifyFocus \_f chunk -> pure chunk
+  Empty _pos -> pure $ focusEmpty
   Prompt _pos ->
     pure $
       liftSimple
@@ -563,3 +564,26 @@ emitInterleaved fields = do
                     Just ks -> (result <>) <$> (loop ks)
         loop corts
   pure $ ViewFocus foc
+
+condBranches :: [(Selector Pos, Selector Pos)] -> IO (Focus ViewT Chunk Chunk)
+condBranches branches = do
+  focs <- branches & traversed . both %%~ compileSelectorG ViewF
+  pure $ ViewFocus \f inp -> condBranchesRec f inp focs
+
+condBranchesRec :: forall m r. (Focusable m, Monoid r) => (Chunk -> m r) -> Chunk -> [(Focus ViewT Chunk Chunk, Focus ViewT Chunk Chunk)] -> m r
+condBranchesRec f inp =
+  \case
+    [] -> pure mempty
+    (condFoc, bodyFoc) : rest -> do
+      (r, Monoid.Any committed) <-
+        inp
+          & getViewFocus
+            condFoc
+            ( \condChunk -> do
+                Writer.tell (Monoid.Any True)
+                lift $ getViewFocus bodyFoc f condChunk
+            )
+          & Writer.runWriterT
+      if committed
+        then pure r
+        else condBranchesRec f inp rest

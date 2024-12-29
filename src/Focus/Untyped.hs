@@ -32,7 +32,7 @@ module Focus.Untyped
   )
 where
 
-import Control.Lens hiding (Reversed)
+import Control.Lens hiding (Empty, Reversed)
 import Control.Lens.Regex.Text qualified as Re
 import Data.Aeson (Value)
 import Data.Aeson qualified as Aeson
@@ -125,7 +125,7 @@ data Selector p
   | ParseJSON p
   | Cast p
   | Id p
-  | Noop p
+  | Empty p
   | Prompt p
   | File p (Selector p {- filepath -})
   | DebugTrace p (Selector p)
@@ -156,7 +156,7 @@ instance Tagged (Selector p) p where
     ParseJSON p -> p
     Cast p -> p
     Id p -> p
-    Noop p -> p
+    Empty p -> p
     Prompt p -> p
     File p _ -> p
     DebugTrace p _ -> p
@@ -185,7 +185,7 @@ instance Tagged (Selector p) p where
     ParseJSON _ -> ParseJSON p
     Cast _ -> Cast p
     Id _ -> Id p
-    Noop _ -> Noop p
+    Empty _ -> Empty p
     Prompt _ -> Prompt p
     File _ fp -> File p fp
     DebugTrace _ x -> DebugTrace p x
@@ -255,6 +255,7 @@ data Expr p
   | Index p
   | Uniq p (Selector p)
   | Pattern p (Pattern p)
+  | Select p (NonEmpty (Selector p, Selector p))
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Expr p) p where
@@ -275,6 +276,7 @@ instance Tagged (Expr p) p where
     Pattern p _ -> p
     Index p -> p
     Uniq p _ -> p
+    Select p _ -> p
   setTag p = \case
     Modify _ x y -> Modify p x y
     Binding _ x -> Binding p x
@@ -292,6 +294,7 @@ instance Tagged (Expr p) p where
     Pattern _ pat -> Pattern p pat
     Index _ -> Index p
     Uniq _ x -> Uniq p x
+    Select _ x -> Select p x
 
 data NumberT
   = IntNumber Int

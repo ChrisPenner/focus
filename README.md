@@ -171,6 +171,13 @@ before feeding the result back through the selector.
 
 ## TODO
 
+- [ ] `||` for concat (and logical or), `&&` for zippy logical and, (maybe it returns an n'ary tuple?)
+- [ ] I'm thinking it may be clearer to actually require '%{}' inside pattern binding and template strings. Maybe just use bare '{}'?'
+- [ ] Most selectors probably shouldn't return their input, instead the caller can wrap them in 'filter' if that was the intention.
+    - e.g. pattern selectors.
+- [ ] Be more consistent in using syntax to denote special syntactic constructs.
+      - I.e. pattern strings shouldn't look like regular strings, maybe they start with a '%' or '=' or something
+- [ ] Add case/select statements
 - [ ] Make pattern matching more consistent, i.e. are patterns modifiable?
   - [ ] probably need to make 'contains' bind patterns, and use "^...$" in pattern strings 
 - [ ] Add mechanism for warning when files may be written to.

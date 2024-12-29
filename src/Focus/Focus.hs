@@ -19,6 +19,7 @@ module Focus.Focus
     listOfFocus,
     (>.>),
     focusId,
+    focusEmpty,
     focusTo,
   )
 where
@@ -40,6 +41,11 @@ import Prelude hiding (reads)
 
 focusId :: (IsCmd cmd) => Focus cmd i i
 focusId = Cat.id
+
+focusEmpty :: forall cmd i o. (IsCmd cmd) => Focus cmd i o
+focusEmpty = case getCmd @cmd of
+  ViewF -> ViewFocus $ \_ _ -> pure mempty
+  ModifyF -> ModifyFocus $ \_ inp -> pure inp
 
 getViewFocus :: Focus 'ViewT i o -> (forall m r. (Focusable m, Monoid r) => (o -> m r) -> i -> m r)
 getViewFocus (ViewFocus f) = f

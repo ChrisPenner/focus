@@ -138,7 +138,7 @@ listOfP = withPos do
   M.between (lexeme $ M.char '[') (lexeme $ M.char ']') $ do
     M.sepBy selectorsP (lexeme $ M.char ',')
       <&> \selectors pos ->
-        ListOf pos (foldl' (\l r -> Action pos $ Comma pos l r) (Noop pos) selectors)
+        ListOf pos (foldl' (\l r -> Action pos $ Comma pos l r) (Empty pos) selectors)
 
 shellP :: P (Expr Pos)
 shellP = withPos do
@@ -368,6 +368,14 @@ simpleSelectorP = withPos do
         do
           labelSel <- selectorP
           pure $ \pos -> DebugTrace pos labelSel
+      ),
+      ( "_",
+        do
+          pure Id
+      ),
+      ( "empty",
+        do
+          pure Empty
       )
     ]
 
@@ -422,6 +430,17 @@ simpleExprP = withPos $ do
         do
           pattern <- patternP
           pure $ \pos -> Pattern pos pattern
+      ),
+      ( "select",
+        do
+          branches <- M.between (lexeme $ M.char '{') (lexeme $ M.char '}') $ do
+            flip sepBy1 (lexeme $ M.char ',') $ do
+              cond <- lexeme selectorP
+              _ <- lexeme $ M.string "->"
+              body <- lexeme selectorP
+              pure (cond, body)
+
+          pure $ \pos -> Select pos branches
       )
     ]
 
@@ -439,3 +458,6 @@ patternP = withPos do
     [ lexeme bindingSymbol <&> \bs pos -> BindingPattern pos bs,
       patternStringP '"' '"' <&> \pat _pos -> pat
     ]
+
+sepBy1 :: P a -> P sep -> P (NE.NonEmpty a)
+sepBy1 p sep = NE.fromList <$> M.sepBy1 p sep

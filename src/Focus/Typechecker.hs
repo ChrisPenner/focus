@@ -5,6 +5,7 @@ module Focus.Typechecker
   )
 where
 
+import Control.Arrow ((>>>))
 import Control.Lens
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT, withExceptT)
 import Control.Monad.Reader (MonadReader (..), ReaderT (..), asks)
@@ -266,7 +267,7 @@ unifySelectorG = \case
   UT.Cast pos -> do
     inp <- freshVar
     pure $ (inp, T.castableType pos inp, Exactly 1)
-  UT.Noop _pos -> do
+  UT.Empty _pos -> do
     inp <- freshVar
     out <- freshVar
     pure $ (inp, out, Exactly 0)
@@ -413,6 +414,15 @@ unifyExpr expr = do
     UT.Uniq _pos inner -> do
       (inp, out, _arity) <- unifySelector inner
       pure $ (inp, out, Any)
+    UT.Select _pos branches -> do
+      -- Each branch cond/body can have different types as long as the cond input and body
+      -- output match with all other branches.
+      branchTypes <- for branches \(cond, body) -> do
+        (condI, condO, condArity) <- unifySelectorG cond
+        (bodyI, bodyO, bodyArity) <- unifySelectorG body
+        _ <- liftUnify $ Unify.unify condO bodyI
+        pure (condI, bodyO, composeArities (condArity NE.:| [bodyArity]))
+      zipTypeSigs (toList branchTypes)
   where
     exprWarning :: UnifyM ()
     exprWarning = do
@@ -434,17 +444,18 @@ unifyPattern = \case
     for pats unifyPattern >>= zipTypeSigs
 
 -- | Unify many (input, output, arity) asserting that all the inputs unify, all the outputs unify, and the arities are combined
-zipTypeSigs :: [(Typ, Typ, ReturnArity)] -> UnifyM (Typ, Typ, ReturnArity)
-zipTypeSigs = \case
-  [] -> do
-    t <- freshVar
-    pure (t, t, Any)
-  [x] -> pure x
-  ((i, o, arity) : xs) -> do
-    (i', o', arity') <- zipTypeSigs xs
-    newI <- liftUnify $ Unify.unify i i'
-    newO <- liftUnify $ Unify.unify o o'
-    pure (newI, newO, zipArities arity arity')
+zipTypeSigs :: (Foldable f) => f (Typ, Typ, ReturnArity) -> UnifyM (Typ, Typ, ReturnArity)
+zipTypeSigs =
+  toList >>> \case
+    [] -> do
+      t <- freshVar
+      pure (t, t, Any)
+    [x] -> pure x
+    ((i, o, arity) : xs) -> do
+      (i', o', arity') <- zipTypeSigs xs
+      newI <- liftUnify $ Unify.unify i i'
+      newO <- liftUnify $ Unify.unify o o'
+      pure (newI, newO, zipArities arity arity')
 
 unifyTemplateString :: Typ -> Diagnose.Position -> TemplateString D.Position -> UnifyM (Typ, Typ, ReturnArity)
 unifyTemplateString inputTyp pos (TemplateString bindings) = do
