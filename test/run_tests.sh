@@ -109,8 +109,8 @@ echo "The password is swordfish" | run binding_usage '/The password is (?<passwo
 echo "The password is swordfish" | run binding_usage_in_template '/The password is (?<password>\w+)/ | "password: %{ %password | #{rev}}!"' '-'
 
 ## Pattern strings
-echo "The password is swordfish" | run pattern_string 'pattern "The password is %password" | "password: %password"' '-'
-echo '[http://google.ca](My Link)' | run pattern_modify 'pattern "[%descr](%link)" |= "[%link](%descr)"' '-'
+echo "The password is swordfish" | run pattern_string '=> "The password is %password" | "password: %password"' '-'
+echo '[http://google.ca](My Link)' | run pattern_modify '=> "[%descr](%link)" |= "[%link](%descr)"' '-'
 
 ## String Concatenation
 echo "one,two,three" | run string_concat_view '[splitOn ","] | concat %.' '-'
@@ -122,7 +122,7 @@ printf "one,two,three\n1,2,3" | run string_append_view '[splitOn ","] | at 0 ++ 
 echo "1 2 3 one two three" | run intersperse_view 'intersperse /\d+/ /\w+/ (splitOn " ")' '-'
 
 ## Binding assignment
-echo 'one,two,three' | run binding_assignment_view 'splitOn "," | -> x | concat ["*", %x, "*"]' '-'
+echo 'one,two,three' | run binding_assignment_view 'splitOn "," | => x | concat ["*", %x, "*"]' '-'
 
 ## Count
 echo 'one,two,three' | run count_view 'count (splitOn ",")' '-'

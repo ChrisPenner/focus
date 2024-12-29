@@ -1,8 +1,16 @@
 ===COMMAND===============================================================================
-focus pattern "[%descr](%link)" |= "[%link](%descr)" -
+focus => "[%descr](%link)" |= "[%link](%descr)" -
 ===INPUT===============================================================================
 [http://google.ca](My Link)
 ===OUTPUT===============================================================================
-[My Link](http://google.ca)
+[error]: Expression found in selector
+     ╭──▶ <selector>@1:1-1:22
+     │
+   1 │ => "[%descr](%link)" |= "[%link](%descr)"
+     • ┬──────────────────── 
+     • ╰╸ This expression can't be used in the selector on the left-hand side of a '|='
+     •
+     │ Note: Certain expressions can't be sensibly 'reversed' as required by the use of '|='
+─────╯
 ===EXIT CODE===============================================================================
 0

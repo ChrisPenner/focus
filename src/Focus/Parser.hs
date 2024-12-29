@@ -418,7 +418,7 @@ simpleExprP = withPos $ do
         do
           flip Uniq <$> selectorP
       ),
-      ( "->",
+      ( "=>",
         do
           pattern <- patternP
           pure $ \pos -> Pattern pos pattern
