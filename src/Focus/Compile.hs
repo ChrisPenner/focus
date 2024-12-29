@@ -23,6 +23,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Trans.Maybe (MaybeT (..))
 import Data.Aeson qualified as Aeson
+import Data.Align
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NE
 import Data.Map (Map)
@@ -36,6 +37,7 @@ import Data.Text.Encoding qualified as Text
 import Data.Text.IO qualified as Text
 import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
+import Data.These
 import Error.Diagnose qualified as D
 import Focus.Command (CommandF (..), CommandT (..), IsCmd)
 import Focus.Debug qualified as Debug
@@ -194,13 +196,8 @@ compileExpr =
       pure $
         listOfFocus s >.> liftTrav \f xs -> do
           for (cycle xs) f
-    BindingAssignment _pos sel name -> do
-      s <- compileSelectorG ViewF sel
-      pure $ ViewFocus \f inp -> do
-        let inner = getViewFocus s
-        inp
-          & inner %%~ \foc -> do
-            local (over focusBindings (Map.insert name foc)) $ f inp
+    Pattern _pos pat -> do
+      compilePatternG pat
     Index _pos -> do
       counter <- newTVarIO 0
       pure $ ViewFocus \f _inp -> do
@@ -404,24 +401,52 @@ compileSelectorG cmdF = \case
       let (before, after) = splitAt (len - n) xs
       (<> after) <$> traverse f before
 
-    viewRegex :: (HasCallStack) => RE.Regex -> (Traversal' RE.Match Text) -> Focus 'ViewT Chunk Chunk
-    viewRegex pat trav = ViewFocus \f chunk -> do
-      let txt = textChunk chunk
-      txt & foldMapMOf (RE.regexing pat) \match -> do
-        let groups =
-              match ^. RE.namedGroups
-                <&> TextChunk
-        local (over focusBindings (Map.union groups)) $ foldMapMOf trav (f . TextChunk) match
-
     modifyRegex :: RE.Regex -> (Traversal' RE.Match Text) -> Focus 'ModifyT Chunk Chunk
     modifyRegex pat trav = ModifyFocus \f chunk -> do
       let txt = textChunk chunk
       TextChunk <$> forOf (RE.regexing pat) txt \match -> do
         let groups =
               match ^. RE.namedGroups
+                & Map.mapKeys BindingSymbol
                 <&> TextChunk
         Debug.debugM "Match Groups" groups
         local (over focusBindings (Map.union groups)) $ forOf trav match (fmap textChunk . f . TextChunk)
+
+viewRegex :: (HasCallStack) => RE.Regex -> (Traversal' RE.Match Text) -> Focus 'ViewT Chunk Chunk
+viewRegex pat trav = ViewFocus \f chunk -> do
+  let txt = textChunk chunk
+  txt & foldMapMOf (RE.regexing pat) \match -> do
+    let groups =
+          match ^. RE.namedGroups
+            & Map.mapKeys BindingSymbol
+            <&> TextChunk
+    local (over focusBindings (Map.union groups)) $ foldMapMOf trav (f . TextChunk) match
+
+compilePatternG :: Pattern Pos -> IO (Focus ViewT Chunk Chunk)
+compilePatternG = \case
+  BindingPattern _p bs -> do
+    pure $ ViewFocus \f inp -> do
+      local (over focusBindings (Map.insert bs inp)) $ f inp
+  PatternString _p _bd pat -> do
+    pure $ viewRegex pat RE.match
+  PatternList _p pats -> do
+    patFocs <- for pats compilePatternG
+    pure $ ViewFocus \f inp -> do
+      case sequenceA (alignWith zipper patFocs (listChunk inp)) of
+        Left () -> pure mempty
+        Right matched -> do
+          -- Bind all the patterns, then run the continuation inside the bound scope.
+          bindPatterns (f inp) matched
+    where
+      -- Mismatched patterns just fail with the original input.
+      zipper (This {}) = Left ()
+      zipper (That {}) = Left ()
+      zipper (These pat chunk) = Right (pat, chunk)
+      bindPatterns m = \case
+        [] -> m
+        (pat, chunk) : rest -> do
+          chunk & getViewFocus pat \_ -> do
+            bindPatterns m rest
 
 streamFile :: Text -> FilePath -> CommandF cmd -> Focus cmd () Chunk
 streamFile _sep input = \case
@@ -490,9 +515,9 @@ mayErr err = do
 
 resolveBinding :: (Focusable m) => Pos -> Chunk -> BindingName -> m Chunk
 resolveBinding pos input = \case
-  BindingName name -> do
+  BindingName bs@(BindingSymbol name) -> do
     bindings <- view focusBindings
-    case Map.lookup name bindings of
+    case Map.lookup bs bindings of
       Just chunk -> pure chunk
       Nothing -> do
         Debug.debugM "Bindings before err" bindings
@@ -500,7 +525,7 @@ resolveBinding pos input = \case
         pure $ input
   InputBinding -> pure input
 
-compileRecord :: (Map Text (Selector Pos)) -> IO (Focus ViewT Chunk Chunk)
+compileRecord :: (Map BindingSymbol (Selector Pos)) -> IO (Focus ViewT Chunk Chunk)
 compileRecord fields = do
   fv <- emitInterleaved fields
   pure $ ViewFocus \f chunk -> do

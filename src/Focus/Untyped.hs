@@ -8,9 +8,10 @@ module Focus.Untyped
     TaggedSelector,
     ShellMode (..),
     BindingName (..),
+    BindingSymbol (..),
     TemplateString (..),
     PatternElem (..),
-    PatternString (..),
+    Pattern (..),
     Bindings,
     BindingDeclarations,
     Chunk (..),
@@ -48,26 +49,22 @@ import Text.Regex.PCRE.Heavy (Regex)
 
 type Pos = D.Position
 
-data VoidF a
+data VoidF p
   deriving stock (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-absurdF :: VoidF a -> b
+absurdF :: VoidF p -> b
 absurdF = \case {}
 
 type TaggedSelector = Selector Pos
 
-data BindingName
-  = BindingName Text
-  | InputBinding
+-- | A non-special binding symbol, i.e. not '%.', just a regular name like 'foo'
+newtype BindingSymbol = BindingSymbol {bsText :: Text}
   deriving stock (Show, Eq, Ord)
 
-data PatternElem a
-  = PatternText a Text
-  | PatternBinding a Text
-  deriving stock (Show, Functor, Foldable, Traversable)
-
-newtype PatternString a = PatternString [PatternElem a]
-  deriving stock (Show, Functor, Foldable, Traversable)
+data BindingName
+  = BindingName BindingSymbol
+  | InputBinding
+  deriving stock (Show, Eq, Ord)
 
 newtype TemplateString a = TemplateString [Either (Selector a) Text]
   deriving stock (Show)
@@ -81,74 +78,88 @@ instance Foldable TemplateString where
 instance Traversable TemplateString where
   traverse f (TemplateString ps) = TemplateString <$> traverse (bitraverse (traverse f) pure) ps
 
-type Bindings = Map Text Chunk
+type Bindings = Map BindingSymbol Chunk
 
-type BindingDeclarations = Map Text (Pos, ChunkType)
+type BindingDeclarations = Map BindingSymbol (Pos, ChunkType)
 
 data ShellMode
   = Normal
   | NullStdin
   deriving stock (Show)
 
-data Selector a
-  = Compose a (NonEmpty (Selector a))
-  | SplitFields a Text {- delimeter -}
-  | SplitLines a
-  | Chars a
-  | SplitWords a
-  | Regex a Regex BindingDeclarations
-  | RegexMatches a
-  | RegexGroups a Regex BindingDeclarations
-  | ListOf a (Selector a)
-  | Filter a (Selector a)
-  | Not a (Selector a)
-  | Splat a
-  | At a Int
-  | Take a Int (Selector a)
-  | TakeEnd a Int (Selector a)
-  | Drop a Int (Selector a)
-  | DropEnd a Int (Selector a)
-  | Reversed a (Selector a)
-  | Contains a Text
-  | Action a (Expr a)
-  | ParseJSON a
-  | Cast a
-  | Id a
-  | Noop a
-  | Prompt a
-  | File a (Selector a {- filepath -})
-  | DebugTrace a (Selector a)
+data Pattern p
+  = -- | Bind into a regular binding name, e.g. `-> %foo`
+    BindingPattern p BindingSymbol
+  | -- | Bind using a pattern string, e.g. `-> "%foo-%bar.%ext"`
+    PatternString p BindingDeclarations Regex
+  | -- | Bind elements of a list, e.g. `-> [%foo, _, %bar]`
+    PatternList p [Pattern p]
   deriving stock (Show, Functor, Foldable, Traversable)
 
-instance Tagged (Selector a) a where
+data PatternElem p
+  = PatternText p Text
+  | PatternBinding p BindingSymbol
+  deriving stock (Show, Functor, Foldable, Traversable)
+
+data Selector p
+  = Compose p (NonEmpty (Selector p))
+  | SplitFields p Text {- delimeter -}
+  | SplitLines p
+  | Chars p
+  | SplitWords p
+  | Regex p Regex BindingDeclarations
+  | RegexMatches p
+  | RegexGroups p Regex BindingDeclarations
+  | ListOf p (Selector p)
+  | Filter p (Selector p)
+  | Not p (Selector p)
+  | Splat p
+  | At p Int
+  | Take p Int (Selector p)
+  | TakeEnd p Int (Selector p)
+  | Drop p Int (Selector p)
+  | DropEnd p Int (Selector p)
+  | Reversed p (Selector p)
+  | Contains p Text
+  | Action p (Expr p)
+  | ParseJSON p
+  | Cast p
+  | Id p
+  | Noop p
+  | Prompt p
+  | File p (Selector p {- filepath -})
+  | DebugTrace p (Selector p)
+  deriving stock (Show, Functor, Foldable, Traversable)
+
+instance Tagged (Selector p) p where
   tag = \case
-    Compose a _ -> a
-    SplitFields a _ -> a
-    SplitLines a -> a
-    Chars a -> a
-    SplitWords a -> a
-    Regex a _ _ -> a
-    RegexMatches a -> a
-    RegexGroups a _ _ -> a
-    ListOf a _ -> a
-    Filter a _ -> a
-    Not a _ -> a
-    Splat a -> a
-    At a _ -> a
-    Take a _ _ -> a
-    TakeEnd a _ _ -> a
-    Drop a _ _ -> a
-    DropEnd a _ _ -> a
-    Reversed a _ -> a
-    Contains a _ -> a
-    Action a _ -> a
-    ParseJSON a -> a
-    Cast a -> a
-    Id a -> a
-    Noop a -> a
-    Prompt a -> a
-    File a _ -> a
-    DebugTrace a _ -> a
+    Compose p _ -> p
+    SplitFields p _ -> p
+    SplitLines p -> p
+    Chars p -> p
+    SplitWords p -> p
+    Regex p _ _ -> p
+    RegexMatches p -> p
+    RegexGroups p _ _ -> p
+    ListOf p _ -> p
+    Filter p _ -> p
+    Not p _ -> p
+    Splat p -> p
+    At p _ -> p
+    Take p _ _ -> p
+    TakeEnd p _ _ -> p
+    Drop p _ _ -> p
+    DropEnd p _ _ -> p
+    Reversed p _ -> p
+    Contains p _ -> p
+    Action p _ -> p
+    ParseJSON p -> p
+    Cast p -> p
+    Id p -> p
+    Noop p -> p
+    Prompt p -> p
+    File p _ -> p
+    DebugTrace p _ -> p
 
   setTag p = \case
     Compose _ x -> Compose p x
@@ -185,7 +196,7 @@ data Chunk
   | NumberChunk NumberT
   | RegexMatchChunk Re.Match
   | JsonChunk Value
-  | RecordChunk (Map Text Chunk)
+  | RecordChunk (Map BindingSymbol Chunk)
   | UnitChunk
   deriving (Eq, Ord)
 
@@ -206,10 +217,10 @@ renderChunk = \case
   NumberChunk n -> case n of
     IntNumber i -> Text.pack $ show i
     DoubleNumber d -> Text.pack $ show d
-  RegexMatchChunk _m -> error "Can't render a regex match chunk"
+  RegexMatchChunk _m -> error "Can't render p regex match chunk"
   JsonChunk v -> Text.pack $ BSC.unpack $ Aeson.encode v
   RecordChunk fields ->
-    "{" <> Text.intercalate ", " (Map.toList fields <&> \(k, v) -> k <> ": " <> renderChunk v) <> "}"
+    "{" <> Text.intercalate ", " (Map.toList fields <&> \(BindingSymbol k, v) -> k <> ": " <> renderChunk v) <> "}"
   UnitChunk -> "null"
 
 data ChunkType
@@ -218,7 +229,7 @@ data ChunkType
   | NumberType
   | RegexMatchType
   | JsonType
-  | RecordType (Map Text ChunkType)
+  | RecordType (Map BindingSymbol ChunkType)
   | NullType
   deriving (Show, Eq)
 
@@ -227,43 +238,43 @@ type TaggedExpr = Expr Pos
 data MathBinOp = Plus | Minus | Multiply | Divide | Modulo | Power
   deriving stock (Show, Eq, Ord)
 
-data Expr a
-  = Modify a (Selector a {- <- selector -}) (Selector a {- <- modifier -})
-  | Binding a BindingName
-  | Str a (TemplateString a)
-  | Number a (NumberT)
-  | StrConcat a (Selector a)
-  | StrAppend a (Selector a) (Selector a)
-  | Intersperse a (NonEmpty (Selector a))
-  | Comma a (Selector a) (Selector a)
-  | Count a (Selector a)
-  | Shell a (TemplateString a) ShellMode
-  | MathBinOp a MathBinOp (Selector a) (Selector a)
-  | Record a (Map Text (Selector a))
-  | Cycle a (Selector a)
-  | BindingAssignment a (Selector a) Text
-  | Index a
-  | Uniq a (Selector a)
+data Expr p
+  = Modify p (Selector p {- <- selector -}) (Selector p {- <- modifier -})
+  | Binding p BindingName
+  | Str p (TemplateString p)
+  | Number p (NumberT)
+  | StrConcat p (Selector p)
+  | StrAppend p (Selector p) (Selector p)
+  | Intersperse p (NonEmpty (Selector p))
+  | Comma p (Selector p) (Selector p)
+  | Count p (Selector p)
+  | Shell p (TemplateString p) ShellMode
+  | MathBinOp p MathBinOp (Selector p) (Selector p)
+  | Record p (Map BindingSymbol (Selector p))
+  | Cycle p (Selector p)
+  | Index p
+  | Uniq p (Selector p)
+  | Pattern p (Pattern p)
   deriving stock (Show, Functor, Foldable, Traversable)
 
-instance Tagged (Expr a) a where
+instance Tagged (Expr p) p where
   tag = \case
-    Modify a _ _ -> a
-    Binding a _ -> a
-    Str a _ -> a
-    Number a _ -> a
-    StrConcat a _ -> a
-    StrAppend a _ _ -> a
-    Intersperse a _ -> a
-    Comma a _ _ -> a
-    Count a _ -> a
-    MathBinOp a _ _ _ -> a
-    Shell a _ _ -> a
-    Record a _ -> a
-    Cycle a _ -> a
-    BindingAssignment a _ _ -> a
-    Index a -> a
-    Uniq a _ -> a
+    Modify p _ _ -> p
+    Binding p _ -> p
+    Str p _ -> p
+    Number p _ -> p
+    StrConcat p _ -> p
+    StrAppend p _ _ -> p
+    Intersperse p _ -> p
+    Comma p _ _ -> p
+    Count p _ -> p
+    MathBinOp p _ _ _ -> p
+    Shell p _ _ -> p
+    Record p _ -> p
+    Cycle p _ -> p
+    Pattern p _ -> p
+    Index p -> p
+    Uniq p _ -> p
   setTag p = \case
     Modify _ x y -> Modify p x y
     Binding _ x -> Binding p x
@@ -278,7 +289,7 @@ instance Tagged (Expr a) a where
     Shell _ x y -> Shell p x y
     Record _ x -> Record p x
     Cycle _ x -> Cycle p x
-    BindingAssignment _ x y -> BindingAssignment p x y
+    Pattern _ pat -> Pattern p pat
     Index _ -> Index p
     Uniq _ x -> Uniq p x
 

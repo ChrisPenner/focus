@@ -27,6 +27,7 @@ import Data.Set.NonEmpty qualified as NESet
 import Data.Text (Text)
 import Error.Diagnose qualified as D
 import Focus.Types
+import Focus.Untyped (BindingSymbol (..))
 
 arrow :: D.Position -> Typ -> Typ -> Typ
 arrow pos l r = UTerm $ Arrow (NESet.singleton pos) l r
@@ -46,7 +47,7 @@ regexMatchType pos = UTerm $ RegexMatchTypeT (NESet.singleton pos)
 jsonType :: D.Position -> Typ
 jsonType pos = UTerm $ JsonTypeT (NESet.singleton pos)
 
-recordType :: D.Position -> Map Text (Typ) -> Typ
+recordType :: D.Position -> Map BindingSymbol (Typ) -> Typ
 recordType pos fields = UTerm $ RecordTypeT (NESet.singleton pos) fields
 
 castableType :: D.Position -> Typ -> Typ
@@ -72,5 +73,5 @@ renderType = \case
   NumberType -> "Number"
   RegexMatchType -> "Regex-Match"
   JsonType -> "Json"
-  RecordType fields -> "{" <> ifoldMap (\k v -> k <> ": " <> renderType v <> ",\n") fields <> "}"
+  RecordType fields -> "{" <> ifoldMap (\(BindingSymbol k) v -> k <> ": " <> renderType v <> ",\n") fields <> "}"
   NullType -> "Null"

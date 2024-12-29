@@ -26,7 +26,7 @@ import Focus.Prelude
 import Focus.Typechecker (typecheckModify)
 import Focus.Typechecker.Types qualified as Types
 import Focus.Types
-import Focus.Untyped (renderChunk)
+import Focus.Untyped (BindingSymbol (..), renderChunk)
 import Options.Applicative qualified as Opts
 import Prettyprinter.Render.Terminal (AnsiStyle)
 import System.Exit qualified as System
@@ -160,9 +160,9 @@ run = do
               printWarnings warnings
               compiledSel <- liftIO $ compileSelector ViewF selectorAst
               pure compiledSel
-    initVars :: Alignment -> [InputLocation] -> Map Text Typ
+    initVars :: Alignment -> [InputLocation] -> Map BindingSymbol Typ
     initVars alignment inputFiles = case alignment of
-      Aligned -> Map.fromList $ zipWith const ([(1 :: Int) ..] <&> (\i -> ("f" <> Text.pack (show i), Types.textType argPosition))) inputFiles
+      Aligned -> Map.fromList $ zipWith const ([(1 :: Int) ..] <&> (\i -> (BindingSymbol $ "f" <> Text.pack (show i), Types.textType argPosition))) inputFiles
       Unaligned -> mempty
 
     argPosition :: D.Position

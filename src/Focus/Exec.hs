@@ -81,7 +81,7 @@ runAlignedHelper chunkSize inputs output f = do
   where
     withBindings :: [Text] -> FocusM a -> FocusM a
     withBindings chunks =
-      let binds = Map.fromList $ zipWith (\i chunk -> (Text.pack ("f" <> show i), TextChunk chunk)) [(1 :: Int) ..] chunks
+      let binds = Map.fromList $ zipWith (\i chunk -> (BindingSymbol $ Text.pack ("f" <> show i), TextChunk chunk)) [(1 :: Int) ..] chunks
        in local (over focusBindings (Map.union binds))
 
 runModify :: Focus ViewT Chunk Chunk -> ChunkSize -> Maybe Handle -> Handle -> FocusM ()

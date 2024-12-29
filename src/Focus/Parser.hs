@@ -123,7 +123,7 @@ regexLiteralP =
         let bindingDeclarations =
               (PCRE.Light.captureNames re)
                 & fmap (Text.decodeUtf8 . fst)
-                & fmap (,(pos, TextType))
+                & fmap (\groupName -> (BindingSymbol groupName, (pos, TextType)))
                 & M.fromList
          in (pos, re, bindingDeclarations)
   where
@@ -156,7 +156,7 @@ recordP = withPos do
   pure $ \pos -> Action pos $ Record pos fields
   where
     field = do
-      key <- lexeme bindingName
+      key <- lexeme bindingSymbol
       _ <- lexeme $ M.char ':'
       value <- selectorP
       pure (key, value)
@@ -176,7 +176,7 @@ templateStringP begin end = M.between (maybe (pure ()) (void . M.char) begin) (l
     -- Escape bindings
     escaped = M.string "\\%" $> '%'
 
-patternStringP :: Char -> Char -> P (Selector Pos)
+patternStringP :: Char -> Char -> P (Pattern Pos)
 patternStringP begin end = withPos $ M.between (M.char begin) (lexeme $ M.char end) $ do
   patPieces <- many . withPos $ do
     M.choice
@@ -189,7 +189,7 @@ patternStringP begin end = withPos $ M.between (M.char begin) (lexeme $ M.char e
   let (bindingDecls, regexStr) =
         patPieces & foldMap \case
           PatternText _pos t -> (mempty, Regex.escape t)
-          PatternBinding pos t -> (M.singleton t (pos, TextType), "(?<" <> t <> ">.+?)")
+          PatternBinding pos bs@(BindingSymbol t) -> (M.singleton bs (pos, TextType), "(?<" <> t <> ">.+?)")
   -- If the final piece is a binding, expand it to match till the end of the string
   regexStr' <- case reverse patPieces of
     PatternBinding {} : _ -> do
@@ -199,31 +199,27 @@ patternStringP begin end = withPos $ M.between (M.char begin) (lexeme $ M.char e
     Left err -> M.customFailure $ BadRegex (Text.pack err)
     Right re -> do
       Debug.debugM "Regex" $ re
-      pure $ \pos -> Regex pos re bindingDecls
+      pure $ \pos -> PatternString pos bindingDecls re
   where
-    -- selExprP =
-    --   M.try (M.char '%' *> M.between (lexeme (M.char '{')) (lexeme (M.char '}')) selectorsP)
-    --     <|> (M.try $ withPos ((\b pos -> Action pos $ Binding pos b) <$> bareBindingP))
     -- Escape bindings
     escaped =
       M.string "\\%" $> '%'
-
-    bareBindingNameP :: P Text
+    bareBindingNameP :: P BindingSymbol
     bareBindingNameP = do
       _ <- M.char '%'
       bracketed <- optional (M.char '{')
-      n <- bindingName
+      n <- bindingSymbol
       when (isJust bracketed) $ void $ M.char '}'
-      pure n
+      pure $ n
 
 bareBindingP :: P BindingName
 bareBindingP = do
   _ <- M.char '%'
-  ((BindingName <$> bindingName) <|> (M.string "." $> InputBinding))
+  ((BindingName <$> bindingSymbol) <|> (M.string "." $> InputBinding))
 
-bindingName :: P Text
-bindingName = do
-  Text.pack <$> (M.some M.alphaNumChar)
+bindingSymbol :: P BindingSymbol
+bindingSymbol = do
+  BindingSymbol . Text.pack <$> (M.some M.alphaNumChar)
 
 groupedP :: P (Selector Pos)
 groupedP = do
@@ -245,8 +241,7 @@ selectorP :: P (Selector Pos)
 selectorP = withPos do
   l <- sp
   M.choice
-    [ assignment l,
-      strAppend l,
+    [ strAppend l,
       mathBinOp l,
       pure $ const l
     ]
@@ -256,11 +251,6 @@ selectorP = withPos do
     --   _ <- lexeme (M.char ',')
     --   r <- selectorP <|> sp
     --   pure $ \pos -> Action pos $ Comma pos l r
-    assignment :: Selector Pos -> P (Pos -> Selector Pos)
-    assignment l = do
-      _ <- lexeme (M.string "->")
-      binding <- lexeme bindingName
-      pure $ \pos -> Action pos $ BindingAssignment pos l binding
     strAppend :: Selector Pos -> P (Pos -> Selector Pos)
     strAppend l = do
       _ <- lexeme (M.string "++")
@@ -324,11 +314,6 @@ simpleSelectorP = withPos do
         do
           pure Splat
       ),
-      ( "->",
-        do
-          binding <- lexeme bindingName
-          pure $ \pos -> Action pos $ BindingAssignment pos (Id pos) binding
-      ),
       ( "takeEnd",
         do
           n <- lexeme L.decimal
@@ -370,10 +355,6 @@ simpleSelectorP = withPos do
       ),
       ( "json",
         pure ParseJSON
-      ),
-      ( "pattern",
-        do
-          const <$> patternStringP '"' '"'
       ),
       ( "prompt",
         pure Prompt
@@ -436,6 +417,11 @@ simpleExprP = withPos $ do
       ( "uniq",
         do
           flip Uniq <$> selectorP
+      ),
+      ( "->",
+        do
+          pattern <- patternP
+          pure $ \pos -> Pattern pos pattern
       )
     ]
 
@@ -445,4 +431,11 @@ exprLiteralP = withPos do
     [ flip Number <$> numberP,
       flip Binding <$> lexeme bareBindingP,
       flip Str <$> templateStringP (Just '"') '"'
+    ]
+
+patternP :: P (Pattern Pos)
+patternP = withPos do
+  M.choice
+    [ lexeme bindingSymbol <&> \bs pos -> BindingPattern pos bs,
+      patternStringP '"' '"' <&> \pat _pos -> pat
     ]

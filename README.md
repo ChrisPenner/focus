@@ -171,7 +171,7 @@ before feeding the result back through the selector.
 
 ## TODO
 
-- [ ] Set default input mode to a single 'null', but allow stdin to be passed as a file via '-'
+- [ ] Make pattern matching more consistent, e.g. use `->` with pattern strings?
 - [ ] Add mechanism for warning when files may be written to.
 - [ ] Determine whether there's a semantics that works for using records as the selector for a modify; or maybe using bindings as a modify target.
 - [ ] Use different commands for different default setups.
@@ -195,6 +195,7 @@ before feeding the result back through the selector.
 - [ ] Fix annoying ansi codes coming from diagnose even on no-color mode.
 - [ ] Pass env vars via an `%env` object.
 - [ ] Make 'at' work with records, including typechecking
+- [x] ~Set default input mode to a single 'null', but allow stdin to be passed as a file via '-'~
 - [x] ~Add 'prompt' command to fill in results interactively.~
 - [x] ~Implement "aligned" mode~
 - [x] ~Fix or warn on cases which trigger unsafePartsOf (e.g. changing number of elements in returned list)~

@@ -99,7 +99,7 @@ unificationErrorReport = \case
       T.NumberTypeT _ -> renderType T.NumberType
       T.RegexMatchTypeT _ -> renderType T.RegexMatchType
       T.JsonTypeT _ -> renderType T.JsonType
-      T.RecordTypeT _ fields -> "{" <> Text.intercalate ", " (M.toList fields <&> \(k, v) -> k <> ": " <> renderTyp v) <> "}"
+      T.RecordTypeT _ fields -> "{" <> Text.intercalate ", " (M.toList fields <&> \(UT.BindingSymbol k, v) -> k <> ": " <> renderTyp v) <> "}"
       T.NullTypeT _ -> renderType T.NullType
 
 warningReport :: Warning -> D.Report Text
@@ -108,7 +108,7 @@ warningReport = \case {}
 expandPositions :: (Foldable f) => (Text -> Diagnose.Marker Text) -> Text -> f D.Position -> [(D.Position, D.Marker Text)]
 expandPositions marker msg xs = toList xs <&> \pos -> (pos, marker msg)
 
-type UBindings = M.Map Text Typ
+type UBindings = M.Map UT.BindingSymbol Typ
 
 data Warning
 
@@ -121,12 +121,12 @@ data UnifyEnv = UnifyEnv {inPathSelector :: Bool}
 
 type UMonad = Unify.IntBindingT (ChunkTypeT (NESet Pos)) Identity
 
-type UnifyME e = (ReaderT UnifyEnv (WriterT Warnings (StateT (UBindings) (ExceptT e UMonad))))
+type UnifyME e = (ReaderT UnifyEnv (WriterT Warnings (StateT UBindings (ExceptT e UMonad))))
 
 data TypecheckFailure
   = OccursFailure UVar Typ
   | MismatchFailure (ChunkTypeT (NESet Diagnose.Position) Typ) (ChunkTypeT (NESet Diagnose.Position) Typ)
-  | UndeclaredBinding Diagnose.Position Text
+  | UndeclaredBinding Diagnose.Position UT.BindingSymbol
   | ExpectedSingularArity Diagnose.Position ReturnArity
   | MismatchedInput (NESet Diagnose.Position) Typ Typ
   | ExprInSelector Diagnose.Position
@@ -159,28 +159,21 @@ declareBindings bd = do
       T.RecordType fields -> T.recordType pos (chunkTypeToChunkTypeT pos <$> fields)
       T.NullType -> T.nullType pos
 
-initBinding :: Text -> UnifyM (Typ)
+initBinding :: UT.BindingSymbol -> UnifyM Typ
 initBinding name = do
   bindings <- get
   typ <- freshVar
   put $ M.insert name typ bindings
   pure typ
 
-_getBinding :: Text -> D.Position -> UnifyM (Typ)
-_getBinding name pos = do
-  bindings <- get
-  case M.lookup name bindings of
-    Just v -> pure v
-    Nothing -> throwError $ UndeclaredBinding pos name
-
-expectBinding :: Diagnose.Position -> Text -> UnifyM (Typ)
+expectBinding :: Diagnose.Position -> UT.BindingSymbol -> UnifyM (Typ)
 expectBinding pos name = do
   bindings <- get
   case M.lookup name bindings of
     Just v -> pure v
     Nothing -> throwError $ UndeclaredBinding pos name
 
-typecheckModify :: (M.Map Text Typ) -> Typ -> UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
+typecheckModify :: (M.Map UT.BindingSymbol Typ) -> Typ -> UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
 typecheckModify initialBindings actualInp selector = do
   Debug.debugM "Init vars" initialBindings
   typecheckThing initialBindings False $ do
@@ -196,7 +189,7 @@ expectInput actualInp expectedInp =
       MismatchFailure a b -> MismatchedInput (tag a) (UTerm a) (UTerm b)
       x -> x
 
-typecheckThing :: (M.Map Text Typ) -> Bool -> (UnifyME TypecheckFailure ()) -> Either TypeErrorReport [WarningReport]
+typecheckThing :: (M.Map UT.BindingSymbol Typ) -> Bool -> (UnifyME TypecheckFailure ()) -> Either TypeErrorReport [WarningReport]
 typecheckThing initialBindings warnOnExpr m = do
   let r = Unify.runIntBindingT $ runExceptT $ flip evalStateT initialBindings $ mapStateT (withExceptT unificationErrorReport) . runWriterT . flip runReaderT (UnifyEnv warnOnExpr) $ m
   case r of
@@ -413,11 +406,8 @@ unifyExpr expr = do
             Affine -> Any
             _ -> Infinite
       pure $ (inp, out, arity)
-    UT.BindingAssignment _pos inner name -> do
-      v <- initBinding name
-      (i, o, arity) <- unifySelector inner
-      _ <- liftUnify $ Unify.unify v o
-      pure $ (i, i, arity)
+    UT.Pattern _pos pat -> do
+      unifyPattern pat
     UT.Index pos -> do
       pure $ (T.textType pos, T.numberType pos, Exactly 1)
     UT.Uniq _pos inner -> do
@@ -431,6 +421,30 @@ unifyExpr expr = do
           throwError $ ExprInSelector (tag expr)
         False -> do
           pure ()
+
+unifyPattern :: UT.Pattern D.Position -> UnifyM (Typ, Typ, ReturnArity)
+unifyPattern = \case
+  UT.BindingPattern _pos name -> do
+    v <- initBinding name
+    pure $ (v, v, Exactly 1)
+  UT.PatternString pos bindings _re -> do
+    declareBindings bindings
+    pure $ (T.textType pos, T.textType pos, Affine)
+  UT.PatternList _pos pats -> do
+    for pats unifyPattern >>= zipTypeSigs
+
+-- | Unify many (input, output, arity) asserting that all the inputs unify, all the outputs unify, and the arities are combined
+zipTypeSigs :: [(Typ, Typ, ReturnArity)] -> UnifyM (Typ, Typ, ReturnArity)
+zipTypeSigs = \case
+  [] -> do
+    t <- freshVar
+    pure (t, t, Any)
+  [x] -> pure x
+  ((i, o, arity) : xs) -> do
+    (i', o', arity') <- zipTypeSigs xs
+    newI <- liftUnify $ Unify.unify i i'
+    newO <- liftUnify $ Unify.unify o o'
+    pure (newI, newO, zipArities arity arity')
 
 unifyTemplateString :: Typ -> Diagnose.Position -> TemplateString D.Position -> UnifyM (Typ, Typ, ReturnArity)
 unifyTemplateString inputTyp pos (TemplateString bindings) = do
