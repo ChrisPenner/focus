@@ -73,3 +73,4 @@ renderType = \case
   RegexMatchType -> "Regex-Match"
   JsonType -> "Json"
   RecordType fields -> "{" <> ifoldMap (\k v -> k <> ": " <> renderType v <> ",\n") fields <> "}"
+  NullType -> "Null"

@@ -76,12 +76,13 @@ unificationErrorReport = \case
       "Multiplicity error"
       [(pos, D.This $ "Actions must result in exactly one result." <> tShow arity)]
       []
-  MismatchedInput pos typ ->
+  MismatchedInput pos typ actual ->
     Diagnose.Err
       Nothing
       "Type error"
-      (expandPositions D.This ("The first selector must accept text input, but currently expects: " <> renderTyp typ) pos)
-      []
+      (expandPositions D.This ("This usage expects the first input to be of type " <> renderTyp typ <> ", but it's actually: " <> renderTyp actual) pos)
+      [ Diagnose.Hint "Did you forget to provide a file or '-' for stdin as input?"
+      ]
   where
     varNames :: [Text]
     varNames =
@@ -102,7 +103,7 @@ unificationErrorReport = \case
       T.RegexMatchTypeT _ -> renderType T.RegexMatchType
       T.JsonTypeT _ -> renderType T.JsonType
       T.RecordTypeT _ fields -> "{" <> Text.intercalate ", " (M.toList fields <&> \(k, v) -> k <> ": " <> renderTyp v) <> "}"
-      T.NullTypeT _ -> "null"
+      T.NullTypeT _ -> renderType T.NullType
 
 warningReport :: Warning -> D.Report Text
 warningReport = \case {}
@@ -130,7 +131,7 @@ data TypecheckFailure
   | MismatchFailure (ChunkTypeT (NESet Diagnose.Position) Typ) (ChunkTypeT (NESet Diagnose.Position) Typ)
   | UndeclaredBinding Diagnose.Position Text
   | ExpectedSingularArity Diagnose.Position ReturnArity
-  | MismatchedInput (NESet Diagnose.Position) Typ
+  | MismatchedInput (NESet Diagnose.Position) Typ Typ
   | ExprInSelector Diagnose.Position
 
 instance Unify.Fallible (ChunkTypeT (NESet D.Position)) UVar (First TypecheckFailure) where
@@ -159,6 +160,7 @@ declareBindings bd = do
       T.RegexMatchType -> T.regexMatchType pos
       T.JsonType -> T.jsonType pos
       T.RecordType fields -> T.recordType pos (chunkTypeToChunkTypeT pos <$> fields)
+      T.NullType -> T.nullType pos
 
 initBinding :: Text -> UnifyM (Typ)
 initBinding name = do
@@ -194,7 +196,7 @@ expectInput actualInp expectedInp =
   void . liftUnify $ withExceptT rewriteErr $ Unify.unify expectedInp actualInp
   where
     rewriteErr = \case
-      First (Just (MismatchFailure a _)) -> First . Just $ MismatchedInput (tag a) (UTerm a)
+      First (Just (MismatchFailure a b)) -> First . Just $ MismatchedInput (tag a) (UTerm a) (UTerm b)
       x -> x
 
 typecheckThing :: (M.Map Text Typ) -> Bool -> (UnifyME TypecheckFailure ()) -> Either TypeErrorReport [WarningReport]
