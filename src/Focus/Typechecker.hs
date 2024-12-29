@@ -7,8 +7,6 @@ where
 
 import Control.Lens
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT, withExceptT)
-import Control.Monad.Logic (Logic)
-import Control.Monad.Logic qualified as Logic
 import Control.Monad.Reader (MonadReader (..), ReaderT (..), asks)
 import Control.Monad.State (MonadState (..), StateT, evalStateT, mapStateT, modify)
 import Control.Monad.Trans (lift)
@@ -20,7 +18,6 @@ import Data.Foldable1 qualified as F1
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as M
-import Data.Monoid (First (..))
 import Data.Set.NonEmpty (NESet)
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -122,9 +119,9 @@ type UnifyM = UnifyME TypecheckFailure
 data UnifyEnv = UnifyEnv {inPathSelector :: Bool}
   deriving stock (Show, Eq, Ord)
 
-type UMonad = Unify.IntBindingT (ChunkTypeT (NESet Pos)) Logic
+type UMonad = Unify.IntBindingT (ChunkTypeT (NESet Pos)) Identity
 
-type UnifyME e = (ReaderT UnifyEnv (WriterT Warnings (StateT (UBindings) (ExceptT (First e) UMonad))))
+type UnifyME e = (ReaderT UnifyEnv (WriterT Warnings (StateT (UBindings) (ExceptT e UMonad))))
 
 data TypecheckFailure
   = OccursFailure UVar Typ
@@ -134,11 +131,11 @@ data TypecheckFailure
   | MismatchedInput (NESet Diagnose.Position) Typ Typ
   | ExprInSelector Diagnose.Position
 
-instance Unify.Fallible (ChunkTypeT (NESet D.Position)) UVar (First TypecheckFailure) where
-  occursFailure a b = First . Just $ OccursFailure a b
-  mismatchFailure a b = First . Just $ MismatchFailure a b
+instance Unify.Fallible (ChunkTypeT (NESet D.Position)) UVar TypecheckFailure where
+  occursFailure a b = OccursFailure a b
+  mismatchFailure a b = MismatchFailure a b
 
-liftUnify :: (ExceptT (First TypecheckFailure) UMonad) a -> UnifyM a
+liftUnify :: (ExceptT (TypecheckFailure) UMonad) a -> UnifyM a
 liftUnify = lift . lift . lift
 
 unifyBindings :: UBindings -> UnifyM ()
@@ -174,14 +171,14 @@ _getBinding name pos = do
   bindings <- get
   case M.lookup name bindings of
     Just v -> pure v
-    Nothing -> throwError $ First . Just $ UndeclaredBinding pos name
+    Nothing -> throwError $ UndeclaredBinding pos name
 
 expectBinding :: Diagnose.Position -> Text -> UnifyM (Typ)
 expectBinding pos name = do
   bindings <- get
   case M.lookup name bindings of
     Just v -> pure v
-    Nothing -> throwError . First . Just $ UndeclaredBinding pos name
+    Nothing -> throwError $ UndeclaredBinding pos name
 
 typecheckModify :: (M.Map Text Typ) -> Typ -> UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
 typecheckModify initialBindings actualInp selector = do
@@ -196,17 +193,16 @@ expectInput actualInp expectedInp =
   void . liftUnify $ withExceptT rewriteErr $ Unify.unify expectedInp actualInp
   where
     rewriteErr = \case
-      First (Just (MismatchFailure a b)) -> First . Just $ MismatchedInput (tag a) (UTerm a) (UTerm b)
+      MismatchFailure a b -> MismatchedInput (tag a) (UTerm a) (UTerm b)
       x -> x
 
 typecheckThing :: (M.Map Text Typ) -> Bool -> (UnifyME TypecheckFailure ()) -> Either TypeErrorReport [WarningReport]
 typecheckThing initialBindings warnOnExpr m = do
-  let r = listToMaybe . Logic.observeMany 2 . Unify.runIntBindingT $ runExceptT $ flip evalStateT initialBindings $ mapStateT (withExceptT $ maybe mempty unificationErrorReport . getFirst) . runWriterT . flip runReaderT (UnifyEnv warnOnExpr) $ m
+  let r = Unify.runIntBindingT $ runExceptT $ flip evalStateT initialBindings $ mapStateT (withExceptT unificationErrorReport) . runWriterT . flip runReaderT (UnifyEnv warnOnExpr) $ m
   case r of
-    Just (r', _) -> do
+    Identity (r', _) -> do
       ((), warnings) <- r'
       pure $ warningReport <$> warnings
-    Nothing -> error "Failed typechecking with no alternatives. Please report this error."
 
 unifySelector :: UT.TaggedSelector -> UnifyM (Typ, Typ, ReturnArity)
 unifySelector = unifySelectorG
@@ -432,7 +428,7 @@ unifyExpr expr = do
     exprWarning = do
       asks inPathSelector >>= \case
         True -> do
-          throwError . First . Just $ ExprInSelector (tag expr)
+          throwError $ ExprInSelector (tag expr)
         False -> do
           pure ()
 
