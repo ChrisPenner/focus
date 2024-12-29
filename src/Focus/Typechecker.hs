@@ -295,6 +295,9 @@ unifySelectorG = \case
     _ <- liftUnify $ Unify.unify fpOut (T.textType pos)
     out <- freshVar
     pure $ (inp, out, Any)
+  UT.DebugTrace _pos labelSelector -> do
+    (inp, _labelOut, _arity) <- asView $ unifySelectorG labelSelector
+    pure $ (inp, inp, Any)
   where
     compose ::
       (Typ s, Typ s, ReturnArity) ->

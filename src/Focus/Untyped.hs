@@ -117,6 +117,7 @@ data Selector a
   | Noop a
   | Prompt a
   | File a (Selector a {- filepath -})
+  | DebugTrace a (Selector a)
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Selector a) a where
@@ -147,6 +148,7 @@ instance Tagged (Selector a) a where
     Noop a -> a
     Prompt a -> a
     File a _ -> a
+    DebugTrace a _ -> a
 
   setTag p = \case
     Compose _ x -> Compose p x
@@ -175,6 +177,7 @@ instance Tagged (Selector a) a where
     Noop _ -> Noop p
     Prompt _ -> Prompt p
     File _ fp -> File p fp
+    DebugTrace _ x -> DebugTrace p x
 
 data Chunk
   = TextChunk Text

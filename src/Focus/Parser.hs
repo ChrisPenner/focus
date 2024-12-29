@@ -382,6 +382,11 @@ simpleSelectorP = withPos do
         do
           filePathSel <- selectorP
           pure $ \pos -> File pos filePathSel
+      ),
+      ( "debug",
+        do
+          labelSel <- selectorP
+          pure $ \pos -> DebugTrace pos labelSel
       )
     ]
 

@@ -376,6 +376,14 @@ compileSelectorG cmdF = \case
             let foc = getModifyFocus (streamFile sep (Text.unpack $ textChunk path) cmdF)
             foc f ()
           pure UnitChunk
+  DebugTrace _pos labelSel -> do
+    lbl <- compileSelectorG ViewF labelSel
+    let fwd :: forall m. (Focusable m) => Chunk -> m Chunk
+        fwd chunk = do
+          chunk & getViewFocus lbl \l -> do
+            liftIO $ Text.hPutStrLn UnliftIO.stdout $ renderChunk l <> ": " <> renderChunk chunk
+          pure chunk
+    pure $ liftSimple fwd pure
   where
     hasMatches :: (Focusable m) => CommandF cmd -> Focus cmd i o -> i -> m Bool
     hasMatches cmd foc i = do
