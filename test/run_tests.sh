@@ -110,7 +110,7 @@ echo "The password is swordfish" | run binding_usage_in_template '/The password 
 
 ## Pattern strings
 echo "The password is swordfish" | run pattern_string '=> "The password is %password" | "password: %password"' '-'
-echo '[http://google.ca](My Link)' | run pattern_modify '=> "[%descr](%link)" |= "[%link](%descr)"' '-'
+echo '[http://google.ca](My Link)' | run pattern_modify 'contains "[%descr](%link)" |= "[%link](%descr)"' '-'
 
 ## String Concatenation
 echo "one,two,three" | run string_concat_view '[splitOn ","] | concat %.' '-'

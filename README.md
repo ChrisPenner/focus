@@ -171,7 +171,8 @@ before feeding the result back through the selector.
 
 ## TODO
 
-- [ ] Make pattern matching more consistent, e.g. use `->` with pattern strings?
+- [ ] Make pattern matching more consistent, i.e. are patterns modifiable?
+  - [ ] probably need to make 'contains' bind patterns, and use "^...$" in pattern strings 
 - [ ] Add mechanism for warning when files may be written to.
 - [ ] Determine whether there's a semantics that works for using records as the selector for a modify; or maybe using bindings as a modify target.
 - [ ] Use different commands for different default setups.
