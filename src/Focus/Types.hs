@@ -38,7 +38,7 @@ import Control.Monad.Reader (ReaderT)
 import Control.Monad.State.Lazy
 import Control.Monad.Trans.Resource (ResourceT)
 import Control.Unification (UTerm, Unifiable)
-import Control.Unification.STVar qualified as Unify
+import Control.Unification.IntVar qualified as Unify
 import Control.Unification.Types (Unifiable (..))
 import Data.Aeson qualified as Aeson
 import Data.Align (Semialign (..))
@@ -96,9 +96,9 @@ instance (IsCmd cmd) => Category (Focus cmd) where
 (>.>) :: (IsCmd cmd) => Focus cmd a b -> Focus cmd b c -> Focus cmd a c
 (>.>) = flip (Cat..)
 
-type UVar s = Unify.STVar s (ChunkTypeT (NESet D.Position))
+type UVar = Unify.IntVar
 
-type Typ s = UTerm (ChunkTypeT (NESet D.Position)) (UVar s)
+type Typ = UTerm (ChunkTypeT (NESet D.Position)) UVar
 
 data ReturnArity = Affine | Exactly Int | Infinite | Any
   deriving stock (Show, Eq, Ord)
@@ -112,6 +112,7 @@ data ChunkTypeT a r
   | JsonTypeT a
   | CastableTypeT a r
   | RecordTypeT a (Map Text r)
+  | NullTypeT a
   deriving stock (Show, Eq, Functor, Foldable, Traversable)
 
 instance (Semigroup a) => Unifiable (ChunkTypeT a) where
@@ -133,6 +134,8 @@ instance (Semigroup a) => Unifiable (ChunkTypeT a) where
     (TextTypeT posL) (TextTypeT posR) -> Just (TextTypeT (posL <> posR))
     (ListTypeT posL x) (ListTypeT posR y) -> Just (ListTypeT (posL <> posR) $ Right (x, y))
     (RegexMatchTypeT posL) (RegexMatchTypeT posR) -> Just $ RegexMatchTypeT (posL <> posR)
+    (JsonTypeT posL) (JsonTypeT posR) -> Just $ JsonTypeT (posL <> posR)
+    (NullTypeT posL) (NullTypeT posR) -> Just $ NullTypeT (posL <> posR)
     TextTypeT {} _ -> Nothing
     ListTypeT {} _ -> Nothing
     NumberTypeT {} _ -> Nothing
@@ -140,6 +143,7 @@ instance (Semigroup a) => Unifiable (ChunkTypeT a) where
     Arrow {} _ -> Nothing
     JsonTypeT {} _ -> Nothing
     RecordTypeT {} _ -> Nothing
+    NullTypeT {} _ -> Nothing
 
 instance Tagged (ChunkTypeT a r) a where
   tag = \case
@@ -151,6 +155,8 @@ instance Tagged (ChunkTypeT a r) a where
     JsonTypeT pos -> pos
     CastableTypeT pos _ -> pos
     RecordTypeT pos _ -> pos
+    NullTypeT pos -> pos
+
   setTag p = \case
     Arrow _ x y -> Arrow p x y
     TextTypeT _ -> TextTypeT p
@@ -160,6 +166,7 @@ instance Tagged (ChunkTypeT a r) a where
     JsonTypeT _ -> JsonTypeT p
     CastableTypeT _ x -> CastableTypeT p x
     RecordTypeT _ x -> RecordTypeT p x
+    NullTypeT _ -> NullTypeT p
 
 type TypeErrorReport = D.Report Text
 

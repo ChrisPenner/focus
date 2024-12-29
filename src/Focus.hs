@@ -145,19 +145,22 @@ run = do
 
     getModifyFocus :: [InputLocation] -> Text -> CliM (Focus ViewT Chunk Chunk)
     getModifyFocus inputFiles selectorTxt = do
+      let inputTyp = case inputFiles of
+            [] -> Types.nullType argPosition
+            _ -> Types.textType argPosition
       addSource "<selector>" selectorTxt
       case parseSelector "<selector>" selectorTxt of
         Left errDiagnostic -> do
           failWithDiagnostic errDiagnostic
         Right selectorAst -> do
           alignment <- asks alignMode
-          case typecheckModify (initVars alignment inputFiles) selectorAst of
+          case typecheckModify (initVars alignment inputFiles) inputTyp selectorAst of
             Left errReport -> failWithReport errReport
             Right warnings -> do
               printWarnings warnings
               compiledSel <- liftIO $ compileSelector ViewF selectorAst
               pure compiledSel
-    initVars :: Alignment -> [InputLocation] -> Map Text (Typ s)
+    initVars :: Alignment -> [InputLocation] -> Map Text Typ
     initVars alignment inputFiles = case alignment of
       Aligned -> Map.fromList $ zipWith const ([(1 :: Int) ..] <&> (\i -> ("f" <> Text.pack (show i), Types.textType argPosition))) inputFiles
       Unaligned -> mempty

@@ -1,24 +1,26 @@
 {-# LANGUAGE EmptyCase #-}
 
 module Focus.Typechecker
-  ( typecheckSelector,
-    typecheckModify,
+  ( typecheckModify,
   )
 where
 
 import Control.Lens
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT, withExceptT)
+import Control.Monad.Logic (Logic)
+import Control.Monad.Logic qualified as Logic
 import Control.Monad.Reader (MonadReader (..), ReaderT (..), asks)
 import Control.Monad.State (MonadState (..), StateT, evalStateT, mapStateT, modify)
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Writer.CPS (WriterT, runWriterT)
 import Control.Unification qualified as Unify
-import Control.Unification.STVar qualified as Unify
+import Control.Unification.IntVar qualified as Unify
 import Control.Unification.Types (UTerm (..))
 import Data.Foldable1 qualified as F1
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as M
+import Data.Monoid (First (..))
 import Data.Set.NonEmpty (NESet)
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -30,10 +32,10 @@ import Focus.Tagged (Tagged (..))
 import Focus.Typechecker.Types (renderType)
 import Focus.Typechecker.Types qualified as T
 import Focus.Types
-import Focus.Untyped (BindingName (..), Expr (..), TemplateString (..))
+import Focus.Untyped (BindingName (..), Expr (..), Pos, TemplateString (..))
 import Focus.Untyped qualified as UT
 
-unificationErrorReport :: TypecheckFailure s -> D.Report Text
+unificationErrorReport :: TypecheckFailure -> D.Report Text
 unificationErrorReport = \case
   ExprInSelector pos ->
     Diagnose.Err
@@ -74,7 +76,7 @@ unificationErrorReport = \case
       "Multiplicity error"
       [(pos, D.This $ "Actions must result in exactly one result." <> tShow arity)]
       []
-  NonTextInput pos typ ->
+  MismatchedInput pos typ ->
     Diagnose.Err
       Nothing
       "Type error"
@@ -85,12 +87,12 @@ unificationErrorReport = \case
     varNames =
       let letters = (Text.singleton <$> ['a' .. 'z'])
        in letters <> zipWith (<>) (cycle letters) (Text.pack . show <$> [(0 :: Int) ..])
-    renderTyp :: Typ s -> Text
+    renderTyp :: Typ -> Text
     renderTyp = \case
       UVar v ->
         varNames !! succ (maxBound + Unify.getVarID v)
       UTerm t -> renderUTyp t
-    renderUTyp :: ChunkTypeT (NESet D.Position) (Typ s) -> Text
+    renderUTyp :: ChunkTypeT (NESet D.Position) (Typ) -> Text
     renderUTyp = \case
       T.CastableTypeT _ typ -> "!" <> renderTyp typ
       T.Arrow _ a b -> "(" <> renderTyp a <> " -> " <> renderTyp b <> ")"
@@ -100,6 +102,7 @@ unificationErrorReport = \case
       T.RegexMatchTypeT _ -> renderType T.RegexMatchType
       T.JsonTypeT _ -> renderType T.JsonType
       T.RecordTypeT _ fields -> "{" <> Text.intercalate ", " (M.toList fields <&> \(k, v) -> k <> ": " <> renderTyp v) <> "}"
+      T.NullTypeT _ -> "null"
 
 warningReport :: Warning -> D.Report Text
 warningReport = \case {}
@@ -107,46 +110,48 @@ warningReport = \case {}
 expandPositions :: (Foldable f) => (Text -> Diagnose.Marker Text) -> Text -> f D.Position -> [(D.Position, D.Marker Text)]
 expandPositions marker msg xs = toList xs <&> \pos -> (pos, marker msg)
 
-type UBindings s = M.Map Text (Typ s)
+type UBindings = M.Map Text Typ
 
 data Warning
 
 type Warnings = [Warning]
 
-type UnifyM s = UnifyME (TypecheckFailure s) s
+type UnifyM = UnifyME TypecheckFailure
 
 data UnifyEnv = UnifyEnv {inPathSelector :: Bool}
   deriving stock (Show, Eq, Ord)
 
-type UnifyME e s = (ReaderT UnifyEnv (WriterT Warnings (StateT (UBindings s) (ExceptT e (Unify.STBinding s)))))
+type UMonad = Unify.IntBindingT (ChunkTypeT (NESet Pos)) Logic
 
-data TypecheckFailure s
-  = OccursFailure (UVar s) (Typ s)
-  | MismatchFailure (ChunkTypeT (NESet Diagnose.Position) (Typ s)) (ChunkTypeT (NESet Diagnose.Position) (Typ s))
+type UnifyME e = (ReaderT UnifyEnv (WriterT Warnings (StateT (UBindings) (ExceptT (First e) UMonad))))
+
+data TypecheckFailure
+  = OccursFailure UVar Typ
+  | MismatchFailure (ChunkTypeT (NESet Diagnose.Position) Typ) (ChunkTypeT (NESet Diagnose.Position) Typ)
   | UndeclaredBinding Diagnose.Position Text
   | ExpectedSingularArity Diagnose.Position ReturnArity
-  | NonTextInput (NESet Diagnose.Position) (Typ s)
+  | MismatchedInput (NESet Diagnose.Position) Typ
   | ExprInSelector Diagnose.Position
 
-instance Unify.Fallible (ChunkTypeT (NESet D.Position)) (UVar s) (TypecheckFailure s) where
-  occursFailure = OccursFailure
-  mismatchFailure = MismatchFailure
+instance Unify.Fallible (ChunkTypeT (NESet D.Position)) UVar (First TypecheckFailure) where
+  occursFailure a b = First . Just $ OccursFailure a b
+  mismatchFailure a b = First . Just $ MismatchFailure a b
 
-liftUnify :: (ExceptT (TypecheckFailure s) (Unify.STBinding s)) a -> UnifyM s a
+liftUnify :: (ExceptT (First TypecheckFailure) UMonad) a -> UnifyM a
 liftUnify = lift . lift . lift
 
-unifyBindings :: UBindings s -> UnifyM s ()
+unifyBindings :: UBindings -> UnifyM ()
 unifyBindings bindings =
   modify (bindings <>)
 
-declareBindings :: BindingDeclarations -> UnifyM s ()
+declareBindings :: BindingDeclarations -> UnifyM ()
 declareBindings bd = do
   newBindings <- ifor bd $ \name (pos, typ) -> do
     v <- initBinding name
     liftUnify $ Unify.unify v (chunkTypeToChunkTypeT pos typ)
   unifyBindings newBindings
   where
-    chunkTypeToChunkTypeT :: D.Position -> ChunkType -> Typ s
+    chunkTypeToChunkTypeT :: D.Position -> ChunkType -> Typ
     chunkTypeToChunkTypeT pos = \case
       T.TextType -> T.textType pos
       T.ListType t -> T.listType pos (chunkTypeToChunkTypeT pos t)
@@ -155,72 +160,59 @@ declareBindings bd = do
       T.JsonType -> T.jsonType pos
       T.RecordType fields -> T.recordType pos (chunkTypeToChunkTypeT pos <$> fields)
 
-initBinding :: Text -> UnifyM s (Typ s)
+initBinding :: Text -> UnifyM (Typ)
 initBinding name = do
   bindings <- get
   typ <- freshVar
   put $ M.insert name typ bindings
   pure typ
 
-_getBinding :: Text -> D.Position -> UnifyM s (Typ s)
+_getBinding :: Text -> D.Position -> UnifyM (Typ)
 _getBinding name pos = do
   bindings <- get
   case M.lookup name bindings of
     Just v -> pure v
-    Nothing -> throwError $ UndeclaredBinding pos name
+    Nothing -> throwError $ First . Just $ UndeclaredBinding pos name
 
-expectBinding :: Diagnose.Position -> Text -> UnifyM s (Typ s)
+expectBinding :: Diagnose.Position -> Text -> UnifyM (Typ)
 expectBinding pos name = do
   bindings <- get
   case M.lookup name bindings of
     Just v -> pure v
-    Nothing -> throwError $ UndeclaredBinding pos name
+    Nothing -> throwError . First . Just $ UndeclaredBinding pos name
 
-typecheckModify :: (forall s. M.Map Text (Typ s)) -> UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
-typecheckModify initialBindings selector = do
+typecheckModify :: (M.Map Text Typ) -> Typ -> UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
+typecheckModify initialBindings actualInp selector = do
   Debug.debugM "Init vars" initialBindings
   typecheckThing initialBindings False $ do
     (inp, _out, _arity) <- unifySelector selector
-    expectTextInput inp (tag selector)
+    expectInput actualInp inp
     pure ()
 
-expectTextInput :: Typ s -> Diagnose.Position -> UnifyM s ()
-expectTextInput inp pos =
-  void . liftUnify $ withExceptT rewriteErr $ Unify.unify inp (T.textType pos)
+expectInput :: Typ -> Typ -> UnifyM ()
+expectInput actualInp expectedInp =
+  void . liftUnify $ withExceptT rewriteErr $ Unify.unify expectedInp actualInp
   where
     rewriteErr = \case
-      MismatchFailure a _ -> NonTextInput (tag a) (UTerm a)
+      First (Just (MismatchFailure a _)) -> First . Just $ MismatchedInput (tag a) (UTerm a)
       x -> x
 
--- unifyModify :: (UT.TaggedSelector, UT.Selector D.Position) -> UnifyME (TypecheckFailure s) s (Typ s, Typ s, ReturnArity)
--- unifyModify (selector, expr) = do
---   (selectorIn, selectorOut, _selArity) <- unifySelector selector
---   (exprIn, exprOut, actionArity) <- unifyAction expr
---   _ <- liftUnify $ Unify.unify selectorOut exprIn
---   _ <- liftUnify $ Unify.unify selectorOut exprOut
---   -- case actionArity of
---   --   Exactly 1 -> pure ()
---   --   _ -> throwError $ ExpectedSingularArity (tag expr) actionArity
---   pure (selectorIn, exprOut, actionArity)
-
-typecheckSelector :: (forall s. M.Map Text (Typ s)) -> Bool -> UT.TaggedSelector -> Either TypeErrorReport [WarningReport]
-typecheckSelector initialBindings warnOnExpr sel = typecheckThing initialBindings warnOnExpr do
-  (inp, _out, _arity) <- unifySelector sel
-  expectTextInput inp (tag sel)
-  pure ()
-
-typecheckThing :: (forall s. M.Map Text (Typ s)) -> Bool -> (forall s. UnifyME (TypecheckFailure s) s ()) -> Either TypeErrorReport [WarningReport]
+typecheckThing :: (M.Map Text Typ) -> Bool -> (UnifyME TypecheckFailure ()) -> Either TypeErrorReport [WarningReport]
 typecheckThing initialBindings warnOnExpr m = do
-  (_, warnings) <- Unify.runSTBinding $ runExceptT $ flip evalStateT initialBindings $ mapStateT (withExceptT unificationErrorReport) . runWriterT . flip runReaderT (UnifyEnv warnOnExpr) $ void $ m
-  pure $ warningReport <$> warnings
+  let r = listToMaybe . Logic.observeMany 2 . Unify.runIntBindingT $ runExceptT $ flip evalStateT initialBindings $ mapStateT (withExceptT $ maybe mempty unificationErrorReport . getFirst) . runWriterT . flip runReaderT (UnifyEnv warnOnExpr) $ m
+  case r of
+    Just (r', _) -> do
+      ((), warnings) <- r'
+      pure $ warningReport <$> warnings
+    Nothing -> error "Failed typechecking with no alternatives. Please report this error."
 
-unifySelector :: UT.TaggedSelector -> UnifyM s (Typ s, Typ s, ReturnArity)
+unifySelector :: UT.TaggedSelector -> UnifyM (Typ, Typ, ReturnArity)
 unifySelector = unifySelectorG
 
-unifyAction :: UT.TaggedSelector -> UnifyM s (Typ s, Typ s, ReturnArity)
+unifyAction :: UT.TaggedSelector -> UnifyM (Typ, Typ, ReturnArity)
 unifyAction = unifySelectorG
 
-unifySelectorG :: forall s. UT.Selector D.Position -> UnifyM s (Typ s, Typ s, ReturnArity)
+unifySelectorG :: UT.Selector D.Position -> UnifyM (Typ, Typ, ReturnArity)
 unifySelectorG = \case
   UT.Id _pos -> do
     inp <- freshVar
@@ -300,9 +292,9 @@ unifySelectorG = \case
     pure $ (inp, inp, Any)
   where
     compose ::
-      (Typ s, Typ s, ReturnArity) ->
+      (Typ, Typ, ReturnArity) ->
       UT.Selector Diagnose.Position ->
-      UnifyM s (Typ s, Typ s, ReturnArity)
+      UnifyM (Typ, Typ, ReturnArity)
     compose (li, lm, lArity) rTagged = do
       (rm, ro, rArity) <- unifySelectorG rTagged
       _ <- liftUnify $ Unify.unify lm rm
@@ -341,7 +333,7 @@ zipArities = \cases
 asView :: (MonadReader UnifyEnv m) => m r -> m r
 asView = local \e -> e {inPathSelector = False}
 
-unifyExpr :: UT.TaggedExpr -> UnifyME (TypecheckFailure s) s (Typ s, Typ s, ReturnArity)
+unifyExpr :: UT.TaggedExpr -> UnifyME (TypecheckFailure) (Typ, Typ, ReturnArity)
 unifyExpr expr = do
   exprWarning
   case expr of
@@ -434,15 +426,15 @@ unifyExpr expr = do
       (inp, out, _arity) <- unifySelector inner
       pure $ (inp, out, Any)
   where
-    exprWarning :: UnifyM s ()
+    exprWarning :: UnifyM ()
     exprWarning = do
       asks inPathSelector >>= \case
         True -> do
-          throwError $ ExprInSelector (tag expr)
+          throwError . First . Just $ ExprInSelector (tag expr)
         False -> do
           pure ()
 
-unifyTemplateString :: Typ s -> Diagnose.Position -> TemplateString D.Position -> UnifyM s (Typ s, Typ s, ReturnArity)
+unifyTemplateString :: Typ -> Diagnose.Position -> TemplateString D.Position -> UnifyM (Typ, Typ, ReturnArity)
 unifyTemplateString inputTyp pos (TemplateString bindings) = do
   arities <- for bindings $ \case
     Left sel -> do
@@ -453,5 +445,5 @@ unifyTemplateString inputTyp pos (TemplateString bindings) = do
     Right _ -> pure (Exactly 1)
   pure (inputTyp, T.textType pos, composeArities (Exactly 1 NE.:| arities))
 
-freshVar :: UnifyM s (Typ s)
+freshVar :: UnifyM (Typ)
 freshVar = (Unify.UVar <$> (lift . lift . lift . lift $ Unify.freeVar))

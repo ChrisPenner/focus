@@ -45,6 +45,7 @@ import Focus.Prelude
 import Focus.Tagged (Tagged (..))
 import Focus.Types
 import Focus.Untyped
+import GHC.Stack (HasCallStack)
 import System.Exit (ExitCode (..))
 import UnliftIO qualified
 import UnliftIO.Directory qualified as UnliftIO
@@ -403,7 +404,7 @@ compileSelectorG cmdF = \case
       let (before, after) = splitAt (len - n) xs
       (<> after) <$> traverse f before
 
-    viewRegex :: RE.Regex -> (Traversal' RE.Match Text) -> Focus 'ViewT Chunk Chunk
+    viewRegex :: (HasCallStack) => RE.Regex -> (Traversal' RE.Match Text) -> Focus 'ViewT Chunk Chunk
     viewRegex pat trav = ViewFocus \f chunk -> do
       let txt = textChunk chunk
       txt & foldMapMOf (RE.regexing pat) \match -> do
