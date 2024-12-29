@@ -3,8 +3,6 @@
 module Focus.Cli
   ( optionsP,
     Options (..),
-    InputLocation (..),
-    OutputLocation (..),
     UseColour (..),
     ChunkSize (..),
     InPlace (..),
@@ -16,16 +14,8 @@ where
 import Data.Function
 import Data.Functor
 import Data.Text (Text)
-import Focus.Command (Command (..))
+import Focus.Command (Command (..), InputLocation (..), OutputLocation (..))
 import Options.Applicative hiding (action, command)
-
-data InputLocation
-  = StdIn
-  | InputFile FilePath
-
-data OutputLocation
-  = StdOut
-  | OutputFile FilePath
 
 data ChunkSize
   = LineChunks
@@ -34,6 +24,7 @@ data ChunkSize
 data UseColour = Colour | NoColour
 
 data InPlace = InPlace | NotInPlace
+  deriving stock (Show, Eq, Ord)
 
 data ShowWarnings = ShowWarnings | NoWarnings
 
@@ -103,8 +94,11 @@ inputFilesP = many $ strArgument (metavar "FILES..." <> help "Input files. If om
 overP :: Parser Command
 overP = do
   script <- scriptP
-  inputFiles <- inputFilesP
-  pure $ Modify script inputFiles
+  inputLocs <-
+    inputFilesP <&> fmap \case
+      "-" -> StdIn
+      f -> InputFile f
+  pure $ Modify script inputLocs
 
 alignModeP :: Parser Alignment
 alignModeP = do

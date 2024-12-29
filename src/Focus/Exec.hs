@@ -17,26 +17,33 @@ import Focus.Untyped
 import System.IO qualified as IO
 import UnliftIO (BufferMode (LineBuffering), Handle, hSetBuffering)
 
-runGeneric :: ChunkSize -> Handle -> Handle -> (Text -> FocusM (Maybe Text)) -> FocusM ()
+runGeneric :: ChunkSize -> Maybe Handle -> Handle -> (Chunk -> FocusM (Maybe Text)) -> FocusM ()
 runGeneric chunkSize input output f = do
   case chunkSize of
     EntireChunks -> do
-      chunk <- liftIO (Text.hGetContents input)
+      chunk <- case input of
+        Nothing -> pure UnitChunk
+        Just inputHandle -> do TextChunk <$> liftIO (Text.hGetContents inputHandle)
       out <- f chunk
       for_ out $ liftIO . Text.hPutStrLn output
     LineChunks -> do
-      liftIO $ hSetBuffering input LineBuffering
       liftIO $ hSetBuffering output LineBuffering
-      let go = do
-            done <- liftIO $ IO.hIsEOF input
-            if done
-              then pure ()
-              else do
-                line <- liftIO $ Text.hGetLine input
-                result <- f line
-                for_ result $ liftIO . Text.hPutStrLn output
-                go
-      go
+      case input of
+        Nothing -> do
+          result <- f UnitChunk
+          for_ result $ liftIO . Text.hPutStrLn output
+        Just inputHandle -> do
+          liftIO $ hSetBuffering inputHandle LineBuffering
+          let go = do
+                done <- liftIO $ IO.hIsEOF inputHandle
+                if done
+                  then pure ()
+                  else do
+                    line <- liftIO $ Text.hGetLine inputHandle
+                    result <- f $ TextChunk line
+                    for_ result $ liftIO . Text.hPutStrLn output
+                    go
+          go
 
 runAligned :: Focus ViewT Chunk Chunk -> ChunkSize -> [Handle] -> Handle -> FocusM ()
 runAligned (ViewFocus f) chunkSize inputs output = do
@@ -77,7 +84,7 @@ runAlignedHelper chunkSize inputs output f = do
       let binds = Map.fromList $ zipWith (\i chunk -> (Text.pack ("f" <> show i), TextChunk chunk)) [(1 :: Int) ..] chunks
        in local (over focusBindings (Map.union binds))
 
-runModify :: Focus ViewT Chunk Chunk -> ChunkSize -> Handle -> Handle -> FocusM ()
+runModify :: Focus ViewT Chunk Chunk -> ChunkSize -> Maybe Handle -> Handle -> FocusM ()
 runModify (ViewFocus f) chunkSize input output = do
   runGeneric chunkSize input output \chunk -> do
-    Nothing <$ f (liftIO . Text.hPutStrLn output . renderChunk) (TextChunk chunk)
+    Nothing <$ f (liftIO . Text.hPutStrLn output . renderChunk) chunk

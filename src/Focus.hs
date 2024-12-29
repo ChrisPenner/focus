@@ -9,6 +9,7 @@ import Control.Monad.Reader (MonadReader (..), ReaderT (..), asks)
 import Control.Monad.State
 import Control.Monad.Trans.Resource (runResourceT)
 import Data.Bifunctor
+import Data.Functor.Identity
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Text (Text)
@@ -16,8 +17,8 @@ import Data.Text qualified as Text
 import Data.Text.IO qualified as TextIO
 import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
-import Focus.Cli (Alignment (..), InPlace (..), Options (..), OutputLocation (..), ShowWarnings (..), UseColour (..), optionsP)
-import Focus.Command (Command (..), CommandF (..), CommandT (..))
+import Focus.Cli (Alignment (..), InPlace (..), Options (..), ShowWarnings (..), UseColour (..), optionsP)
+import Focus.Command (Command (..), CommandF (..), CommandT (..), InputLocation (..), OutputLocation (..))
 import Focus.Compile (compileSelector)
 import Focus.Exec qualified as Exec
 import Focus.Parser (parseSelector)
@@ -56,7 +57,7 @@ instance MonadState (CliState) CliM where
 
 run :: IO ()
 run = do
-  opts@Options {command = Modify script inputFiles, output, chunkSize, inPlace, alignMode} <-
+  opts@Options {command = Modify script inputLocs, output, chunkSize, inPlace, alignMode} <-
     Opts.customExecParser
       (Opts.prefs (Opts.subparserInline <> Opts.showHelpOnError <> Opts.disambiguate <> Opts.showHelpOnEmpty <> Opts.helpShowGlobals))
       ( Opts.info
@@ -67,8 +68,8 @@ run = do
       )
   cliStateVar <- newTVarIO $ CliState mempty
   flip runReaderT (cliStateVar, opts) . unCli $ do
-    focus <- getModifyFocus inputFiles script
-    case (inputFiles, alignMode, inPlace) of
+    focus <- getModifyFocus inputLocs script
+    case (inputLocs, alignMode, inPlace) of
       ([], _, InPlace) -> do
         failWith "In-place mode specified, but no input files provided."
       ([], _, NotInPlace) -> do
@@ -78,9 +79,16 @@ run = do
                 OutputFile path -> IO.openFile path IO.WriteMode
         IO.bracket getOutput IO.hClose \outputHandle -> do
           focusMToCliM $ do
-            Exec.runModify focus chunkSize IO.stdin outputHandle
+            Exec.runModify focus chunkSize Nothing outputHandle
       (_, Unaligned, _) -> do
-        for_ inputFiles \inputFile -> do
+        let hasStdIn =
+              inputLocs & any \case
+                StdIn -> True
+                _ -> False
+        if hasStdIn && inPlace == InPlace
+          then failWith "Cannot pass stdin as input when in-place mode is requested."
+          else pure ()
+        for_ inputLocs \inputLoc -> do
           let withOutput go =
                 case inPlace of
                   NotInPlace -> do
@@ -90,18 +98,19 @@ run = do
                   InPlace -> do
                     UnliftIO.withSystemTempFile "focus.txt" \tempPath tempHandle -> do
                       _ <- go tempHandle
-                      UnliftIO.renameFile tempPath inputFile
-                      pure ()
+                      case inputLoc of
+                        StdIn -> failWith "Cannot use stdin as input when in-place mode is requested."
+                        InputFile inputFile -> do
+                          UnliftIO.renameFile tempPath inputFile
+                          pure ()
           withOutput \outputHandle -> do
-            IO.withFile inputFile IO.ReadMode \inputHandle -> do
+            withInputs (Identity inputLoc) \(Identity inputHandle) -> do
               focusMToCliM $ do
-                Exec.runModify focus chunkSize inputHandle outputHandle
+                Exec.runModify focus chunkSize (Just inputHandle) outputHandle
       (_, Aligned, InPlace) ->
         failWith "Cannot use both aligned and in-place modes together."
       (_, Aligned, _) -> do
-        let openInputs = traverse (\fp -> IO.openFile fp IO.ReadMode) inputFiles
-        let withInputs = IO.bracket openInputs (traverse IO.hClose)
-        withInputs \inputHandles -> do
+        withInputs inputLocs \inputHandles -> do
           let getOutput = case output of
                 StdOut -> pure IO.stdout
                 OutputFile path -> IO.openFile path IO.WriteMode
@@ -109,6 +118,15 @@ run = do
             focusMToCliM $ do
               Exec.runAligned focus chunkSize inputHandles outputHandle
   where
+    openLoc :: (MonadIO m) => InputLocation -> m (Either IO.Handle IO.Handle)
+    openLoc = \case
+      StdIn -> pure (Left IO.stdin)
+      InputFile path -> Right <$> IO.openFile path IO.ReadMode
+    withInputs :: (Traversable f) => f InputLocation -> (f IO.Handle -> CliM a) -> CliM a
+    withInputs inputLocs f = do
+      let acquire = traverse openLoc inputLocs
+      let release = (traverse . traverse) IO.hClose
+      IO.bracket acquire release (f . fmap (either id id))
     failWithDiagnostic :: Diagnose.Diagnostic Text -> CliM a
     failWithDiagnostic diagnostic = do
       style <- diagnoseStyle
@@ -125,7 +143,7 @@ run = do
       liftIO $ TextIO.hPutStrLn UnliftIO.stderr msg
       liftIO $ System.exitFailure
 
-    getModifyFocus :: [FilePath] -> Text -> CliM (Focus ViewT Chunk Chunk)
+    getModifyFocus :: [InputLocation] -> Text -> CliM (Focus ViewT Chunk Chunk)
     getModifyFocus inputFiles selectorTxt = do
       addSource "<selector>" selectorTxt
       case parseSelector "<selector>" selectorTxt of
@@ -139,7 +157,7 @@ run = do
               printWarnings warnings
               compiledSel <- liftIO $ compileSelector ViewF selectorAst
               pure compiledSel
-    initVars :: Alignment -> [FilePath] -> Map Text (Typ s)
+    initVars :: Alignment -> [InputLocation] -> Map Text (Typ s)
     initVars alignment inputFiles = case alignment of
       Aligned -> Map.fromList $ zipWith const ([(1 :: Int) ..] <&> (\i -> ("f" <> Text.pack (show i), Types.textType argPosition))) inputFiles
       Unaligned -> mempty

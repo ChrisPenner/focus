@@ -6,6 +6,8 @@ module Focus.Command
     CommandT (..),
     CommandF (..),
     IsCmd (..),
+    InputLocation (..),
+    OutputLocation (..),
   )
 where
 
@@ -28,6 +30,16 @@ data CommandF (cmd :: CommandT) where
   ViewF :: CommandF 'ViewT
   ModifyF :: CommandF 'ModifyT
 
+data InputLocation
+  = StdIn
+  | InputFile FilePath
+  deriving stock (Show, Eq, Ord)
+
+data OutputLocation
+  = StdOut
+  | OutputFile FilePath
+  deriving stock (Show, Eq, Ord)
+
 data Command
-  = Modify Script [FilePath]
+  = Modify Script [InputLocation]
   deriving stock (Show)
