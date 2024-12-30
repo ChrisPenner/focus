@@ -171,6 +171,7 @@ before feeding the result back through the selector.
 
 ## TODO
 
+- [ ] Support reading command from a file with -f 
 - [ ] `||` for concat (and logical or), `&&` for zippy logical and, (maybe it returns an n'ary tuple?)
 - [ ] I'm thinking it may be clearer to actually require '%{}' inside pattern binding and template strings. Maybe just use bare '{}'?'
 - [ ] Most selectors probably shouldn't return their input, instead the caller can wrap them in 'filter' if that was the intention.

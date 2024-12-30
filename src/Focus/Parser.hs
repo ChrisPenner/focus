@@ -134,14 +134,14 @@ reGroupsP = do
   regexLiteralP <&> \(_pos, re, bindings) -> \pos -> RegexGroups pos re bindings
 
 listOfP :: P (Selector Pos)
-listOfP = withPos do
+listOfP = M.label "list expression" $ withPos do
   M.between (lexeme $ M.char '[') (lexeme $ M.char ']') $ do
     M.sepBy selectorsP (lexeme $ M.char ',')
       <&> \selectors pos ->
         ListOf pos (foldl' (\l r -> Action pos $ Comma pos l r) (Empty pos) selectors)
 
 shellP :: P (Expr Pos)
-shellP = withPos do
+shellP = M.label "shell expression" $ withPos do
   shellMode <- (((M.string "-{" $> NullStdin) <|> (M.string "#{" $> Normal)))
   script <- templateStringP Nothing '}'
   pure $ \pos -> Shell pos script shellMode
@@ -151,7 +151,7 @@ shellActionP = withPos do
   flip Action <$> shellP
 
 recordP :: P (Selector Pos)
-recordP = withPos do
+recordP = M.label "record" $ withPos do
   fields <- Map.fromList <$> M.between (lexeme $ M.char '{') (lexeme $ M.char '}') (M.sepBy field (lexeme $ M.char ','))
   pure $ \pos -> Action pos $ Record pos fields
   where
@@ -232,7 +232,9 @@ castP = withPos do
   pure $ \pos -> Compose pos (selector NE.:| [Cast pos])
 
 bracketedP :: P a -> P a
-bracketedP p = M.between (lexeme (M.char '(')) (lexeme (M.char ')')) p
+bracketedP p =
+  M.label "selector pipeline" do
+    M.between (lexeme (M.char '(')) (lexeme (M.char ')')) p
 
 mayBracketedP :: P a -> P a
 mayBracketedP p = bracketedP p <|> p
@@ -262,7 +264,7 @@ selectorP = withPos do
         lexeme
           ( M.choice
               [ M.char '+' $> Plus,
-                M.char '-' $> Minus,
+                (M.notFollowedBy (M.string "->")) *> M.char '-' $> Minus,
                 M.char '*' $> Multiply,
                 M.char '^' $> Power,
                 -- M.char '/' $> Divide,
@@ -433,14 +435,16 @@ simpleExprP = withPos $ do
       ),
       ( "select",
         do
-          branches <- M.between (lexeme $ M.char '{') (lexeme $ M.char '}') $ do
-            flip sepBy1 (lexeme $ M.char ',') $ do
-              cond <- lexeme selectorP
-              _ <- lexeme $ M.string "->"
-              body <- lexeme selectorP
-              pure (cond, body)
+          let lbl = "a conditional block"
+          M.label lbl do
+            branches <- M.between (lexeme $ M.char '{') (lexeme $ M.char '}') $ do
+              flip sepBy1 (lexeme $ M.char ',') $ do
+                cond <- lexeme selectorP
+                _ <- lexeme $ M.string "->"
+                body <- lexeme selectorP
+                pure (cond, body)
 
-          pure $ \pos -> Select pos branches
+            pure $ \pos -> Select pos branches
       )
     ]
 
