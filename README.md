@@ -173,7 +173,7 @@ before feeding the result back through the selector.
 
 - [ ] How do I fold, e.g. to sum or w/e
 - [ ] `||` for concat (and logical or), `&&` for zippy logical and, (maybe it returns an n'ary tuple?)
-- [ ] I'm thinking it may be clearer to actually require '%{}' inside pattern binding and template strings. Maybe just use bare '{}'?'
+- [ ] I now use bare '{}' in template strings, but still use %{} in binding strings; is that right? Do I eventually allow expressions in pattern binding strings like view patterns?
 - [ ] Most selectors probably shouldn't return their input, instead the caller can wrap them in 'filter' if that was the intention.
     - e.g. pattern selectors.
 - [ ] Be more consistent in using syntax to denote special syntactic constructs.
@@ -182,10 +182,6 @@ before feeding the result back through the selector.
   - [ ] probably need to make 'contains' bind patterns, and use "^...$" in pattern strings 
 - [ ] Add mechanism for warning when files may be written to.
 - [ ] Determine whether there's a semantics that works for using records as the selector for a modify; or maybe using bindings as a modify target.
-- [ ] Use different commands for different default setups.
-  E.g. 'align', 'view', 'in-place'
-- [ ] Option for choosing split delimiter via cli flag for better perf, flexibility, and better fzf integration (null terminator)
-- [ ] replace alignment splitting, and 'all at once' options with language features.
 - [ ] Allow defining custom selectors and actions in lua
   * Allow sharing these/caching them, etc.
 - [ ] Fix parsing ambiguity of division and regex
@@ -201,9 +197,12 @@ before feeding the result back through the selector.
 - [ ] Handle errors from shell commands better
 - [ ] Allow capturing the escape code of a shell command for use in conditionals.
 - [ ] Add `==` and `!=` for use in conditionals, maybe allow sectioning?
+- [ ] Add `||` and `&&` for use in conditionals, also, figure out their semantics.
+      - Current plan is that `&&` will emit a single 'true' values iff all of its arguments are true, `||` will emit a single 'true' value if any of its arguments are true. Otherwise, they will emit nothing?
 - [ ] Fix annoying ansi codes coming from diagnose even on no-color mode.
 - [ ] Allow accessing env vars with a `%env.BLAH` or something? (though you can already do this with `"${BLAH}"`)
 - [ ] Make 'at' work with records, including typechecking
+- [x] ~replace alignment splitting, and 'all at once' options with language features.~
 - [x] ~How do I send one input to multiple selectors then combine the results?~
 - [x] ~Support reading command from a file with -f~
 - [x] ~Add case/select statements~
