@@ -247,11 +247,17 @@ selectorP :: P (Selector Pos)
 selectorP = withPos do
   l <- sp
   M.choice
-    [ strAppend l,
+    [ chain l,
+      strAppend l,
       mathBinOp l,
       pure $ const l
     ]
   where
+    chain :: Selector Pos -> P (Pos -> Selector Pos)
+    chain l = do
+      _ <- lexeme (M.string "..")
+      r <- selectorP <|> sp
+      pure $ \pos -> Action pos $ Chain pos [l, r]
     strAppend :: Selector Pos -> P (Pos -> Selector Pos)
     strAppend l = do
       _ <- lexeme (M.string "++")
@@ -272,6 +278,8 @@ selectorP = withPos do
           )
       r <- selectorP <|> sp
       pure (\pos -> Action pos $ MathBinOp pos op l r)
+    -- The actual single selector (without pipelining)
+    sp :: P (Selector Pos)
     sp = recordP <|> shellActionP <|> listOfP <|> regexP <|> groupedP <|> simpleSelectorP <|> evalP
 
 evalP :: P (Selector Pos)
