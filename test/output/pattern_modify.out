@@ -8,7 +8,7 @@ focus contains "[%descr](%link)" |= "[%link](%descr)" -
      │
    1 │ contains "[%descr](%link)" |= "[%link](%descr)"
      •                                 ┬──── 
-     •                                 ╰╸ Binding BindingSymbol {bsText = "link"} is not in scope.
+     •                                 ╰╸ Binding BindingName {bsText = "link"} is not in scope.
 ─────╯
 ===EXIT CODE===============================================================================
 0

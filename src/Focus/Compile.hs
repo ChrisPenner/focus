@@ -112,11 +112,6 @@ compileExpr =
                 r <- f x
                 (r <>) <$> go (rest ++ [xs])
         go (NE.toList chunkResults)
-    Sequence _ a b -> do
-      l <- compileSelectorG ViewF a
-      r <- compileSelectorG ViewF b
-      pure $ ViewFocus $ \f chunk -> do
-        liftA2 (<>) (getViewFocus l f chunk) (getViewFocus r f chunk)
     Count _ selector -> do
       inner <- compileSelectorG ViewF selector
       pure $ listOfFocus inner >.> focusTo (pure . NumberChunk . IntNumber . length)
@@ -232,6 +227,10 @@ compileExpr =
         let foc = getViewFocus fv
         chunk & foc \rec -> do
           f (TupleChunk rec)
+    Chain _pos fields -> do
+      focs <- for fields (compileSelectorG ViewF)
+      pure $ ViewFocus \f inp -> do
+        focs & foldMapM \foc -> getViewFocus foc f inp
   where
     compileTemplateString :: (Focusable m, Monoid r) => Chunk -> [Either (Focus ViewT Chunk Chunk) Text] -> (Chunk -> m r) -> m r
     compileTemplateString inp compiledFocs f = do

@@ -137,7 +137,7 @@ listOfP :: P (Selector Pos)
 listOfP = M.label "list expression" $ withPos do
   selectors <- keyValueBlockP (M.char '[') (M.char ']') (M.char ',') selectorsP
   pure $ \pos ->
-    ListOf pos (foldl' (\l r -> Action pos $ Sequence pos l r) (Empty pos) selectors)
+    ListOf pos (Action pos $ Chain pos selectors)
 
 tupleP :: P [Selector Pos]
 tupleP = M.label "tuple expression" $ do
@@ -447,6 +447,11 @@ simpleExprP = withPos $ do
         do
           sels <- tupleP
           pure $ \pos -> Zip pos sels
+      ),
+      ( "chain",
+        do
+          sels <- tupleP
+          pure $ \pos -> Chain pos sels
       )
     ]
 

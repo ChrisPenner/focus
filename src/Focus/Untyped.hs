@@ -243,7 +243,6 @@ data Expr p
   | StrConcat p (Selector p)
   | StrAppend p (Selector p) (Selector p)
   | Intersperse p (NonEmpty (Selector p))
-  | Sequence p (Selector p) (Selector p)
   | Count p (Selector p)
   | Shell p (TemplateString p) ShellMode
   | MathBinOp p MathBinOp (Selector p) (Selector p)
@@ -254,6 +253,7 @@ data Expr p
   | Pattern p (Pattern p)
   | Select p [(Selector p, Selector p)]
   | Zip p [Selector p]
+  | Chain p [Selector p]
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Expr p) p where
@@ -265,7 +265,6 @@ instance Tagged (Expr p) p where
     StrConcat p _ -> p
     StrAppend p _ _ -> p
     Intersperse p _ -> p
-    Sequence p _ _ -> p
     Count p _ -> p
     MathBinOp p _ _ _ -> p
     Shell p _ _ -> p
@@ -276,6 +275,7 @@ instance Tagged (Expr p) p where
     Uniq p _ -> p
     Select p _ -> p
     Zip p _ -> p
+    Chain p _ -> p
 
   setTag p = \case
     Modify _ x y -> Modify p x y
@@ -285,7 +285,6 @@ instance Tagged (Expr p) p where
     StrConcat _ x -> StrConcat p x
     StrAppend _ x y -> StrAppend p x y
     Intersperse _ x -> Intersperse p x
-    Sequence _ x y -> Sequence p x y
     Count _ x -> Count p x
     MathBinOp _ x y z -> MathBinOp p x y z
     Shell _ x y -> Shell p x y
@@ -296,6 +295,7 @@ instance Tagged (Expr p) p where
     Uniq _ x -> Uniq p x
     Select _ x -> Select p x
     Zip _ x -> Zip p x
+    Chain _ x -> Chain p x
 
 data NumberT
   = IntNumber Int
