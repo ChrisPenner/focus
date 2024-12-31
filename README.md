@@ -171,6 +171,8 @@ before feeding the result back through the selector.
 
 ## TODO
 
+- [ ] How do I fold, e.g. to sum or w/e
+- [ ] How do I send one input to multiple selectors then combine the results?
 - [ ] `||` for concat (and logical or), `&&` for zippy logical and, (maybe it returns an n'ary tuple?)
 - [ ] I'm thinking it may be clearer to actually require '%{}' inside pattern binding and template strings. Maybe just use bare '{}'?'
 - [ ] Most selectors probably shouldn't return their input, instead the caller can wrap them in 'filter' if that was the intention.

@@ -56,7 +56,7 @@ import Focus.Untyped
 import Text.Read (readMaybe)
 import UnliftIO (MonadUnliftIO)
 import UnliftIO.Resource (MonadResource)
-import Prelude hiding (reads)
+import Prelude hiding (reads, (.))
 
 data SelectorError
   = ShellError Pos Text
@@ -113,6 +113,7 @@ data ChunkTypeT a r
   | CastableTypeT a r
   | RecordTypeT a (Map BindingName r)
   | NullTypeT a
+  | TupleTypeT a [r]
   deriving stock (Show, Eq, Functor, Foldable, Traversable)
 
 instance (Semigroup a) => Unifiable (ChunkTypeT a) where
@@ -133,9 +134,11 @@ instance (Semigroup a) => Unifiable (ChunkTypeT a) where
     (Arrow posL x y) (Arrow posR x' y') -> Just (Arrow (posL <> posR) (Right (x, x')) (Right (y, y')))
     (TextTypeT posL) (TextTypeT posR) -> Just (TextTypeT (posL <> posR))
     (ListTypeT posL x) (ListTypeT posR y) -> Just (ListTypeT (posL <> posR) $ Right (x, y))
+    (TupleTypeT posL x) (TupleTypeT posR y) -> Just (TupleTypeT (posL <> posR) $ zipWith (\a b -> Right (a, b)) x y)
     (RegexMatchTypeT posL) (RegexMatchTypeT posR) -> Just $ RegexMatchTypeT (posL <> posR)
     (JsonTypeT posL) (JsonTypeT posR) -> Just $ JsonTypeT (posL <> posR)
     (NullTypeT posL) (NullTypeT posR) -> Just $ NullTypeT (posL <> posR)
+    TupleTypeT {} _ -> Nothing
     TextTypeT {} _ -> Nothing
     ListTypeT {} _ -> Nothing
     NumberTypeT {} _ -> Nothing
@@ -156,6 +159,7 @@ instance Tagged (ChunkTypeT a r) a where
     CastableTypeT pos _ -> pos
     RecordTypeT pos _ -> pos
     NullTypeT pos -> pos
+    TupleTypeT pos _ -> pos
 
   setTag p = \case
     Arrow _ x y -> Arrow p x y
@@ -167,6 +171,7 @@ instance Tagged (ChunkTypeT a r) a where
     CastableTypeT _ x -> CastableTypeT p x
     RecordTypeT _ x -> RecordTypeT p x
     NullTypeT _ -> NullTypeT p
+    TupleTypeT _ x -> TupleTypeT p x
 
 type TypeErrorReport = D.Report Text
 

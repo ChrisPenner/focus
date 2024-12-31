@@ -94,7 +94,7 @@ compileExpr =
               f . TextChunk $ Text.concat (textChunk <$> listChunk xs)
       pure $ ViewFocus $ \f inp -> go (getViewFocus inner) f inp
     StrAppend _pos innerL innerR -> do
-      vf <- emitInterleaved (Pair innerL innerR)
+      vf <- emitZipped (Pair innerL innerR)
       pure $ ViewFocus $ \f inp -> do
         let foc = getViewFocus vf
         inp & foc \(Pair l r) -> do
@@ -226,6 +226,12 @@ compileExpr =
                           )
       pure $ ViewFocus go
     Select _pos branches -> condBranches (toList branches)
+    Zip _pos fields -> do
+      fv <- emitZipped fields
+      pure $ ViewFocus \f chunk -> do
+        let foc = getViewFocus fv
+        chunk & foc \rec -> do
+          f (TupleChunk rec)
   where
     compileTemplateString :: (Focusable m, Monoid r) => Chunk -> [Either (Focus ViewT Chunk Chunk) Text] -> (Chunk -> m r) -> m r
     compileTemplateString inp compiledFocs f = do
@@ -526,14 +532,14 @@ resolveBinding pos input bn@(BindingName name) = do
 
 compileRecord :: (Map BindingName (Selector Pos)) -> IO (Focus ViewT Chunk Chunk)
 compileRecord fields = do
-  fv <- emitInterleaved fields
+  fv <- emitZipped fields
   pure $ ViewFocus \f chunk -> do
     let foc = getViewFocus fv
     chunk & foc \rec -> do
       local (over focusBindings (Map.union rec)) $ f (RecordChunk rec)
 
-emitInterleaved :: forall f. (Traversable f) => (f (Selector Pos)) -> IO (Focus ViewT Chunk (f Chunk))
-emitInterleaved fields = do
+emitZipped :: forall f. (Traversable f) => (f (Selector Pos)) -> IO (Focus ViewT Chunk (f Chunk))
+emitZipped fields = do
   fieldFocuses <- traverse (compileSelectorG ViewF) fields
   let foc :: forall m r. (Focusable m, Monoid r) => (f Chunk -> m r) -> Chunk -> m r
       foc f chunk = do

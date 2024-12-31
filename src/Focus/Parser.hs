@@ -139,6 +139,11 @@ listOfP = M.label "list expression" $ withPos do
   pure $ \pos ->
     ListOf pos (foldl' (\l r -> Action pos $ Sequence pos l r) (Empty pos) selectors)
 
+tupleP :: P [Selector Pos]
+tupleP = M.label "tuple expression" $ do
+  selectors <- keyValueBlockP (M.char '(') (M.char ')') (M.char ',') selectorsP
+  pure selectors
+
 shellP :: P (Expr Pos)
 shellP = M.label "shell expression" $ withPos do
   shellMode <- (((M.string "-{" $> NullStdin) <|> (M.string "#{" $> Normal)))
@@ -247,11 +252,6 @@ selectorP = withPos do
       pure $ const l
     ]
   where
-    -- comma :: (Selector Pos) -> P (Pos -> Selector Pos)
-    -- comma l = do
-    --   _ <- lexeme (M.char ',')
-    --   r <- selectorP <|> sp
-    --   pure $ \pos -> Action pos $ Sequence pos l r
     strAppend :: Selector Pos -> P (Pos -> Selector Pos)
     strAppend l = do
       _ <- lexeme (M.string "++")
@@ -442,13 +442,18 @@ simpleExprP = withPos $ do
               body <- lexeme selectorP
               pure (cond, body)
             pure $ \pos -> Select pos branches
+      ),
+      ( "zip",
+        do
+          sels <- tupleP
+          pure $ \pos -> Zip pos sels
       )
     ]
 
 keyValueBlockP :: P start -> P end -> P sep -> P a -> P [a]
 keyValueBlockP blockStart blockEnd separator body = do
   M.between (lexeme blockStart) (lexeme blockEnd) $ do
-    r <- M.sepBy1 body (M.try (lexeme separator *> M.notFollowedBy (lexeme blockEnd)))
+    r <- M.sepBy body (M.try (lexeme separator *> M.notFollowedBy (lexeme blockEnd)))
     _ <- optional (lexeme separator)
     pure r
 

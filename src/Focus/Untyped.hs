@@ -190,6 +190,7 @@ data Chunk
   | RegexMatchChunk Re.Match
   | JsonChunk Value
   | RecordChunk (Map BindingName Chunk)
+  | TupleChunk [Chunk]
   | UnitChunk
   deriving (Eq, Ord)
 
@@ -201,6 +202,7 @@ instance Show Chunk where
     RegexMatchChunk m -> show $ m ^.. Re.matchAndGroups
     JsonChunk v -> BSC.unpack $ Aeson.encode v
     RecordChunk m -> show m
+    TupleChunk chs -> Text.unpack $ "(" <> (Text.intercalate ", " $ Text.pack . show <$> chs) <> ")"
     UnitChunk -> "null"
 
 renderChunk :: Chunk -> Text
@@ -214,6 +216,7 @@ renderChunk = \case
   JsonChunk v -> Text.pack $ BSC.unpack $ Aeson.encode v
   RecordChunk fields ->
     "{" <> Text.intercalate ", " (Map.toList fields <&> \(BindingName k, v) -> k <> ": " <> renderChunk v) <> "}"
+  TupleChunk chs -> "(" <> (Text.intercalate ", " $ renderChunk <$> chs) <> ")"
   UnitChunk -> "null"
 
 data ChunkType
@@ -224,6 +227,7 @@ data ChunkType
   | JsonType
   | RecordType (Map BindingName ChunkType)
   | NullType
+  | TupleType [ChunkType]
   deriving (Show, Eq)
 
 type TaggedExpr = Expr Pos
@@ -249,6 +253,7 @@ data Expr p
   | Uniq p (Selector p)
   | Pattern p (Pattern p)
   | Select p [(Selector p, Selector p)]
+  | Zip p [Selector p]
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Expr p) p where
@@ -270,6 +275,8 @@ instance Tagged (Expr p) p where
     Index p -> p
     Uniq p _ -> p
     Select p _ -> p
+    Zip p _ -> p
+
   setTag p = \case
     Modify _ x y -> Modify p x y
     Binding _ x -> Binding p x
@@ -288,6 +295,7 @@ instance Tagged (Expr p) p where
     Index _ -> Index p
     Uniq _ x -> Uniq p x
     Select _ x -> Select p x
+    Zip _ x -> Zip p x
 
 data NumberT
   = IntNumber Int

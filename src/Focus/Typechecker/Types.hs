@@ -11,6 +11,7 @@ module Focus.Typechecker.Types
     arrow,
     textType,
     listType,
+    tupleType,
     numberType,
     regexMatchType,
     jsonType,
@@ -37,6 +38,9 @@ textType pos = UTerm $ TextTypeT (NESet.singleton pos)
 
 listType :: D.Position -> Typ -> Typ
 listType pos t = UTerm $ ListTypeT (NESet.singleton pos) t
+
+tupleType :: D.Position -> [Typ] -> Typ
+tupleType pos ts = UTerm $ TupleTypeT (NESet.singleton pos) ts
 
 numberType :: D.Position -> Typ
 numberType pos = UTerm $ NumberTypeT (NESet.singleton pos)
@@ -75,3 +79,4 @@ renderType = \case
   JsonType -> "Json"
   RecordType fields -> "{" <> ifoldMap (\(BindingName k) v -> k <> ": " <> renderType v <> ",\n") fields <> "}"
   NullType -> "Null"
+  TupleType ts -> "(" <> foldMap (\t -> renderType t <> ", ") ts <> ")"

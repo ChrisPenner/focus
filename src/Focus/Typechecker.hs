@@ -102,6 +102,7 @@ unificationErrorReport = \case
       T.JsonTypeT _ -> renderType T.JsonType
       T.RecordTypeT _ fields -> "{" <> Text.intercalate ", " (M.toList fields <&> \(UT.BindingName k, v) -> k <> ": " <> renderTyp v) <> "}"
       T.NullTypeT _ -> renderType T.NullType
+      T.TupleTypeT _ ts -> "(" <> Text.intercalate ", " (renderTyp <$> ts) <> ")"
 
 warningReport :: Warning -> D.Report Text
 warningReport = \case {}
@@ -159,6 +160,7 @@ declareBindings bd = do
       T.JsonType -> T.jsonType pos
       T.RecordType fields -> T.recordType pos (chunkTypeToChunkTypeT pos <$> fields)
       T.NullType -> T.nullType pos
+      T.TupleType ts -> T.tupleType pos (chunkTypeToChunkTypeT pos <$> ts)
 
 initBinding :: UT.BindingName -> UnifyM Typ
 initBinding name = do
@@ -311,8 +313,11 @@ composeArity = \cases
   Infinite Infinite -> Infinite
   (Exactly n) (Exactly m) -> Exactly (n * m)
 
-zipArities :: ReturnArity -> ReturnArity -> ReturnArity
-zipArities = \cases
+zipArities :: (Foldable f) => f ReturnArity -> ReturnArity
+zipArities = foldl' matchArities Infinite
+
+matchArities :: ReturnArity -> ReturnArity -> ReturnArity
+matchArities = \cases
   x Infinite -> x
   Infinite x -> x
   Any _ -> Any
@@ -321,6 +326,14 @@ zipArities = \cases
   Affine Exactly {} -> Affine
   Exactly {} Affine -> Affine
   (Exactly n) (Exactly m) -> Exactly (min n m)
+
+unifyAll :: (Foldable f) => f Typ -> UnifyM Typ
+unifyAll xs = do
+  case toList xs of
+    [] -> freshVar
+    [x] -> pure x
+    (x : xs') -> do
+      foldM (\a b -> liftUnify $ Unify.unify a b) x xs'
 
 asView :: (MonadReader UnifyEnv m) => m r -> m r
 asView = local \e -> e {inPathSelector = False}
@@ -386,17 +399,11 @@ unifyExpr expr = do
       pure $ (i, o, composeArity arity arity')
     UT.Record pos fields -> do
       fields' <- for fields unifySelectorG
-      inp <- freshVar
-      inp' <-
-        foldM
-          ( \i1 i2 -> do
-              liftUnify $ Unify.unify i1 i2
-          )
-          inp
-          (view _1 <$> fields')
-      let arity = foldl zipArities Infinite (view _3 <$> fields')
-      unifyBindings (fields' <&> \(_i, o, _arity) -> o)
-      pure $ (inp', T.recordType pos (view _2 <$> fields'), arity)
+      let (inputs, outputs, arities) = (fields' <&> view _1, fields' <&> view _2, fields' <&> view _3)
+      inp <- unifyAll inputs
+      let arity = zipArities arities
+      unifyBindings outputs
+      pure $ (inp, T.recordType pos outputs, arity)
     UT.Cycle _pos inner -> do
       (inp, out, innerArity) <- unifyAction inner
       let arity = case innerArity of
@@ -420,6 +427,12 @@ unifyExpr expr = do
         _ <- liftUnify $ Unify.unify condO bodyI
         pure (condI, bodyO, composeArities (condArity NE.:| [bodyArity]))
       zipTypeSigs (toList branchTypes)
+    UT.Zip pos fields -> do
+      fieldsTypes <- for fields unifySelectorG
+      let (inputs, outputs, arities) = (fieldsTypes <&> view _1, fieldsTypes <&> view _2, fieldsTypes <&> view _3)
+      inp <- unifyAll inputs
+      let arity = zipArities arities
+      pure $ (inp, T.tupleType pos outputs, arity)
   where
     exprWarning :: UnifyM ()
     exprWarning = do
@@ -452,7 +465,7 @@ zipTypeSigs =
       (i', o', arity') <- zipTypeSigs xs
       newI <- liftUnify $ Unify.unify i i'
       newO <- liftUnify $ Unify.unify o o'
-      pure (newI, newO, zipArities arity arity')
+      pure (newI, newO, matchArities arity arity')
 
 unifyTemplateString :: Typ -> Diagnose.Position -> TemplateString D.Position -> UnifyM (Typ, Typ, ReturnArity)
 unifyTemplateString inputTyp pos (TemplateString bindings) = do
