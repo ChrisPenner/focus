@@ -171,14 +171,13 @@ templateStringP begin end = M.between (maybe (pure ()) (void . M.char) begin) (l
     M.choice
       [ Left <$> selExprP,
         Right . Text.pack
-          <$> some (escaped <|> M.noneOf (['%', '}', end] :: String))
+          <$> some (escaped <|> M.noneOf (['{', '}', end] :: String))
       ]
   where
     selExprP =
-      M.try (M.char '%' *> M.between (lexeme (M.char '{')) ((M.char '}')) selectorsP)
-        <|> (M.try $ withPos ((\b pos -> Action pos $ Binding pos b) <$> bareBindingP))
+      (M.between (lexeme (M.char '{')) ((M.char '}')) selectorsP)
     -- Escape bindings
-    escaped = M.string "\\%" $> '%'
+    escaped = M.string "\\{" $> '{'
 
 patternStringP :: Char -> Char -> P (Pattern Pos)
 patternStringP begin end = withPos $ M.between (M.char begin) (lexeme $ M.char end) $ do
@@ -189,7 +188,6 @@ patternStringP begin end = withPos $ M.between (M.char begin) (lexeme $ M.char e
         flip PatternText . Text.pack
           <$> some (escaped <|> M.noneOf (['%', end] :: String))
       ]
-  Debug.debugM "PatternString" $ "Pattern pieces: " <> show patPieces
   let (bindingDecls, regexStr) =
         patPieces & foldMap \case
           PatternText _pos t -> (mempty, Regex.escape t)
@@ -211,10 +209,8 @@ patternStringP begin end = withPos $ M.between (M.char begin) (lexeme $ M.char e
     bareBindingNameP :: P BindingName
     bareBindingNameP = do
       _ <- M.char '%'
-      bracketed <- optional (M.char '{')
-      n <- bindingName
-      when (isJust bracketed) $ void $ M.char '}'
-      pure $ n
+      M.between (lexeme $ M.char '{') ({- NOT a lexeme -} M.char '}') do
+        bindingName
 
 bareBindingP :: P BindingName
 bareBindingP = do

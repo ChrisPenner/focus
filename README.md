@@ -1,6 +1,6 @@
 # focus - cli utility for hacking and slashing data
 
-**ALPHA** - Very experimental and will change from day to day, don't expect anything to work, it's not stable.
+**ALPHA** - Very experimental and the syntax and semantics are changing almost every day, don't expect anything to work, it's not stable.
 
 `focus` is a flexible tool which helps you to **select** data from stream of text,
 <!-- toc GFM -->

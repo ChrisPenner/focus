@@ -1,14 +1,15 @@
 ===COMMAND===============================================================================
-focus contains "[%descr](%link)" |= "[%link](%descr)" -
+focus "[%{descr}](%{link})" |= "[{%link}]({%descr})" -
 ===INPUT===============================================================================
 [http://google.ca](My Link)
 ===OUTPUT===============================================================================
-[error]: Unknown binding
-     ╭──▶ <argument>@1:33-1:38
+[error]: Invalid selector
+     ╭──▶ <argument>@1:5-1:6
      │
-   1 │ contains "[%descr](%link)" |= "[%link](%descr)"
-     •                                 ┬──── 
-     •                                 ╰╸ Binding BindingName {bsText = "link"} is not in scope.
+   1 │ "[%{descr}](%{link})" |= "[{%link}]({%descr})"
+     •     ┬ 
+     •     ├╸ unexpected "descr}](%{l"
+     •     ╰╸ expecting "...", "=>", "at", "chain", "chars", "concat", "contains", "count", "cycle", "debug", "drop", "dropEnd", "empty", "file", "filter", "groups", "index", "intersperse", "json", "lines", "not", "product", "prompt", "reversed", "select", "splitOn", "take", "takeEnd", "uniq", "words", "zip", '!', '"', '%', '+', '-', '_', digit, integer, list expression, record, regex, selector pipeline, shell expression, or white space
 ─────╯
 ===EXIT CODE===============================================================================
 0

@@ -109,8 +109,8 @@ echo "The password is swordfish" | run binding_usage '/The password is (?<passwo
 echo "The password is swordfish" | run binding_usage_in_template '/The password is (?<password>\w+)/ | "password: %{ %password | #{rev}}!"' '-'
 
 ## Pattern strings
-echo "The password is swordfish" | run pattern_string '=> "The password is %password" | "password: %password"' '-'
-echo '[http://google.ca](My Link)' | run pattern_modify 'contains "[%descr](%link)" |= "[%link](%descr)"' '-'
+echo "The password is swordfish" | run pattern_string '=> "The password is %{password}" | "password: {%password}"' '-'
+echo '[http://google.ca](My Link)' | run pattern_modify 'contains "[%{descr}](%{link})" |= "[{%link}]({%descr})"' '-'
 
 ## String Concatenation
 echo "one,two,three" | run string_concat_view '[splitOn ","] | concat _' '-'
