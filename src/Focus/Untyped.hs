@@ -246,7 +246,7 @@ data Expr p
   | StrConcat p (Selector p)
   | StrAppend p (Selector p) (Selector p)
   | Intersperse p (NonEmpty (Selector p))
-  | Comma p (Selector p) (Selector p)
+  | Sequence p (Selector p) (Selector p)
   | Count p (Selector p)
   | Shell p (TemplateString p) ShellMode
   | MathBinOp p MathBinOp (Selector p) (Selector p)
@@ -267,7 +267,7 @@ instance Tagged (Expr p) p where
     StrConcat p _ -> p
     StrAppend p _ _ -> p
     Intersperse p _ -> p
-    Comma p _ _ -> p
+    Sequence p _ _ -> p
     Count p _ -> p
     MathBinOp p _ _ _ -> p
     Shell p _ _ -> p
@@ -285,7 +285,7 @@ instance Tagged (Expr p) p where
     StrConcat _ x -> StrConcat p x
     StrAppend _ x y -> StrAppend p x y
     Intersperse _ x -> Intersperse p x
-    Comma _ x y -> Comma p x y
+    Sequence _ x y -> Sequence p x y
     Count _ x -> Count p x
     MathBinOp _ x y z -> MathBinOp p x y z
     Shell _ x y -> Shell p x y

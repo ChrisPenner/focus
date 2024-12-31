@@ -135,10 +135,9 @@ reGroupsP = do
 
 listOfP :: P (Selector Pos)
 listOfP = M.label "list expression" $ withPos do
-  M.between (lexeme $ M.char '[') (lexeme $ M.char ']') $ do
-    M.sepBy selectorsP (lexeme $ M.char ',')
-      <&> \selectors pos ->
-        ListOf pos (foldl' (\l r -> Action pos $ Comma pos l r) (Empty pos) selectors)
+  selectors <- keyValueBlockP (M.char '[') (M.char ']') (M.char ',') selectorsP
+  pure $ \pos ->
+    ListOf pos (foldl' (\l r -> Action pos $ Sequence pos l r) (Empty pos) selectors)
 
 shellP :: P (Expr Pos)
 shellP = M.label "shell expression" $ withPos do
@@ -152,7 +151,7 @@ shellActionP = withPos do
 
 recordP :: P (Selector Pos)
 recordP = M.label "record" $ withPos do
-  fields <- Map.fromList <$> M.between (lexeme $ M.char '{') (lexeme $ M.char '}') (M.sepBy field (lexeme $ M.char ','))
+  fields <- Map.fromList <$> keyValueBlockP (M.char '{') (M.char '}') (M.char ',') field
   pure $ \pos -> Action pos $ Record pos fields
   where
     field = do
@@ -252,7 +251,7 @@ selectorP = withPos do
     -- comma l = do
     --   _ <- lexeme (M.char ',')
     --   r <- selectorP <|> sp
-    --   pure $ \pos -> Action pos $ Comma pos l r
+    --   pure $ \pos -> Action pos $ Sequence pos l r
     strAppend :: Selector Pos -> P (Pos -> Selector Pos)
     strAppend l = do
       _ <- lexeme (M.string "++")

@@ -112,7 +112,7 @@ compileExpr =
                 r <- f x
                 (r <>) <$> go (rest ++ [xs])
         go (NE.toList chunkResults)
-    Comma _ a b -> do
+    Sequence _ a b -> do
       l <- compileSelectorG ViewF a
       r <- compileSelectorG ViewF b
       pure $ ViewFocus $ \f chunk -> do

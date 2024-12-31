@@ -365,7 +365,7 @@ unifyExpr expr = do
       typs <- for actions unifyAction <&> fmap \(i, o, _) -> (i, o)
       (i, o) <- liftUnify $ F1.foldrM1 (\(i1, o1) (i2, o2) -> (,) <$> Unify.unify i1 i2 <*> Unify.unify o1 o2) typs
       pure $ (i, o, Any)
-    Comma _pos a b -> do
+    Sequence _pos a b -> do
       (inp, out, _arity) <- unifyAction a
       (inp', out', _arity') <- unifyAction b
       _ <- liftUnify $ Unify.unify inp inp'
