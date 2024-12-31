@@ -68,6 +68,7 @@ dependencies:
 - recursion-schemes
 - some
 - mtl
+- profunctors
 - diagnose
 - deriving-compat
 - prettyprinter-ansi-terminal

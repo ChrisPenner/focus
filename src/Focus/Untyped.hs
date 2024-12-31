@@ -254,6 +254,7 @@ data Expr p
   | Select p [(Selector p, Selector p)]
   | Zip p [Selector p]
   | Chain p [Selector p]
+  | Product p [Selector p]
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Expr p) p where
@@ -276,6 +277,7 @@ instance Tagged (Expr p) p where
     Select p _ -> p
     Zip p _ -> p
     Chain p _ -> p
+    Product p _ -> p
 
   setTag p = \case
     Modify _ x y -> Modify p x y
@@ -296,6 +298,7 @@ instance Tagged (Expr p) p where
     Select _ x -> Select p x
     Zip _ x -> Zip p x
     Chain _ x -> Chain p x
+    Product _ x -> Product p x
 
 data NumberT
   = IntNumber Int

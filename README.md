@@ -172,7 +172,6 @@ before feeding the result back through the selector.
 ## TODO
 
 - [ ] How do I fold, e.g. to sum or w/e
-- [ ] How do I send one input to multiple selectors then combine the results?
 - [ ] `||` for concat (and logical or), `&&` for zippy logical and, (maybe it returns an n'ary tuple?)
 - [ ] I'm thinking it may be clearer to actually require '%{}' inside pattern binding and template strings. Maybe just use bare '{}'?'
 - [ ] Most selectors probably shouldn't return their input, instead the caller can wrap them in 'filter' if that was the intention.
@@ -205,6 +204,7 @@ before feeding the result back through the selector.
 - [ ] Fix annoying ansi codes coming from diagnose even on no-color mode.
 - [ ] Allow accessing env vars with a `%env.BLAH` or something? (though you can already do this with `"${BLAH}"`)
 - [ ] Make 'at' work with records, including typechecking
+- [x] ~How do I send one input to multiple selectors then combine the results?~
 - [x] ~Support reading command from a file with -f~
 - [x] ~Add case/select statements~
 - [x] ~Set default input mode to a single 'null', but allow stdin to be passed as a file via '-'~

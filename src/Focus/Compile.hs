@@ -231,6 +231,8 @@ compileExpr =
       focs <- for fields (compileSelectorG ViewF)
       pure $ ViewFocus \f inp -> do
         focs & foldMapM \foc -> getViewFocus foc f inp
+    Product _pos fields -> do
+      rmap TupleChunk <$> emitProduct fields
   where
     compileTemplateString :: (Focusable m, Monoid r) => Chunk -> [Either (Focus ViewT Chunk Chunk) Text] -> (Chunk -> m r) -> m r
     compileTemplateString inp compiledFocs f = do
@@ -567,6 +569,18 @@ emitZipped fields = do
                     Just ks -> (result <>) <$> (loop ks)
         loop corts
   pure $ ViewFocus foc
+
+emitProduct :: [(Selector Pos)] -> IO (Focus ViewT Chunk [Chunk])
+emitProduct fields = do
+  fieldFocuses <- traverse (compileSelectorG ViewF) fields
+  pure $ ViewFocus \f inp -> do
+    helper id f inp fieldFocuses
+  where
+    helper dlist f inp = \case
+      [] -> f $ dlist []
+      (fieldFocus : rest) -> do
+        inp & getViewFocus fieldFocus \field -> do
+          helper (dlist . (field :)) f inp rest
 
 condBranches :: [(Selector Pos, Selector Pos)] -> IO (Focus ViewT Chunk Chunk)
 condBranches branches = do

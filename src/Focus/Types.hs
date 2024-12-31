@@ -86,6 +86,9 @@ data Focus (cmd :: CommandT) i o where
   ViewFocus :: (forall m r. (Focusable m, Monoid r) => LensLike m i r o r) -> Focus 'ViewT i o
   ModifyFocus :: (forall m. (Focusable m) => LensLike' m i o) -> Focus 'ModifyT i o
 
+instance Profunctor (Focus ViewT) where
+  dimap f g (ViewFocus l) = ViewFocus $ \k s -> f s & l (k Cat.. g)
+
 instance (IsCmd cmd) => Category (Focus cmd) where
   id = case getCmd @cmd of
     ViewF -> ViewFocus $ \f s -> f s

@@ -92,6 +92,7 @@ library
     , pcre-heavy
     , pcre-light
     , prettyprinter-ansi-terminal
+    , profunctors
     , recursion-schemes
     , resourcet
     , scientific
@@ -160,6 +161,7 @@ executable focus
     , pcre-heavy
     , pcre-light
     , prettyprinter-ansi-terminal
+    , profunctors
     , recursion-schemes
     , resourcet
     , scientific

@@ -452,6 +452,11 @@ simpleExprP = withPos $ do
         do
           sels <- tupleP
           pure $ \pos -> Chain pos sels
+      ),
+      ( "product",
+        do
+          sels <- tupleP
+          pure $ \pos -> Product pos sels
       )
     ]
 

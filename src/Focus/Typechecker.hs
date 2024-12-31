@@ -429,6 +429,12 @@ unifyExpr expr = do
     UT.Chain _pos fields -> do
       fieldsTypes <- for fields unifySelectorG
       zipTypeSigs fieldsTypes
+    UT.Product pos fields -> do
+      fieldsTypes <- for fields unifySelectorG
+      let (inputs, outputs, arities) = (fieldsTypes <&> view _1, fieldsTypes <&> view _2, fieldsTypes <&> view _3)
+      inp <- unifyAll inputs
+      let arity = zipArities arities
+      pure $ (inp, T.tupleType pos outputs, arity)
   where
     exprWarning :: UnifyM ()
     exprWarning = do
