@@ -18,7 +18,7 @@ import Data.Text.IO qualified as TextIO
 import Error.Diagnose qualified as D
 import Error.Diagnose qualified as Diagnose
 import Focus.Cli (Alignment (..), InPlace (..), Options (..), ShowWarnings (..), UseColour (..), optionsP)
-import Focus.Command (Command (..), CommandF (..), CommandT (..), InputLocation (..), OutputLocation (..))
+import Focus.Command (Command (..), CommandF (..), CommandT (..), InputLocation (..), OutputLocation (..), ScriptLocation (..))
 import Focus.Compile (compileSelector)
 import Focus.Exec qualified as Exec
 import Focus.Parser (parseSelector)
@@ -57,7 +57,7 @@ instance MonadState (CliState) CliM where
 
 run :: IO ()
 run = do
-  opts@Options {command = Modify script inputLocs, output, chunkSize, inPlace, alignMode} <-
+  opts@Options {command = Command scriptLoc inputLocs, output, chunkSize, inPlace, alignMode} <-
     Opts.customExecParser
       (Opts.prefs (Opts.subparserInline <> Opts.showHelpOnError <> Opts.disambiguate <> Opts.showHelpOnEmpty <> Opts.helpShowGlobals))
       ( Opts.info
@@ -66,9 +66,10 @@ run = do
               <> Opts.progDesc "Focus - cli utility for hacking and slashing data"
           )
       )
+  (scriptName, script) <- resolveScript scriptLoc
   cliStateVar <- newTVarIO $ CliState mempty
   flip runReaderT (cliStateVar, opts) . unCli $ do
-    focus <- getModifyFocus inputLocs script
+    focus <- getModifyFocus inputLocs scriptName script
     case (inputLocs, alignMode, inPlace) of
       ([], _, InPlace) -> do
         failWith "In-place mode specified, but no input files provided."
@@ -143,13 +144,13 @@ run = do
       liftIO $ TextIO.hPutStrLn UnliftIO.stderr msg
       liftIO $ System.exitFailure
 
-    getModifyFocus :: [InputLocation] -> Text -> CliM (Focus ViewT Chunk Chunk)
-    getModifyFocus inputFiles selectorTxt = do
+    getModifyFocus :: [InputLocation] -> Text -> Text -> CliM (Focus ViewT Chunk Chunk)
+    getModifyFocus inputFiles selectorName selectorTxt = do
       let inputTyp = case inputFiles of
             [] -> Types.nullType argPosition
             _ -> Types.textType argPosition
-      addSource "<selector>" selectorTxt
-      case parseSelector "<selector>" selectorTxt of
+      addSource selectorName selectorTxt
+      case parseSelector selectorName selectorTxt of
         Left errDiagnostic -> do
           failWithDiagnostic errDiagnostic
         Right selectorAst -> do
@@ -169,6 +170,13 @@ run = do
     argPosition =
       -- TODO: fix this
       D.Position (0, 0) (0, 0) "unknown"
+
+    resolveScript :: (MonadIO m) => ScriptLocation -> m (Text, Text)
+    resolveScript = \case
+      ScriptLiteral txt -> pure ("<argument>", txt)
+      ScriptFile path -> do
+        contents <- liftIO $ TextIO.readFile path
+        pure (Text.pack path, contents)
 
 printWarnings :: [WarningReport] -> CliM ()
 printWarnings reports = do

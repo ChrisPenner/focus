@@ -13,8 +13,7 @@ where
 
 import Data.Function
 import Data.Functor
-import Data.Text (Text)
-import Focus.Command (Command (..), InputLocation (..), OutputLocation (..))
+import Focus.Command (Command (..), InputLocation (..), OutputLocation (..), ScriptLocation (..))
 import Options.Applicative hiding (action, command)
 
 data ChunkSize
@@ -64,7 +63,6 @@ optionsP = do
       LineChunks
       EntireChunks
       ( long "full"
-          <> short 'f'
           <> help "Process the entire input at once instead of line-by-line"
       )
   inPlace <-
@@ -85,20 +83,20 @@ optionsP = do
       )
 
   alignMode <- alignModeP
-  command <- overP
+  command <- cmdP
   pure Options {output, command, useColour, chunkSize, inPlace, showWarnings, alignMode}
 
 inputFilesP :: Parser [FilePath]
 inputFilesP = many $ strArgument (metavar "FILES..." <> help "Input files. If omitted, read from stdin")
 
-overP :: Parser Command
-overP = do
+cmdP :: Parser Command
+cmdP = do
   script <- scriptP
   inputLocs <-
     inputFilesP <&> fmap \case
       "-" -> StdIn
       f -> InputFile f
-  pure $ Modify script inputLocs
+  pure $ Command script inputLocs
 
 alignModeP :: Parser Alignment
 alignModeP = do
@@ -110,9 +108,23 @@ alignModeP = do
         <> help "Align the input files line by line. Refer to them using %f1, %f2, etc."
     )
 
-scriptP :: Parser Text
+scriptP :: Parser ScriptLocation
 scriptP =
-  strArgument
-    ( metavar "SCRIPT"
-        <> help "Focus script to run"
-    )
+  lit <|> file
+  where
+    lit =
+      ScriptLiteral
+        <$> ( strArgument
+                ( metavar "SCRIPT"
+                    <> help "Focus script to run"
+                )
+            )
+    file =
+      ScriptFile
+        <$> ( strOption
+                ( long "script-file"
+                    <> short 'f'
+                    <> metavar "SCRIPT-FILE"
+                    <> help "File containing the focus script to run"
+                )
+            )

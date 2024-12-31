@@ -8,12 +8,11 @@ module Focus.Command
     IsCmd (..),
     InputLocation (..),
     OutputLocation (..),
+    ScriptLocation (..),
   )
 where
 
 import Data.Text (Text)
-
-type Script = Text
 
 data CommandT = ViewT | ModifyT
 
@@ -40,6 +39,11 @@ data OutputLocation
   | OutputFile FilePath
   deriving stock (Show, Eq, Ord)
 
+data ScriptLocation
+  = ScriptFile FilePath
+  | ScriptLiteral Text
+  deriving stock (Show, Eq, Ord)
+
 data Command
-  = Modify Script [InputLocation]
+  = Command ScriptLocation [InputLocation]
   deriving stock (Show)
