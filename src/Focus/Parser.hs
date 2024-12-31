@@ -123,7 +123,7 @@ regexLiteralP =
         let bindingDeclarations =
               (PCRE.Light.captureNames re)
                 & fmap (Text.decodeUtf8 . fst)
-                & fmap (\groupName -> (BindingSymbol groupName, (pos, TextType)))
+                & fmap (\groupName -> (BindingName groupName, (pos, TextType)))
                 & M.fromList
          in (pos, re, bindingDeclarations)
   where
@@ -155,7 +155,7 @@ recordP = M.label "record" $ withPos do
   pure $ \pos -> Action pos $ Record pos fields
   where
     field = do
-      key <- lexeme bindingSymbol
+      key <- lexeme bindingName
       _ <- lexeme $ M.char ':'
       value <- selectorP
       pure (key, value)
@@ -188,7 +188,7 @@ patternStringP begin end = withPos $ M.between (M.char begin) (lexeme $ M.char e
   let (bindingDecls, regexStr) =
         patPieces & foldMap \case
           PatternText _pos t -> (mempty, Regex.escape t)
-          PatternBinding pos bs@(BindingSymbol t) -> (M.singleton bs (pos, TextType), "(?<" <> t <> ">.+?)")
+          PatternBinding pos bs@(BindingName t) -> (M.singleton bs (pos, TextType), "(?<" <> t <> ">.+?)")
   -- If the final piece is a binding, expand it to match till the end of the string
   regexStr' <- case reverse patPieces of
     PatternBinding {} : _ -> do
@@ -203,22 +203,22 @@ patternStringP begin end = withPos $ M.between (M.char begin) (lexeme $ M.char e
     -- Escape bindings
     escaped =
       M.string "\\%" $> '%'
-    bareBindingNameP :: P BindingSymbol
+    bareBindingNameP :: P BindingName
     bareBindingNameP = do
       _ <- M.char '%'
       bracketed <- optional (M.char '{')
-      n <- bindingSymbol
+      n <- bindingName
       when (isJust bracketed) $ void $ M.char '}'
       pure $ n
 
 bareBindingP :: P BindingName
 bareBindingP = do
   _ <- M.char '%'
-  ((BindingName <$> bindingSymbol) <|> (M.string "." $> InputBinding))
+  bindingName
 
-bindingSymbol :: P BindingSymbol
-bindingSymbol = do
-  BindingSymbol . Text.pack <$> (M.some M.alphaNumChar)
+bindingName :: P BindingName
+bindingName = do
+  BindingName . Text.pack <$> (M.some M.alphaNumChar)
 
 groupedP :: P (Selector Pos)
 groupedP = do
@@ -463,6 +463,6 @@ exprLiteralP = withPos do
 patternP :: P (Pattern Pos)
 patternP = withPos do
   M.choice
-    [ lexeme bindingSymbol <&> \bs pos -> BindingPattern pos bs,
+    [ lexeme bindingName <&> \bs pos -> BindingPattern pos bs,
       patternStringP '"' '"' <&> \pat _pos -> pat
     ]

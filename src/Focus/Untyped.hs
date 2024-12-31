@@ -8,7 +8,6 @@ module Focus.Untyped
     TaggedSelector,
     ShellMode (..),
     BindingName (..),
-    BindingSymbol (..),
     TemplateString (..),
     PatternElem (..),
     Pattern (..),
@@ -57,13 +56,7 @@ absurdF = \case {}
 
 type TaggedSelector = Selector Pos
 
--- | A non-special binding symbol, i.e. not '%.', just a regular name like 'foo'
-newtype BindingSymbol = BindingSymbol {bsText :: Text}
-  deriving stock (Show, Eq, Ord)
-
-data BindingName
-  = BindingName BindingSymbol
-  | InputBinding
+newtype BindingName = BindingName {bsText :: Text}
   deriving stock (Show, Eq, Ord)
 
 newtype TemplateString a = TemplateString [Either (Selector a) Text]
@@ -78,9 +71,9 @@ instance Foldable TemplateString where
 instance Traversable TemplateString where
   traverse f (TemplateString ps) = TemplateString <$> traverse (bitraverse (traverse f) pure) ps
 
-type Bindings = Map BindingSymbol Chunk
+type Bindings = Map BindingName Chunk
 
-type BindingDeclarations = Map BindingSymbol (Pos, ChunkType)
+type BindingDeclarations = Map BindingName (Pos, ChunkType)
 
 data ShellMode
   = Normal
@@ -89,7 +82,7 @@ data ShellMode
 
 data Pattern p
   = -- | Bind into a regular binding name, e.g. `-> %foo`
-    BindingPattern p BindingSymbol
+    BindingPattern p BindingName
   | -- | Bind using a pattern string, e.g. `-> "%foo-%bar.%ext"`
     PatternString p BindingDeclarations Regex
   | -- | Bind elements of a list, e.g. `-> [%foo, _, %bar]`
@@ -98,7 +91,7 @@ data Pattern p
 
 data PatternElem p
   = PatternText p Text
-  | PatternBinding p BindingSymbol
+  | PatternBinding p BindingName
   deriving stock (Show, Functor, Foldable, Traversable)
 
 data Selector p
@@ -196,7 +189,7 @@ data Chunk
   | NumberChunk NumberT
   | RegexMatchChunk Re.Match
   | JsonChunk Value
-  | RecordChunk (Map BindingSymbol Chunk)
+  | RecordChunk (Map BindingName Chunk)
   | UnitChunk
   deriving (Eq, Ord)
 
@@ -220,7 +213,7 @@ renderChunk = \case
   RegexMatchChunk _m -> error "Can't render p regex match chunk"
   JsonChunk v -> Text.pack $ BSC.unpack $ Aeson.encode v
   RecordChunk fields ->
-    "{" <> Text.intercalate ", " (Map.toList fields <&> \(BindingSymbol k, v) -> k <> ": " <> renderChunk v) <> "}"
+    "{" <> Text.intercalate ", " (Map.toList fields <&> \(BindingName k, v) -> k <> ": " <> renderChunk v) <> "}"
   UnitChunk -> "null"
 
 data ChunkType
@@ -229,7 +222,7 @@ data ChunkType
   | NumberType
   | RegexMatchType
   | JsonType
-  | RecordType (Map BindingSymbol ChunkType)
+  | RecordType (Map BindingName ChunkType)
   | NullType
   deriving (Show, Eq)
 
@@ -250,7 +243,7 @@ data Expr p
   | Count p (Selector p)
   | Shell p (TemplateString p) ShellMode
   | MathBinOp p MathBinOp (Selector p) (Selector p)
-  | Record p (Map BindingSymbol (Selector p))
+  | Record p (Map BindingName (Selector p))
   | Cycle p (Selector p)
   | Index p
   | Uniq p (Selector p)

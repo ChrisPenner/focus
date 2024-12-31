@@ -408,7 +408,7 @@ compileSelectorG cmdF = \case
       TextChunk <$> forOf (RE.regexing pat) txt \match -> do
         let groups =
               match ^. RE.namedGroups
-                & Map.mapKeys BindingSymbol
+                & Map.mapKeys BindingName
                 <&> TextChunk
         Debug.debugM "Match Groups" groups
         local (over focusBindings (Map.union groups)) $ forOf trav match (fmap textChunk . f . TextChunk)
@@ -419,7 +419,7 @@ viewRegex pat trav = ViewFocus \f chunk -> do
   txt & foldMapMOf (RE.regexing pat) \match -> do
     let groups =
           match ^. RE.namedGroups
-            & Map.mapKeys BindingSymbol
+            & Map.mapKeys BindingName
             <&> TextChunk
     local (over focusBindings (Map.union groups)) $ foldMapMOf trav (f . TextChunk) match
 
@@ -515,18 +515,16 @@ mayErr err = do
 --     Right txt -> pure txt
 
 resolveBinding :: (Focusable m) => Pos -> Chunk -> BindingName -> m Chunk
-resolveBinding pos input = \case
-  BindingName bs@(BindingSymbol name) -> do
-    bindings <- view focusBindings
-    case Map.lookup bs bindings of
-      Just chunk -> pure chunk
-      Nothing -> do
-        Debug.debugM "Bindings before err" bindings
-        mayErr $ BindingError pos $ "Binding not in scope: " <> name
-        pure $ input
-  InputBinding -> pure input
+resolveBinding pos input bn@(BindingName name) = do
+  bindings <- view focusBindings
+  case Map.lookup bn bindings of
+    Just chunk -> pure chunk
+    Nothing -> do
+      Debug.debugM "Bindings before err" bindings
+      mayErr $ BindingError pos $ "Binding not in scope: " <> name
+      pure $ input
 
-compileRecord :: (Map BindingSymbol (Selector Pos)) -> IO (Focus ViewT Chunk Chunk)
+compileRecord :: (Map BindingName (Selector Pos)) -> IO (Focus ViewT Chunk Chunk)
 compileRecord fields = do
   fv <- emitInterleaved fields
   pure $ ViewFocus \f chunk -> do

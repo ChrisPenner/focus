@@ -111,7 +111,7 @@ data ChunkTypeT a r
   | RegexMatchTypeT a
   | JsonTypeT a
   | CastableTypeT a r
-  | RecordTypeT a (Map BindingSymbol r)
+  | RecordTypeT a (Map BindingName r)
   | NullTypeT a
   deriving stock (Show, Eq, Functor, Foldable, Traversable)
 
