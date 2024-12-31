@@ -198,9 +198,10 @@ before feeding the result back through the selector.
 - [ ] README tests
 - [ ] Support JSON
 - [ ] Handle errors from shell commands better
-- [ ] shell 'if'
+- [ ] Allow capturing the escape code of a shell command for use in conditionals.
+- [ ] Add `==` and `!=` for use in conditionals, maybe allow sectioning?
 - [ ] Fix annoying ansi codes coming from diagnose even on no-color mode.
-- [ ] Pass env vars via an `%env` object.
+- [ ] Allow accessing env vars with a `%env.BLAH` or something? (though you can already do this with `"${BLAH}"`)
 - [ ] Make 'at' work with records, including typechecking
 - [x] ~Support reading command from a file with -f~
 - [x] ~Add case/select statements~

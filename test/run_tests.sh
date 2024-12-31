@@ -98,7 +98,7 @@ echo '{"one": 1, "two": 2, "three": 3}' | run json_view 'json' '-'
 
 ## Casting
 echo '1,2,3' | run auto_cast '[ splitOn "," ] | (at 0) + (at 1)' '-'
-echo '1,2,3' | run auto_cast_2 '[ splitOn "," ] | (at 0) + (at 1) | %. ++ "!"' '-'
+echo '1,2,3' | run auto_cast_2 '[ splitOn "," ] | (at 0) + (at 1) | _ ++ "!"' '-'
 
 # Expressions
 
@@ -113,7 +113,7 @@ echo "The password is swordfish" | run pattern_string '=> "The password is %pass
 echo '[http://google.ca](My Link)' | run pattern_modify 'contains "[%descr](%link)" |= "[%link](%descr)"' '-'
 
 ## String Concatenation
-echo "one,two,three" | run string_concat_view '[splitOn ","] | concat %.' '-'
+echo "one,two,three" | run string_concat_view '[splitOn ","] | concat _' '-'
 
 ## String append
 printf "one,two,three\n1,2,3" | run string_append_view '[splitOn ","] | at 0 ++ "-" ++ at 2' '-'
@@ -170,7 +170,7 @@ echo '10,3.5' | run modulus_mixed_view '[ splitOn "," ] | (at 0) % (at 1)' '-'
 echo '2,3.5' | run power_mixed_view '[ splitOn "," ] | (at 0) ^ (at 1)' '-'
 
 ## Expressions in modify commands
-echo '1,2' | run expression_in_selector '[ splitOn "," ] | (at 0) + (at 1) |= %.' '-'
+echo '1,2' | run expression_in_selector '[ splitOn "," ] | (at 0) + (at 1) |= _' '-'
 
 ## Records
 echo 'one 1 2 two three' | run record_view '{ numbers: /\d+/ , words: /[a-z]+/ }' '-'
