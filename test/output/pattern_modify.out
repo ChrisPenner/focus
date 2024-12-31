@@ -1,16 +1,14 @@
 ===COMMAND===============================================================================
-focus => "[%descr](%link)" |= "[%link](%descr)" -
+focus contains "[%descr](%link)" |= "[%link](%descr)" -
 ===INPUT===============================================================================
 [http://google.ca](My Link)
 ===OUTPUT===============================================================================
-[error]: Expression found in selector
-     ╭──▶ <selector>@1:1-1:22
+[error]: Unknown binding
+     ╭──▶ <argument>@1:33-1:38
      │
-   1 │ => "[%descr](%link)" |= "[%link](%descr)"
-     • ┬──────────────────── 
-     • ╰╸ This expression can't be used in the selector on the left-hand side of a '|='
-     •
-     │ Note: Certain expressions can't be sensibly 'reversed' as required by the use of '|='
+   1 │ contains "[%descr](%link)" |= "[%link](%descr)"
+     •                                 ┬──── 
+     •                                 ╰╸ Binding BindingSymbol {bsText = "link"} is not in scope.
 ─────╯
 ===EXIT CODE===============================================================================
 0

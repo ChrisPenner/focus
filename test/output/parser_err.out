@@ -4,7 +4,7 @@ focus splitOn , -
 one,two,three
 ===OUTPUT===============================================================================
 [error]: Invalid selector
-     ╭──▶ <selector>@1:9-1:10
+     ╭──▶ <argument>@1:9-1:10
      │
    1 │ splitOn ,
      •         ┬
