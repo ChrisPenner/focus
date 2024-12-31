@@ -255,7 +255,7 @@ data Expr p
   | Index p
   | Uniq p (Selector p)
   | Pattern p (Pattern p)
-  | Select p (NonEmpty (Selector p, Selector p))
+  | Select p [(Selector p, Selector p)]
   deriving stock (Show, Functor, Foldable, Traversable)
 
 instance Tagged (Expr p) p where

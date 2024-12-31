@@ -437,16 +437,21 @@ simpleExprP = withPos $ do
         do
           let lbl = "a conditional block"
           M.label lbl do
-            branches <- M.between (lexeme $ M.char '{') (lexeme $ M.char '}') $ do
-              flip sepBy1 (lexeme $ M.char ',') $ do
-                cond <- lexeme selectorP
-                _ <- lexeme $ M.string "->"
-                body <- lexeme selectorP
-                pure (cond, body)
-
+            branches <- keyValueBlockP (M.char '{') (M.char '}') (M.char ',') $ do
+              cond <- lexeme selectorP
+              _ <- lexeme $ M.string "->"
+              body <- lexeme selectorP
+              pure (cond, body)
             pure $ \pos -> Select pos branches
       )
     ]
+
+keyValueBlockP :: P start -> P end -> P sep -> P a -> P [a]
+keyValueBlockP blockStart blockEnd separator body = do
+  M.between (lexeme blockStart) (lexeme blockEnd) $ do
+    r <- M.sepBy1 body (M.try (lexeme separator *> M.notFollowedBy (lexeme blockEnd)))
+    _ <- optional (lexeme separator)
+    pure r
 
 exprLiteralP :: P (Expr Pos)
 exprLiteralP = withPos do
@@ -462,6 +467,3 @@ patternP = withPos do
     [ lexeme bindingSymbol <&> \bs pos -> BindingPattern pos bs,
       patternStringP '"' '"' <&> \pat _pos -> pat
     ]
-
-sepBy1 :: P a -> P sep -> P (NE.NonEmpty a)
-sepBy1 p sep = NE.fromList <$> M.sepBy1 p sep
